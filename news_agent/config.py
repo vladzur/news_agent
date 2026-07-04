@@ -1,0 +1,171 @@
+"""Módulo de configuración del agente de noticias.
+
+Carga la configuración desde variables de entorno y archivos JSON externos.
+También carga automáticamente un archivo .env del directorio del proyecto.
+"""
+
+import json
+import os
+from pathlib import Path
+
+# ---------------------------------------------------------------------------
+# Constantes de configuración del modelo DeepSeek
+# ---------------------------------------------------------------------------
+DEEPSEEK_MODEL = "deepseek-v4-pro"
+DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
+TEMPERATURE = 0.5
+MAX_TOKENS = 8192
+REASONING_EFFORT = "high"  # "high" o "max" para razonamiento profundo
+
+# ---------------------------------------------------------------------------
+# Constantes de la ventana de análisis y formato
+# ---------------------------------------------------------------------------
+TIME_WINDOW_HOURS = 72
+SUMMARY_MAX_CHARS = 200
+
+# ---------------------------------------------------------------------------
+# Archivo de configuración de feeds RSS (por defecto)
+# ---------------------------------------------------------------------------
+DEFAULT_FEEDS_PATH = "rss_feeds.json"
+
+
+class ConfigurationError(Exception):
+    """Excepción personalizada para errores de configuración del agente."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+
+
+def _find_dotenv() -> Path | None:
+    """Busca el archivo .env en el directorio del proyecto.
+
+    Recorre hacia arriba desde el directorio actual hasta encontrar un .env
+    o llegar a la raíz del sistema de archivos.
+
+    Returns:
+        Path | None: Ruta al archivo .env, o None si no se encuentra.
+    """
+    current = Path.cwd()
+    # También buscar en el directorio del paquete
+    candidates = [
+        current / ".env",
+        Path(__file__).resolve().parent.parent / ".env",
+    ]
+
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+
+    return None
+
+
+def _load_dotenv() -> None:
+    """Carga variables de entorno desde un archivo .env si existe.
+
+    Solo carga variables que aún no estén definidas en el entorno,
+    respetando así cualquier valor ya establecido explícitamente.
+
+    El formato esperado es KEY=VALUE por línea, con soporte para
+    líneas en blanco y comentarios con #.
+    """
+    dotenv_path = _find_dotenv()
+    if dotenv_path is None:
+        return
+
+    with open(dotenv_path, encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip()
+            # Ignorar líneas vacías y comentarios
+            if not line or line.startswith("#"):
+                continue
+            # Parsear KEY=VALUE
+            if "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            key = key.strip()
+            value = value.strip()
+            # Eliminar comillas alrededor del valor si las tiene
+            if (value.startswith('"') and value.endswith('"')) or \
+               (value.startswith("'") and value.endswith("'")):
+                value = value[1:-1]
+            # Solo establecer si la variable no existe ya en el entorno
+            if key and key not in os.environ:
+                os.environ[key] = value
+
+
+# Cargar .env automáticamente al importar el módulo
+_load_dotenv()
+
+
+def get_api_key() -> str:
+    """Obtiene la clave API de DeepSeek desde la variable de entorno.
+
+    Busca en el entorno (incluyendo variables cargadas desde .env).
+
+    Returns:
+        str: La clave API.
+
+    Raises:
+        ConfigurationError: Si la variable DEEPSEEK_API_KEY no está definida.
+    """
+    api_key = os.environ.get("DEEPSEEK_API_KEY")
+    if not api_key:
+        raise ConfigurationError(
+            "Variable de entorno DEEPSEEK_API_KEY no encontrada. "
+            "Define tu clave API en el archivo .env o expórtala "
+            "como variable de entorno antes de ejecutar el agente."
+        )
+    return api_key
+
+
+def load_rss_feeds(path: str | Path | None = None) -> list[dict]:
+    """Carga la matriz de canales RSS desde un archivo JSON.
+
+    Args:
+        path: Ruta al archivo JSON de configuración de feeds.
+              Si es None, se usa DEFAULT_FEEDS_PATH.
+
+    Returns:
+        list[dict]: Lista de diccionarios con las claves 'name' y 'url'.
+
+    Raises:
+        ConfigurationError: Si el archivo no existe, no es JSON válido,
+                            o no contiene una lista.
+    """
+    file_path = Path(path) if path else Path(DEFAULT_FEEDS_PATH)
+
+    if not file_path.exists():
+        raise ConfigurationError(
+            f"Archivo de configuración de feeds no encontrado: {file_path.resolve()}"
+        )
+
+    try:
+        with open(file_path, encoding="utf-8") as fh:
+            data = json.load(fh)
+    except json.JSONDecodeError as exc:
+        raise ConfigurationError(
+            f"El archivo {file_path.resolve()} no contiene JSON válido: {exc}"
+        ) from exc
+
+    if not isinstance(data, list):
+        raise ConfigurationError(
+            f"Se esperaba una lista de feeds en {file_path.resolve()}, "
+            f"pero se encontró {type(data).__name__}."
+        )
+
+    # Validar que cada entrada tenga los campos requeridos
+    for idx, feed in enumerate(data):
+        if not isinstance(feed, dict):
+            raise ConfigurationError(
+                f"Entrada de feed #{idx} no es un diccionario: {feed}"
+            )
+        if "name" not in feed:
+            raise ConfigurationError(
+                f"Entrada de feed #{idx} no tiene el campo obligatorio 'name'."
+            )
+        if "url" not in feed:
+            raise ConfigurationError(
+                f"Entrada de feed #{idx} no tiene el campo obligatorio 'url'."
+            )
+
+    return data

@@ -1,0 +1,22 @@
+[    
+    {
+        "name": "BBC News Mundo",
+        "url": "https://feeds.bbci.co.uk/mundo/rss.xml"
+    },    
+    {
+        "name": "Ciper Chile",
+        "url": "https://www.ciperchile.cl/feed/"
+    },    
+    {
+        "name": "La Tercera",
+        "url": "https://www.latercera.com/arc/outboundfeeds/rss/?outputType=xml"
+    },
+    {
+        "name": "Cooperativa",
+        "url": "https://www.cooperativa.cl/noticias/site/tax/port/all/rss_3___1.xml"
+    },
+    {
+        "name": "DF Diario",
+        "url": "https://www.df.cl/noticias/site/list/port/rss.xml"
+    }
+]
