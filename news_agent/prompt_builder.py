@@ -79,6 +79,14 @@ con profundidad, indícalo con "Requiere investigación adicional" en ese punto.
 similares. Sé preciso y concreto.
 6. Escribe cada propuesta pensando en un lector chileno inteligente que busca \
 análisis profundo, no un resumen de lo que ya leyó en otros medios.
+7. **Prohibido referenciar números de artículo**: los lectores no tienen acceso \
+a la recopilación interna de RSS. En las fuentes sugeridas y en el texto de \
+la pauta, cita únicamente el **nombre del medio** (ej: "La Tercera", "CIPER \
+Chile", "DF Diario", "Cooperativa"), nunca incluyas "art. 70", "artículo 129" \
+ni ningún identificador numérico interno. Si necesitas diferenciar varias \
+notas del mismo medio, descríbelas brevemente (ej: "La Tercera, en su nota \
+sobre las comisiones asesoras" o "DF Diario, en su reportaje sobre los \
+lefebvrianos en Chile").
 
 ## Formato de salida
 
@@ -264,9 +272,9 @@ def build_user_prompt(filtered_items: list[dict[str, Any]]) -> str:
         summary = item.get("summary_clean", "")
         link = item.get("link", "")
 
-        parts.append(f"### ARTÍCULO {idx}")
-        parts.append(f"**Título:** {title}")
+        parts.append("---")
         parts.append(f"**Fuente:** {source}")
+        parts.append(f"**Título:** {title}")
         if link:
             parts.append(f"**Enlace:** {link}")
         parts.append(f"**Resumen:** {summary}")
@@ -278,7 +286,9 @@ def build_user_prompt(filtered_items: list[dict[str, Any]]) -> str:
     parts.append(
         "Con base en los artículos anteriores, genera las tres propuestas "
         "de pauta editorial siguiendo estrictamente el formato y las reglas "
-        "definidas en el system prompt."
+        "definidas en el system prompt. Recuerda: en las fuentes sugeridas "
+        "cita solo el nombre del medio, nunca incluyas números de artículo "
+        "como 'art. 70' o 'artículo 129'."
     )
 
     return "\n".join(parts)
