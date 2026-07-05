@@ -1,7 +1,12 @@
 """Tests para el módulo de construcción de prompts."""
 
+import pytest
+
 from news_agent.prompt_builder import (
+    ARTICLE_SYSTEM_PROMPT,
     SYSTEM_PROMPT,
+    build_article_system_prompt,
+    build_article_user_prompt,
     build_system_prompt,
     build_user_prompt,
 )
@@ -63,6 +68,113 @@ class TestBuildSystemPrompt:
         assert "10%" in prompt or "10 %" in prompt
         assert "nacional" in prompt.lower() or "chilenas" in prompt.lower()
         assert "internacional" in prompt.lower()
+
+    def test_contains_left_wing_identity(self):
+        """Debe incluir la identidad de izquierda y anti-neoliberal."""
+        prompt = build_system_prompt()
+        assert "izquierda" in prompt.lower()
+        assert "neoliberal" in prompt.lower()
+
+
+class TestBuildArticleSystemPrompt:
+    """Pruebas para build_article_system_prompt."""
+
+    def test_returns_non_empty_string(self):
+        """Debe devolver un string no vacío."""
+        prompt = build_article_system_prompt()
+        assert isinstance(prompt, str)
+        assert len(prompt) > 0
+
+    def test_contains_la_chispa_sur(self):
+        """Debe mencionar La Chispa Sur."""
+        prompt = build_article_system_prompt()
+        assert "La Chispa Sur" in prompt
+
+    def test_contains_word_count_guidance(self):
+        """Debe indicar la extensión esperada de ~1000 palabras."""
+        prompt = build_article_system_prompt()
+        assert "1000" in prompt or "900" in prompt
+
+    def test_contains_left_wing_identity(self):
+        """Debe incluir la identidad de izquierda y anti-neoliberal."""
+        prompt = build_article_system_prompt()
+        assert "izquierda" in prompt.lower()
+        assert "neoliberal" in prompt.lower()
+
+    def test_contains_article_structure(self):
+        """Debe incluir la estructura esperada del artículo."""
+        prompt = build_article_system_prompt()
+        assert "Lead" in prompt or "entrada" in prompt.lower()
+
+    def test_returns_article_system_prompt_constant(self):
+        """Debe devolver exactamente la constante ARTICLE_SYSTEM_PROMPT."""
+        assert build_article_system_prompt() == ARTICLE_SYSTEM_PROMPT
+
+
+class TestBuildArticleUserPrompt:
+    """Pruebas para build_article_user_prompt."""
+
+    @pytest.fixture
+    def sample_proposal(self):
+        """Propuesta de ejemplo para tests."""
+        return {
+            "title": "Título Gancho del Artículo",
+            "enfoque": "Este es el enfoque editorial con análisis crítico.",
+            "puntos": [
+                "Primer punto clave a desarrollar.",
+                "Segundo punto clave con datos.",
+                "Tercer punto con pregunta abierta.",
+            ],
+            "fuentes": [
+                "Fuente A: Descripción de la fuente A.",
+                "Fuente B: Descripción de la fuente B.",
+            ],
+        }
+
+    def test_formats_title(self, sample_proposal):
+        """Debe incluir el título de la propuesta."""
+        result = build_article_user_prompt(sample_proposal)
+        assert "Título Gancho del Artículo" in result
+
+    def test_formats_enfoque(self, sample_proposal):
+        """Debe incluir el enfoque editorial."""
+        result = build_article_user_prompt(sample_proposal)
+        assert "enfoque editorial con análisis crítico" in result
+
+    def test_formats_puntos_clave(self, sample_proposal):
+        """Debe incluir los puntos clave numerados."""
+        result = build_article_user_prompt(sample_proposal)
+        assert "1. Primer punto clave" in result
+        assert "2. Segundo punto clave" in result
+        assert "3. Tercer punto" in result
+
+    def test_formats_fuentes(self, sample_proposal):
+        """Debe incluir las fuentes sugeridas."""
+        result = build_article_user_prompt(sample_proposal)
+        assert "Fuente A" in result
+        assert "Fuente B" in result
+
+    def test_includes_instruction(self, sample_proposal):
+        """Debe incluir la instrucción de escritura."""
+        result = build_article_user_prompt(sample_proposal)
+        assert "artículo completo" in result.lower() or "escribe" in result.lower()
+
+    def test_handles_missing_fuentes(self):
+        """Debe funcionar sin fuentes (lista vacía)."""
+        proposal = {
+            "title": "Título",
+            "enfoque": "Enfoque.",
+            "puntos": ["Punto 1."],
+            "fuentes": [],
+        }
+        result = build_article_user_prompt(proposal)
+        assert "Título" in result
+        assert "Fuentes sugeridas" not in result
+
+    def test_includes_date(self, sample_proposal):
+        """Debe incluir la fecha actual."""
+        result = build_article_user_prompt(sample_proposal)
+        assert "2026" in result
 
 
 class TestBuildUserPrompt:
