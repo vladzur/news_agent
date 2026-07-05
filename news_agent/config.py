@@ -14,7 +14,8 @@ from pathlib import Path
 DEEPSEEK_MODEL = "deepseek-v4-pro"
 DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
 TEMPERATURE = 0.5
-MAX_TOKENS = 8192
+MAX_TOKENS = 8192  # Suficiente para generación de pauta (3 propuestas)
+ARTICLE_MAX_TOKENS = 16384  # Artículo ~1000 palabras: contenido + overhead de razonamiento
 REASONING_EFFORT = "high"  # "high" o "max" para razonamiento profundo
 
 # ---------------------------------------------------------------------------

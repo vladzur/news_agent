@@ -134,7 +134,21 @@ class LLMClient:
                 "La API de DeepSeek devolvió una respuesta sin choices."
             )
 
-        content: str = response.choices[0].message.content or ""
+        message = response.choices[0].message
+        content: str = message.content or ""
+
+        # Fallback: en modo thinking, el modelo puede consumir todos los tokens
+        # de salida en reasoning_content y dejar content vacío. En ese caso,
+        # usamos reasoning_content como último recurso.
+        if not content.strip():
+            reasoning = getattr(message, "reasoning_content", None)
+            if reasoning and isinstance(reasoning, str) and reasoning.strip():
+                logger.warning(
+                    "Content vacío — usando reasoning_content como fallback "
+                    "(%d caracteres de razonamiento).",
+                    len(reasoning),
+                )
+                content = reasoning
 
         # Registrar estadísticas de uso
         usage: Any = response.usage

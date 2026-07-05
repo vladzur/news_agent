@@ -10,7 +10,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from .config import get_api_key
+from .config import ARTICLE_MAX_TOKENS, get_api_key
 from .llm_client import LLMClient, LLMClientError
 from .prompt_builder import build_article_system_prompt, build_article_user_prompt
 from .report_writer import save_article
@@ -276,7 +276,10 @@ def write_article(
     # -------------------------------------------------------------------
     # Paso 4: Llamar a la API de DeepSeek
     # -------------------------------------------------------------------
-    client = LLMClient(api_key=api_key)
+    # Usar un límite de tokens más alto que el de pauta: el modo thinking
+    # consume parte del presupuesto en razonamiento interno antes de producir
+    # el contenido final del artículo (~1000 palabras).
+    client = LLMClient(api_key=api_key, max_tokens=ARTICLE_MAX_TOKENS)
 
     try:
         article_content = client.generate_report(system_prompt, user_prompt)
