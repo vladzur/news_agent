@@ -1,4 +1,4 @@
-"""Tests para el módulo de ingesta RSS."""
+"""Tests para el módulo de ingesta RSS y scraping."""
 
 import time
 from unittest.mock import Mock, patch
@@ -6,6 +6,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from news_agent.rss_fetcher import FeedFetchError, fetch_all, fetch_feed
+from news_agent.scraper import ScrapingError
 
 
 # ---------------------------------------------------------------------------
@@ -165,3 +166,127 @@ class TestFetchAll:
         """Una lista de feeds vacía debe devolver lista vacía."""
         result = fetch_all([])
         assert result == []
+
+    # -------------------------------------------------------------------
+    # Tests de despacho por método (scraping vs RSS)
+    # -------------------------------------------------------------------
+
+    def test_dispatches_to_scrape_feed_when_method_scraping(self):
+        """Un feed con method='scraping' debe delegar en scrape_feed."""
+        feeds = [
+            {"name": "Feed Scraping", "url": "https://x.com",
+             "method": "scraping",
+             "selectors": {"article": ".a", "title": "h2"}},
+        ]
+
+        mock_item = {
+            "title": "Título scrapeado",
+            "source": "Feed Scraping",
+            "summary": None,
+            "published_parsed": None,
+            "link": "https://x.com/1",
+        }
+
+        with patch("news_agent.rss_fetcher.scrape_feed",
+                   return_value=[mock_item]) as mock_scrape:
+            result = fetch_all(feeds)
+
+        assert len(result) == 1
+        assert result[0]["title"] == "Título scrapeado"
+        assert result[0]["source"] == "Feed Scraping"
+        mock_scrape.assert_called_once_with(
+            "Feed Scraping", "https://x.com", feeds[0]
+        )
+
+    def test_dispatches_to_fetch_feed_when_no_method(self):
+        """Un feed sin 'method' debe usar RSS (comportamiento por defecto)."""
+        now = time.gmtime()
+        mock_parsed = _make_mock_parsed(
+            entries=[
+                _make_mock_entry("Título RSS", "", "Resumen", now, "https://a.com/1"),
+            ],
+        )
+
+        feeds = [{"name": "Feed RSS", "url": "https://a.com/rss"}]
+
+        with patch("feedparser.parse", return_value=mock_parsed):
+            result = fetch_all(feeds)
+
+        assert len(result) == 1
+        assert result[0]["title"] == "Título RSS"
+
+    def test_dispatches_to_fetch_feed_when_method_rss(self):
+        """Un feed con method='rss' explícito debe usar feedparser."""
+        now = time.gmtime()
+        mock_parsed = _make_mock_parsed(
+            entries=[
+                _make_mock_entry("Título RSS", "", "Resumen", now, "https://a.com/1"),
+            ],
+        )
+
+        feeds = [{"name": "Feed RSS", "url": "https://a.com/rss", "method": "rss"}]
+
+        with patch("feedparser.parse", return_value=mock_parsed):
+            result = fetch_all(feeds)
+
+        assert len(result) == 1
+
+    def test_handles_scrape_error_gracefully(self):
+        """Si scrape_feed lanza ScrapingError, debe loguear y continuar."""
+        feeds = [
+            {"name": "Feed Scraping", "url": "https://x.com",
+             "method": "scraping",
+             "selectors": {"article": ".a", "title": "h2"}},
+            {"name": "Feed RSS", "url": "https://b.com/rss"},
+        ]
+
+        now = time.gmtime()
+        mock_parsed = _make_mock_parsed(
+            entries=[
+                _make_mock_entry("Título B", "", "Resumen B", now, "https://b.com/1"),
+            ],
+        )
+
+        with patch("news_agent.rss_fetcher.scrape_feed",
+                   side_effect=ScrapingError("Feed Scraping", "Timeout")):
+            with patch("feedparser.parse", return_value=mock_parsed):
+                result = fetch_all(feeds)
+
+        # Debe continuar con el feed RSS después del fallo del scraping
+        assert len(result) == 1
+        assert result[0]["source"] == "Feed RSS"
+
+    def test_combined_rss_and_scraping_feeds(self):
+        """Debe consolidar artículos de feeds RSS y scraping en una sola lista."""
+        now = time.gmtime()
+        mock_parsed = _make_mock_parsed(
+            entries=[
+                _make_mock_entry("Título RSS", "", "R1", now, "https://a.com/1"),
+            ],
+        )
+
+        mock_scraped = [
+            {
+                "title": "Título Scraping",
+                "source": "Feed Scraping",
+                "summary": "S1",
+                "published_parsed": now,
+                "link": "https://x.com/1",
+            },
+        ]
+
+        feeds = [
+            {"name": "Feed RSS", "url": "https://a.com/rss"},
+            {"name": "Feed Scraping", "url": "https://x.com",
+             "method": "scraping",
+             "selectors": {"article": ".a", "title": "h2"}},
+        ]
+
+        with patch("feedparser.parse", return_value=mock_parsed):
+            with patch("news_agent.rss_fetcher.scrape_feed",
+                       return_value=mock_scraped) as mock_scrape:
+                result = fetch_all(feeds)
+
+        assert len(result) == 2
+        sources = {r["source"] for r in result}
+        assert sources == {"Feed RSS", "Feed Scraping"}

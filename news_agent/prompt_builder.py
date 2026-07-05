@@ -260,7 +260,7 @@ def build_user_prompt(filtered_items: list[dict[str, Any]]) -> str:
         f"Fecha de análisis: {today_str}",
         f"A continuación se presentan {len(filtered_items)} artículos "
         f"periodísticos recolectados en las últimas 72 horas desde diversos "
-        f"canales RSS.\n",
+        f"canales RSS y scraping web.\n",
         "---",
         "",
     ]

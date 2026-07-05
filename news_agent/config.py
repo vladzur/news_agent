@@ -169,4 +169,38 @@ def load_rss_feeds(path: str | Path | None = None) -> list[dict]:
                 f"Entrada de feed #{idx} no tiene el campo obligatorio 'url'."
             )
 
+        # Validación adicional para feeds con método "scraping"
+        method = feed.get("method", "rss")
+        if method == "scraping":
+            if "selectors" not in feed:
+                raise ConfigurationError(
+                    f"Feed '{feed['name']}' usa method='scraping' pero "
+                    "no tiene el campo obligatorio 'selectors'."
+                )
+            selectors = feed["selectors"]
+            if not isinstance(selectors, dict):
+                raise ConfigurationError(
+                    f"Feed '{feed['name']}': 'selectors' debe ser un diccionario."
+                )
+            if "article" not in selectors:
+                raise ConfigurationError(
+                    f"Feed '{feed['name']}' usa method='scraping': "
+                    "selectors requiere al menos la clave 'article'."
+                )
+            if "title" not in selectors:
+                raise ConfigurationError(
+                    f"Feed '{feed['name']}' usa method='scraping': "
+                    "selectors requiere al menos la clave 'title'."
+                )
+        elif method != "rss":
+            # Método desconocido: advertir pero no fallar (compatibilidad futura)
+            import logging
+            _logger = logging.getLogger(__name__)
+            _logger.warning(
+                "Feed '%s' tiene method='%s' (desconocido). "
+                "Se tratará como RSS por defecto.",
+                feed["name"],
+                method,
+            )
+
     return data
