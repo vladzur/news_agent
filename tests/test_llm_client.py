@@ -48,7 +48,7 @@ class TestLLMClientConstruction:
         client = LLMClient(api_key="sk-test")
         assert client.model == "deepseek-v4-pro"
         assert client.temperature == 0.5
-        assert client.max_tokens == 8192
+        assert client.max_tokens == 16384
         assert client.reasoning_effort == "high"
 
     def test_custom_values(self):
@@ -89,7 +89,7 @@ class TestGenerateReport:
         call_kwargs = mock_create.call_args.kwargs
         assert call_kwargs["model"] == "deepseek-v4-pro"
         assert call_kwargs["temperature"] == 0.5
-        assert call_kwargs["max_tokens"] == 8192
+        assert call_kwargs["max_tokens"] == 16384
         assert len(call_kwargs["messages"]) == 2
         assert call_kwargs["messages"][0]["role"] == "system"
         assert call_kwargs["messages"][1]["role"] == "user"

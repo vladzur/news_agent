@@ -100,7 +100,7 @@ def run_pipeline(
     logger.info("Total de artículos crudos recolectados: %d.", len(raw_items))
 
     # -----------------------------------------------------------------------
-    # Paso 4: Filtrar por ventana de 72h, limpiar HTML y truncar
+    # Paso 4: Filtrar por ventana de 168h (7 días), limpiar HTML y truncar
     # -----------------------------------------------------------------------
     filtered_items = filter_items(raw_items)
 
@@ -109,7 +109,7 @@ def run_pipeline(
     # -----------------------------------------------------------------------
     if not filtered_items:
         logger.warning(
-            "No se encontraron noticias dentro de la ventana de 72 horas. "
+            "No se encontraron noticias dentro de la ventana de 7 días. "
             "Se omite la llamada a la API de DeepSeek para evitar consumo "
             "innecesario de tokens."
         )

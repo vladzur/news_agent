@@ -201,8 +201,8 @@ class TestRunPipeline:
         """Debe saltar la API si todos los artículos están fuera de la ventana."""
         import time
 
-        # Crear items con fecha de hace 100 horas (fuera de la ventana de 72h)
-        old_time = time.localtime(time.time() - 100 * 3600)
+        # Crear items con fecha de hace 200 horas (fuera de la ventana de 168h)
+        old_time = time.localtime(time.time() - 200 * 3600)
         old_items = [
             {
                 "title": f"Old {i}",

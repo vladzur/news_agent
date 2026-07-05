@@ -1,6 +1,6 @@
 """Módulo de filtrado y limpieza de noticias.
 
-Aplica la ventana de 72 horas, limpia HTML residual de los resúmenes
+Aplica la ventana de 7 días (168 horas), limpia HTML residual de los resúmenes
 y trunca el texto a 200 caracteres según las especificaciones.
 """
 
@@ -29,7 +29,7 @@ def is_within_window(
         published_parsed: Tupla struct_time de la fecha de publicación (UTC),
                           o None si la fecha no está disponible.
         window_hours: Horas de la ventana de análisis. Por defecto usa
-                      TIME_WINDOW_HOURS (48h).
+                      TIME_WINDOW_HOURS (168h, 7 días).
 
     Returns:
         bool: True si la noticia está dentro de la ventana, False en caso
@@ -131,7 +131,7 @@ def filter_items(
     """Filtra y normaliza una lista de artículos crudos.
 
     Aplica en secuencia:
-    1. Filtro de ventana de tiempo (48 horas).
+    1. Filtro de ventana de tiempo (168 horas, 7 días).
     2. Limpieza HTML del resumen.
     3. Truncado a 200 caracteres del resumen limpio.
 

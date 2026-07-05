@@ -14,14 +14,14 @@ from pathlib import Path
 DEEPSEEK_MODEL = "deepseek-v4-pro"
 DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
 TEMPERATURE = 0.5
-MAX_TOKENS = 8192  # Suficiente para generación de pauta (3 propuestas)
+MAX_TOKENS = 16384  # Pauta semanal: ~1000+ noticias requieren más presupuesto de razonamiento
 ARTICLE_MAX_TOKENS = 16384  # Artículo ~1000 palabras: contenido + overhead de razonamiento
 REASONING_EFFORT = "high"  # "high" o "max" para razonamiento profundo
 
 # ---------------------------------------------------------------------------
 # Constantes de la ventana de análisis y formato
 # ---------------------------------------------------------------------------
-TIME_WINDOW_HOURS = 72
+TIME_WINDOW_HOURS = 168  # 7 días: cubre la semana completa (lunes a domingo)
 SUMMARY_MAX_CHARS = 200
 
 # ---------------------------------------------------------------------------

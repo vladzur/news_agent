@@ -55,7 +55,7 @@ class LLMClient:
             api_key: Clave API de DeepSeek.
             model: Modelo a usar. Por defecto DEEPSEEK_MODEL.
             temperature: Temperatura de sampling. Por defecto TEMPERATURE (0.5).
-            max_tokens: Límite de tokens de salida. Por defecto MAX_TOKENS (8192).
+            max_tokens: Límite de tokens de salida. Por defecto MAX_TOKENS (16384).
             base_url: URL base de la API. Por defecto DEEPSEEK_BASE_URL.
             reasoning_effort: Esfuerzo de razonamiento ("low", "high", "max").
                               Por defecto REASONING_EFFORT ("high").

@@ -16,13 +16,13 @@ class TestIsWithinWindow:
     """Pruebas para la función is_within_window."""
 
     def test_recent_item_is_within_window(self):
-        """Un artículo publicado hace 1 hora debe estar dentro de la ventana de 72h."""
+        """Un artículo publicado hace 1 hora debe estar dentro de la ventana de 168h."""
         recent = (datetime.now(timezone.utc) - timedelta(hours=1)).timetuple()
         assert is_within_window(recent) is True
 
     def test_old_item_is_outside_window(self):
-        """Un artículo publicado hace 96 horas debe estar fuera de la ventana de 72h."""
-        old = (datetime.now(timezone.utc) - timedelta(hours=96)).timetuple()
+        """Un artículo de hace 200 horas debe estar fuera de la ventana de 168h."""
+        old = (datetime.now(timezone.utc) - timedelta(hours=200)).timetuple()
         assert is_within_window(old) is False
 
     def test_none_timestamp_is_outside_window(self):
@@ -39,8 +39,8 @@ class TestIsWithinWindow:
 
     def test_exact_boundary(self):
         """Un artículo justo en el límite de la ventana debe estar dentro."""
-        exact = (datetime.now(timezone.utc) - timedelta(hours=72)).timetuple()
-        assert is_within_window(exact, window_hours=73) is True
+        exact = (datetime.now(timezone.utc) - timedelta(hours=168)).timetuple()
+        assert is_within_window(exact, window_hours=169) is True
 
 
 # ---------------------------------------------------------------------------
@@ -164,10 +164,10 @@ class TestFilterItems:
         }
 
     def test_filters_out_old_items(self):
-        """Debe excluir artículos fuera de la ventana de 72h."""
+        """Debe excluir artículos fuera de la ventana de 168h (7 días)."""
         items = [
             self._make_item("Reciente", "S1", "Resumen", 1),
-            self._make_item("Antiguo", "S2", "Resumen", 96),
+            self._make_item("Antiguo", "S2", "Resumen", 200),
         ]
 
         result = filter_items(items)
@@ -231,7 +231,7 @@ class TestFilterItems:
     def test_all_old_returns_empty(self):
         """Si todos los artículos son antiguos, debe devolver lista vacía."""
         items = [
-            self._make_item(f"T{i}", "S1", "R", 100) for i in range(3)
+            self._make_item(f"T{i}", "S1", "R", 200) for i in range(3)
         ]
 
         result = filter_items(items)
@@ -242,7 +242,7 @@ class TestFilterItems:
         items = [
             self._make_item("T1", "S1", "<p>R1</p>", 1),
             self._make_item("T2", "S2", "<p>R2</p>", 3),
-            self._make_item("T3", "S3", "<p>R3</p>", 100),  # fuera de ventana
+            self._make_item("T3", "S3", "<p>R3</p>", 200),  # fuera de ventana
         ]
 
         result = filter_items(items)
