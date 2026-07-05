@@ -20,6 +20,7 @@ env/
 
 # Output
 pauta_semanal_*.md
+articulo_*.md
 
 # OS
 .DS_Store

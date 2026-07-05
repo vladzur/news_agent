@@ -82,3 +82,62 @@ def save_report(
 
     logger.info("Reporte guardado exitosamente en: %s", file_path.resolve())
     return file_path.resolve()
+
+
+def _slugify(text: str, max_len: int = 50) -> str:
+    """Convierte un texto en un slug apto para nombre de archivo.
+
+    Args:
+        text: Texto a convertir.
+        max_len: Longitud máxima del slug resultante.
+
+    Returns:
+        str: Slug en minúsculas, solo caracteres alfanuméricos y guiones.
+    """
+    import re
+
+    # Eliminar caracteres especiales, conservar letras, números y espacios
+    slug = re.sub(r"[^\w\s-]", "", text.lower())
+    # Reemplazar espacios y guiones bajos por un solo guión
+    slug = re.sub(r"[\s_]+", "-", slug)
+    # Eliminar guiones repetidos
+    slug = re.sub(r"-+", "-", slug)
+    # Recortar al largo máximo sin cortar palabras
+    if len(slug) > max_len:
+        slug = slug[:max_len].rstrip("-")
+    return slug.strip("-")
+
+
+def save_article(
+    content: str,
+    title: str,
+    article_number: int,
+    output_dir: str | Path = ".",
+) -> Path:
+    """Guarda un artículo individual como archivo Markdown.
+
+    Args:
+        content: Texto completo del artículo generado por el LLM.
+        title: Título del artículo (se usa para generar el slug del archivo).
+        article_number: Número de artículo (1, 2, o 3).
+        output_dir: Directorio donde se guardará el archivo.
+
+    Returns:
+        Path: Ruta absoluta al archivo generado.
+
+    Raises:
+        IOError: Si el directorio de salida no existe.
+    """
+    output_path = Path(output_dir)
+    if not output_path.exists():
+        raise IOError(f"El directorio de salida no existe: {output_path.resolve()}")
+
+    slug = _slugify(title)
+    filename = f"articulo_{article_number}_{slug}.md"
+    file_path = output_path / filename
+
+    with open(file_path, "w", encoding="utf-8") as fh:
+        fh.write(content)
+
+    logger.info("Artículo guardado exitosamente en: %s", file_path.resolve())
+    return file_path.resolve()

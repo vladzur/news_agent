@@ -5,7 +5,12 @@ from pathlib import Path
 
 import pytest
 
-from news_agent.report_writer import build_filename, build_header, save_report
+from news_agent.report_writer import (
+    build_filename,
+    build_header,
+    save_article,
+    save_report,
+)
 
 
 class TestBuildFilename:
@@ -103,3 +108,66 @@ class TestSaveReport:
 
         saved = file_path.read_text(encoding="utf-8")
         assert saved  # Al menos tiene la cabecera
+
+
+class TestSaveArticle:
+    """Pruebas para save_article."""
+
+    def test_saves_article_with_correct_filename(self, tmp_path):
+        """Debe guardar el artículo con nombre basado en número y slug del título."""
+        content = "# Título del Artículo\n\nContenido de prueba."
+        file_path = save_article(content, "Título del Artículo", 1, output_dir=tmp_path)
+
+        assert file_path.exists()
+        assert file_path.name.startswith("articulo_1_")
+        assert file_path.name.endswith(".md")
+
+    def test_slug_includes_title_words(self, tmp_path):
+        """El slug debe contener palabras del título."""
+        content = "Contenido."
+        file_path = save_article(
+            content, "El Ministerio de las Comisiones", 1, output_dir=tmp_path
+        )
+
+        assert "ministerio" in file_path.name.lower()
+        assert "comisiones" in file_path.name.lower()
+
+    def test_writes_content_correctly(self, tmp_path):
+        """El contenido debe escribirse correctamente en el archivo."""
+        content = "# Mi Artículo\n\nDesarrollo del tema."
+        file_path = save_article(content, "Mi Artículo", 2, output_dir=tmp_path)
+
+        saved = file_path.read_text(encoding="utf-8")
+        assert "Mi Artículo" in saved
+        assert "Desarrollo del tema" in saved
+
+    def test_different_article_numbers(self, tmp_path):
+        """Debe generar nombres distintos para diferentes números de artículo."""
+        content = "Test"
+        path1 = save_article(content, "Tema Uno", 1, output_dir=tmp_path)
+        path2 = save_article(content, "Tema Dos", 2, output_dir=tmp_path)
+
+        assert "articulo_1_" in path1.name
+        assert "articulo_2_" in path2.name
+
+    def test_raises_when_dir_not_found(self):
+        """Debe lanzar IOError si el directorio no existe."""
+        with pytest.raises(IOError, match="no existe"):
+            save_article("Test", "Título", 1, output_dir="/tmp/no_existe_dir_xyz")
+
+    def test_handles_special_characters_in_title(self, tmp_path):
+        """Debe manejar caracteres especiales en el título al generar el slug."""
+        content = "Test"
+        file_path = save_article(
+            content,
+            "¿Cómo afecta el 5% a las AFP? — Análisis crítico",
+            3,
+            output_dir=tmp_path,
+        )
+
+        assert file_path.exists()
+        # El slug no debe tener caracteres especiales
+        slug_part = file_path.name.replace("articulo_3_", "").replace(".md", "")
+        assert "?" not in slug_part
+        assert "%" not in slug_part
+        assert "—" not in slug_part
