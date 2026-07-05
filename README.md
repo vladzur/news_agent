@@ -2,7 +2,7 @@
 
 **Curador automatizado de pauta periodística para La Chispa Sur**, medio digital independiente de izquierda, crítico del modelo neoliberal.
 
-El agente recolecta noticias desde canales RSS y scraping web, las filtra por una ventana temporal de 72 horas y utiliza el modelo **DeepSeek-V4-Pro** (vía API compatible con OpenAI SDK) para sintetizar **tres propuestas de pauta editorial semanal** con profundidad analítica, tono incisivo y narrativa ágil. También permite **escribir artículos completos (~1000 palabras)** a partir de cualquiera de las propuestas generadas.
+El agente recolecta noticias desde canales RSS y scraping web, las filtra por una ventana temporal de 7 días (168 horas) y utiliza el modelo **DeepSeek-V4-Pro** (vía API compatible con OpenAI SDK) para sintetizar **tres propuestas de pauta editorial semanal** con profundidad analítica, tono incisivo y narrativa ágil. También permite **escribir artículos completos (~1000 palabras)** a partir de cualquiera de las propuestas generadas.
 
 ---
 
@@ -16,7 +16,7 @@ Flujo automatizado que:
    - **RSS**: Usa `feedparser` para canales RSS/Atom tradicionales.
    - **Scraping web**: Usa `requests` + `BeautifulSoup` con selectores CSS configurables por sitio, para medios sin feed RSS.
    - Tolerancia a fallos individuales: si un feed o scraping falla, continúa con el siguiente.
-2. **Filtrado temporal** — Descarta noticias con más de 72 horas de antigüedad (configurable).
+2. **Filtrado temporal** — Descarta noticias con más de 7 días (168 horas) de antigüedad, cubriendo la ventana semanal de lunes a domingo. Configurable.
 3. **Limpieza HTML** — Elimina etiquetas, comentarios, scripts y decodifica entidades HTML de los resúmenes.
 4. **Truncado inteligente** — Recorta resúmenes a 200 caracteres sin cortar palabras a la mitad.
 5. **Análisis con IA** — Envía los artículos filtrados a DeepSeek-V4-Pro con un system prompt que define la identidad editorial de La Chispa Sur (izquierda independiente, rigor periodístico, enfoque chileno).
@@ -56,7 +56,7 @@ news_agent/
 ├── config.py            # Carga de .env, validación de API key, feeds JSON
 ├── rss_fetcher.py       # Ingesta RSS + despacho a scraping según método
 ├── scraper.py           # Scraping web con requests + BeautifulSoup (selectores CSS)
-├── news_filter.py       # Ventana temporal (72h), limpieza HTML, truncado
+├── news_filter.py       # Ventana temporal (168h / 7 días), limpieza HTML, truncado
 ├── prompt_builder.py    # Construcción de system/user prompts editoriales
 ├── llm_client.py        # Cliente DeepSeek vía SDK OpenAI (modo compatible)
 ├── report_writer.py     # Escritura de reportes .md y artículos
@@ -80,7 +80,7 @@ news_agent/
 |-----------|-------|-------------|
 | `model` | `deepseek-v4-pro` | Modelo principal (límite de salida: 384K tokens) |
 | `temperature` | `0.5` | Balance creatividad/rigor factual |
-| `max_tokens` (pauta) | `8192` | Suficiente para tres propuestas detalladas |
+| `max_tokens` (pauta) | `16384` | Presupuesto para razonamiento + 3 propuestas sobre ~1000 noticias semanales |
 | `max_tokens` (artículo) | `16384` | El doble que pauta: margen para razonamiento + ~1000 palabras |
 | `reasoning_effort` | `high` | Razonamiento profundo habilitado |
 | `base_url` | `https://api.deepseek.com/v1` | Endpoint compatible OpenAI |
@@ -212,10 +212,10 @@ Las constantes principales se encuentran en [news_agent/config.py](news_agent/co
 |-----------|-------------------|-------------|
 | `DEEPSEEK_MODEL` | `"deepseek-v4-pro"` | Modelo a utilizar |
 | `TEMPERATURE` | `0.5` | Creatividad del sampling (0.0–2.0) |
-| `MAX_TOKENS` | `8192` | Límite de tokens para generación de pauta |
+| `MAX_TOKENS` | `16384` | Límite de tokens para generación de pauta semanal |
 | `ARTICLE_MAX_TOKENS` | `16384` | Límite de tokens para escritura de artículo (~1000 palabras + razonamiento) |
 | `REASONING_EFFORT` | `"high"` | Esfuerzo de razonamiento (`low`, `high`, `max`) |
-| `TIME_WINDOW_HOURS` | `72` | Ventana de análisis en horas |
+| `TIME_WINDOW_HOURS` | `168` | Ventana de análisis en horas (7 días, lunes a domingo) |
 | `SUMMARY_MAX_CHARS` | `200` | Caracteres máximos por resumen |
 
 ### Automatización con cron
