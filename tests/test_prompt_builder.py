@@ -75,6 +75,12 @@ class TestBuildSystemPrompt:
         assert "izquierda" in prompt.lower()
         assert "neoliberal" in prompt.lower()
 
+    def test_prohibits_article_number_references(self):
+        """Debe prohibir referencias a números de artículo interno."""
+        prompt = build_system_prompt()
+        assert "Prohibido referenciar números de artículo" in prompt \
+            or "prohibido referenciar" in prompt.lower()
+
 
 class TestBuildArticleSystemPrompt:
     """Pruebas para build_article_system_prompt."""
@@ -202,7 +208,7 @@ class TestBuildUserPrompt:
         assert "Título de prueba" in result
         assert "Medio X" in result
         assert "Resumen de prueba" in result
-        assert "ARTÍCULO 1" in result
+        assert "Fuente:" in result
 
     def test_formats_multiple_items(self):
         """Debe formatear correctamente múltiples artículos."""
@@ -214,10 +220,10 @@ class TestBuildUserPrompt:
 
         result = build_user_prompt(items)
 
-        assert "ARTÍCULO 1" in result
-        assert "ARTÍCULO 2" in result
-        assert "ARTÍCULO 3" in result
-        assert "ARTÍCULO 4" not in result  # exactamente 3
+        assert "**Fuente:** S1" in result
+        assert "**Fuente:** S2" in result
+        assert "**Fuente:** S3" in result
+        assert result.count("---") >= 4  # separadores entre artículos + inicio/fin
 
     def test_includes_article_count(self):
         """Debe incluir la cantidad de artículos procesados."""
@@ -260,6 +266,17 @@ class TestBuildUserPrompt:
         result = build_user_prompt(items)
 
         assert "propuestas" in result.lower()
+
+    def test_includes_no_article_numbers_warning(self):
+        """La instrucción final debe recordar no usar números de artículo."""
+        items = [
+            self._make_item("T1", "S1", "R1"),
+        ]
+
+        result = build_user_prompt(items)
+
+        assert "nunca incluyas números" in result.lower() \
+            or "nunca incluyas" in result.lower()
 
     def test_empty_items_returns_empty_string(self):
         """Debe devolver cadena vacía cuando no hay artículos."""
