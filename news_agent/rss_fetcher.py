@@ -1,6 +1,6 @@
-"""Módulo de ingesta de noticias desde canales RSS.
+"""Módulo de ingesta de noticias desde canales RSS y scraping web.
 
-Utiliza feedparser para extraer artículos de cada fuente configurada,
+Utiliza feedparser para feeds RSS y BeautifulSoup para scraping web,
 con tolerancia a fallos individuales por feed.
 """
 
@@ -9,6 +9,8 @@ import time
 from typing import Any
 
 import feedparser
+
+from .scraper import ScrapingError, scrape_feed
 
 # ---------------------------------------------------------------------------
 # Logger del módulo
@@ -101,11 +103,16 @@ def fetch_all(feeds: list[dict[str, Any]]) -> list[dict[str, Any]]:
     for feed in feeds:
         name = feed["name"]
         url = feed["url"]
+        method = feed.get("method", "rss")
+
         try:
-            items = fetch_feed(name, url)
+            if method == "scraping":
+                items = scrape_feed(name, url, feed)
+            else:
+                items = fetch_feed(name, url)
             all_items.extend(items)
             success_count += 1
-        except FeedFetchError as exc:
+        except (FeedFetchError, ScrapingError) as exc:
             logger.error(
                 "Fallo al procesar feed '%s': %s. Continuando con el siguiente.",
                 exc.feed_name,

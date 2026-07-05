@@ -18,5 +18,25 @@
     {
         "name": "DF Diario",
         "url": "https://www.df.cl/noticias/site/list/port/rss.xml"
+    },
+    {
+        "name": "El Mostrador",
+        "url": "https://www.elmostrador.cl",
+        "method": "scraping",
+        "selectors": {
+            "article": "h2:has(a[href]), h3:has(a[href]), h4:has(a[href])",
+            "title": "a[href]",
+            "link": "a[href]"
+        },
+        "date_regex": "/(\\d{4})/(\\d{2})/(\\d{2})/",
+        "date_format": "%Y/%m/%d"
+    },
+    {
+        "name": "El Siglo",
+        "url": "https://elsiglo.cl/feed/"
+    },
+    {
+        "name": "El Ciudadano",
+        "url": "https://www.elciudadano.com/feed/"
     }
 ]

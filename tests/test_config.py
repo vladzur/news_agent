@@ -149,3 +149,112 @@ class TestLoadRssFeeds:
 
         result = load_rss_feeds(str(file_path))
         assert result == []
+
+    # -------------------------------------------------------------------
+    # Tests de validación de configuración de scraping
+    # -------------------------------------------------------------------
+
+    def test_scraping_method_requires_selectors(self, tmp_path):
+        """Un feed con method='scraping' sin 'selectors' debe lanzar error."""
+        feeds = [
+            {"name": "Medio", "url": "https://x.com", "method": "scraping"},
+        ]
+        file_path = tmp_path / "feeds.json"
+        file_path.write_text(json.dumps(feeds), encoding="utf-8")
+
+        with pytest.raises(ConfigurationError, match="selectors"):
+            load_rss_feeds(str(file_path))
+
+    def test_scraping_method_requires_selectors_article(self, tmp_path):
+        """Un feed scraping sin 'article' en selectors debe lanzar error."""
+        feeds = [
+            {
+                "name": "Medio",
+                "url": "https://x.com",
+                "method": "scraping",
+                "selectors": {"title": "h2"},
+            },
+        ]
+        file_path = tmp_path / "feeds.json"
+        file_path.write_text(json.dumps(feeds), encoding="utf-8")
+
+        with pytest.raises(ConfigurationError, match="'article'"):
+            load_rss_feeds(str(file_path))
+
+    def test_scraping_method_requires_selectors_title(self, tmp_path):
+        """Un feed scraping sin 'title' en selectors debe lanzar error."""
+        feeds = [
+            {
+                "name": "Medio",
+                "url": "https://x.com",
+                "method": "scraping",
+                "selectors": {"article": ".card"},
+            },
+        ]
+        file_path = tmp_path / "feeds.json"
+        file_path.write_text(json.dumps(feeds), encoding="utf-8")
+
+        with pytest.raises(ConfigurationError, match="'title'"):
+            load_rss_feeds(str(file_path))
+
+    def test_scraping_method_with_valid_selectors_passes(self, tmp_path):
+        """Un feed scraping con selectors válidos debe cargar sin error."""
+        feeds = [
+            {
+                "name": "Medio",
+                "url": "https://x.com",
+                "method": "scraping",
+                "selectors": {"article": ".card", "title": "h2"},
+            },
+        ]
+        file_path = tmp_path / "feeds.json"
+        file_path.write_text(json.dumps(feeds), encoding="utf-8")
+
+        result = load_rss_feeds(str(file_path))
+        assert len(result) == 1
+        assert result[0]["method"] == "scraping"
+
+    def test_selectors_must_be_dict_when_scraping(self, tmp_path):
+        """Si 'selectors' no es un dict, debe lanzar ConfigurationError."""
+        feeds = [
+            {
+                "name": "Medio",
+                "url": "https://x.com",
+                "method": "scraping",
+                "selectors": "no soy un dict",
+            },
+        ]
+        file_path = tmp_path / "feeds.json"
+        file_path.write_text(json.dumps(feeds), encoding="utf-8")
+
+        with pytest.raises(ConfigurationError, match="diccionario"):
+            load_rss_feeds(str(file_path))
+
+    def test_unknown_method_does_not_raise(self, tmp_path):
+        """Un método desconocido debe advertir pero no lanzar error."""
+        feeds = [
+            {
+                "name": "Medio",
+                "url": "https://x.com",
+                "method": "metodo_futuro",
+            },
+        ]
+        file_path = tmp_path / "feeds.json"
+        file_path.write_text(json.dumps(feeds), encoding="utf-8")
+
+        # No debe lanzar error (compatibilidad hacia adelante)
+        result = load_rss_feeds(str(file_path))
+        assert len(result) == 1
+
+    def test_feed_without_method_loads_normally(self, tmp_path):
+        """Un feed sin 'method' debe cargar sin error (RSS por defecto)."""
+        feeds = [
+            {"name": "Medio", "url": "https://x.com/rss"},
+        ]
+        file_path = tmp_path / "feeds.json"
+        file_path.write_text(json.dumps(feeds), encoding="utf-8")
+
+        result = load_rss_feeds(str(file_path))
+        assert len(result) == 1
+        # Compatibilidad hacia atrás: sin cambios en el dict retornado
+        assert result[0]["name"] == "Medio"

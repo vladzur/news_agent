@@ -2,7 +2,7 @@
 
 **Curador automatizado de pauta periodística para La Chispa Sur**, medio digital independiente de izquierda, crítico del modelo neoliberal.
 
-El agente recolecta noticias desde canales RSS, las filtra por una ventana temporal de 72 horas y utiliza el modelo **DeepSeek-V4-Pro** (vía API compatible con OpenAI SDK) para sintetizar **tres propuestas de pauta editorial semanal** con profundidad analítica, tono incisivo y narrativa ágil. También permite **escribir artículos completos (~1000 palabras)** a partir de cualquiera de las propuestas generadas.
+El agente recolecta noticias desde canales RSS y scraping web, las filtra por una ventana temporal de 72 horas y utiliza el modelo **DeepSeek-V4-Pro** (vía API compatible con OpenAI SDK) para sintetizar **tres propuestas de pauta editorial semanal** con profundidad analítica, tono incisivo y narrativa ágil. También permite **escribir artículos completos (~1000 palabras)** a partir de cualquiera de las propuestas generadas.
 
 ---
 
@@ -12,7 +12,10 @@ El agente recolecta noticias desde canales RSS, las filtra por una ventana tempo
 
 Flujo automatizado que:
 
-1. **Ingesta RSS** — Obtiene artículos desde múltiples fuentes configuradas en `rss_feeds.json` usando `feedparser`, con tolerancia a fallos individuales por feed.
+1. **Ingesta de noticias** — Obtiene artículos desde múltiples fuentes configuradas en `rss_feeds.json`:
+   - **RSS**: Usa `feedparser` para canales RSS/Atom tradicionales.
+   - **Scraping web**: Usa `requests` + `BeautifulSoup` con selectores CSS configurables por sitio, para medios sin feed RSS.
+   - Tolerancia a fallos individuales: si un feed o scraping falla, continúa con el siguiente.
 2. **Filtrado temporal** — Descarta noticias con más de 72 horas de antigüedad (configurable).
 3. **Limpieza HTML** — Elimina etiquetas, comentarios, scripts y decodifica entidades HTML de los resúmenes.
 4. **Truncado inteligente** — Recorta resúmenes a 200 caracteres sin cortar palabras a la mitad.
@@ -51,7 +54,8 @@ news_agent/
 ├── __main__.py          # Punto de entrada CLI (argparse)
 ├── orchestrator.py      # Orquestador del pipeline completo
 ├── config.py            # Carga de .env, validación de API key, feeds JSON
-├── rss_fetcher.py       # Ingesta RSS con feedparser + tolerancia a fallos
+├── rss_fetcher.py       # Ingesta RSS + despacho a scraping según método
+├── scraper.py           # Scraping web con requests + BeautifulSoup (selectores CSS)
 ├── news_filter.py       # Ventana temporal (72h), limpieza HTML, truncado
 ├── prompt_builder.py    # Construcción de system/user prompts editoriales
 ├── llm_client.py        # Cliente DeepSeek vía SDK OpenAI (modo compatible)
@@ -64,8 +68,9 @@ news_agent/
 | Capa | Tecnología | Propósito |
 |------|-----------|-----------|
 | Ingesta RSS | `feedparser` | Parseo de canales RSS/Atom |
+| Scraping web | `requests` + `beautifulsoup4` | Extracción de artículos desde sitios sin RSS con selectores CSS configurables |
 | Cliente LLM | `openai` (SDK) | Conexión con DeepSeek API en modo compatible |
-| Lenguaje | Python ≥ 3.10 | Sin dependencias pesadas, solo stdlib + dos librerías |
+| Lenguaje | Python ≥ 3.10 | stdlib + 4 dependencias ligeras |
 | Configuración | `.env` + `rss_feeds.json` | Separación de credenciales y fuentes |
 | Testing | `pytest`, `pytest-mock`, `freezegun` | Tests unitarios para todos los módulos |
 
@@ -122,9 +127,11 @@ cp .env.example .env
 # DEEPSEEK_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
-### 4. Configurar fuentes RSS
+### 4. Configurar fuentes
 
-Edita `rss_feeds.json` para agregar, quitar o modificar los canales RSS. El formato es:
+Edita `rss_feeds.json` para agregar, quitar o modificar las fuentes de noticias. Se soportan dos métodos de ingesta:
+
+#### Fuentes RSS (por defecto)
 
 ```json
 [
@@ -133,6 +140,49 @@ Edita `rss_feeds.json` para agregar, quitar o modificar los canales RSS. El form
         "url": "https://ejemplo.com/rss.xml"
     }
 ]
+```
+
+#### Fuentes con scraping web
+
+Para medios que no disponen de feed RSS, usa `"method": "scraping"` con selectores CSS:
+
+```json
+[
+    {
+        "name": "Nombre del Medio",
+        "url": "https://www.medio.cl",
+        "method": "scraping",
+        "selectors": {
+            "article": "h2:has(a[href]), h3:has(a[href])",
+            "title": "a[href]",
+            "link": "a[href]",
+            "summary": ".excerpt, .summary",
+            "date": "time, .date"
+        },
+        "date_regex": "/(\\d{4})/(\\d{2})/(\\d{2})/",
+        "date_format": "%Y/%m/%d",
+        "link_prefix": "https://www.medio.cl",
+        "request_headers": {}
+    }
+]
+```
+
+| Campo | Obligatorio | Descripción |
+|-------|:-----------:|-------------|
+| `name` | ✅ | Nombre descriptivo del medio |
+| `url` | ✅ | URL del sitio web a scrapear |
+| `method` | ✅ | Debe ser `"scraping"` para activar scraping |
+| `selectors.article` | ✅ | Selector CSS para cada contenedor de artículo |
+| `selectors.title` | ✅ | Selector CSS para el título (dentro del contenedor) |
+| `selectors.link` | ❌ | Selector CSS para el enlace (por defecto usa el mismo que `title`) |
+| `selectors.summary` | ❌ | Selector CSS para el resumen/extracto |
+| `selectors.date` | ❌ | Selector CSS para la fecha de publicación |
+| `date_regex` | ❌ | Regex para extraer la fecha desde la URL del artículo (ej: `/(\\d{4})/(\\d{2})/(\\d{2})/`) |
+| `date_format` | ❌ | Formato `strptime` para parsear la fecha extraída |
+| `link_prefix` | ❌ | Prefijo para resolver URLs relativas |
+| `request_headers` | ❌ | Headers HTTP adicionales para la petición |
+
+> **Nota:** Los selectores CSS deben coincidir con la estructura HTML real del sitio. Usa las herramientas de desarrollador del navegador para identificar los selectores correctos. Si el sitio cambia su estructura, solo necesitas actualizar los selectores en el JSON, sin tocar código.
 ```
 
 ### 5. Ejecutar
@@ -183,11 +233,12 @@ Para ejecutar el agente de forma semanal (recomendado: domingo a las 23:00 o lun
 
 El agente implementa fail-safe en cada etapa del pipeline:
 
-- **Feed caído** → registra el error, continúa con el siguiente medio.
+- **Feed caído o scraping fallido** → registra el error, continúa con el siguiente medio.
 - **0 noticias en ventana** → aborta antes de llamar a la API (ahorro de tokens).
 - **API key ausente** → error explícito de configuración al inicio.
 - **API devuelve vacío** → aborta con mensaje claro. Si `content` es `None` pero existe `reasoning_content`, se usa este último como fallback automático.
 - **Directorio de salida inexistente** → `IOError` antes de escribir.
+- **Configuración de scraping inválida** → error descriptivo al cargar `rss_feeds.json` si faltan selectores obligatorios.
 
 ---
 
