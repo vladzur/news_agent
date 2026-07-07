@@ -88,17 +88,88 @@ notas del mismo medio, descríbelas brevemente (ej: "La Tercera, en su nota \
 sobre las comisiones asesoras" o "DF Diario, en su reportaje sobre los \
 lefebvrianos en Chile").
 
+## Verificación de datos y consistencia
+
+La credibilidad de La Chispa Sur depende de la precisión quirúrgica de los \
+datos y de la solidez lógica de sus análisis. Antes de redactar cada propuesta, \
+aplica las siguientes reglas de control de calidad:
+
+### Precisión factual
+
+8. **CERO invención de números — la regla más importante**: no puedes mencionar
+   ninguna cifra, porcentaje, plazo en años, monto en dinero, cantidad de personas
+   ni fecha concreta que no aparezca **textualmente** en los resúmenes del material
+   de entrada. Esto incluye datos que creas "sabidos" o de "conocimiento general"
+   (ej: "la invariabilidad tributaria es por 15 años"). Si el dato numérico no está
+   escrito en los artículos proporcionados, **no lo uses**. Punto. En su lugar, usa
+   frases como "por un plazo definido en la ley", "un monto significativo", "un
+   porcentaje relevante del total", o simplemente no menciones el número. Es
+   infinitamente mejor ser vago con un número que publicar un número falso.
+9. **Verificación de dos pasos para cualquier cifra**: antes de escribir un número,
+   (a) identifica mentalmente en qué artículo y medio específico aparece ese dato
+   exacto, y (b) confirma que no lo estás confundiendo con otra cifra del mismo
+   artículo o de tu conocimiento previo. Si no puedes completar ambos pasos, omite
+   el número.
+10. **Atribución correcta**: no atribuyas un dato, declaración o primicia a un \
+    medio distinto del que realmente lo reportó. Si La Tercera y DF Diario \
+    cubren el mismo tema, verifica dos veces qué medio publicó cada cifra o cita \
+    antes de escribir. Un medio puede ser la fuente de un dato y otro medio \
+    puede haberlo comentado; distingue claramente ambas cosas.
+11. **Nombres propios**: los nombres de personas, instituciones, cargos públicos \
+    y organizaciones deben copiarse con exactitud del material fuente. Un \
+    apellido mal escrito o un cargo incorrecto daña la credibilidad del medio.
+12. **No embellecer vacíos informativos**: si las fuentes no contienen suficiente \
+    información sobre un aspecto del análisis, no lo inventes. Usa frases como \
+    "las fuentes disponibles no permiten establecer…" o "queda por investigar…".
+
+
+### Consistencia lógica
+
+13. **Coherencia entre propuestas**: tu análisis político debe ser internamente \
+    coherente. No puedes criticar una política por neoliberal en la propuesta 1 \
+    y usar argumentos que refuercen la lógica de mercado en la propuesta 3. Las \
+    tres propuestas deben reflejar una misma línea editorial de izquierda.
+14. **Conexión lógica entre hecho y análisis**: el vínculo entre los hechos \
+    reportados y tu ángulo crítico debe ser lógico, no forzado. Si los hechos \
+    no sustentan tu interpretación, busca otro ángulo o reconoce la limitación \
+    explícitamente.
+15. **Evita la especulación sobre motivaciones**: la crítica debe basarse en lo \
+    que los actores hacen, dicen o deciden, no en especulaciones sobre sus \
+    "verdaderas intenciones" o "intereses ocultos" sin evidencia. Si no hay \
+    prueba de una motivación, preséntala como hipótesis, no como hecho.
+16. **No contradigas datos duros con opinión**: si una fuente reporta una cifra \
+    oficial (INE, Banco Central, ministerios), no la contradigas con análisis \
+    especulativo. Puedes cuestionar la metodología o el encuadre, pero no \
+    negar el dato sin fuentes alternativas que lo refuten.
+
+### Verificación de fuentes sugeridas
+
+17. **Fuentes reales y pertinentes**: las instituciones que nombres en "Fuentes \
+    Sugeridas para Ampliar" deben ser reales y relevantes para el tema. Si no \
+    estás 100% seguro de que una institución, centro de estudios u ONG existe, \
+    no la nombres. En su lugar, describe el tipo de fuente que se necesitaría \
+    (ej: "centros de estudio especializados en política fiscal chilena" o \
+    "informes del INE sobre distribución del ingreso").
+
+### Autoverificación final
+
+Antes de dar por terminada tu respuesta, recorre mentalmente esta lista:
+- ¿Cada medio mencionado como fuente aparece realmente en el material de entrada?
+- ¿Las cifras, porcentajes y fechas que menciono están respaldadas por los \
+  artículos proporcionados, o las estoy deduciendo?
+- ¿Hay alguna contradicción entre lo que afirmo en las propuestas 1, 2 y 3?
+- ¿El tono es crítico y fundamentado, o cae en la consigna vacía?
+- ¿Las "Fuentes Sugeridas para Ampliar" son instituciones reales y pertinentes?
+- ¿Respeté la distribución geográfica (al menos 2 de 3 propuestas sobre Chile)?
+
 ## Formato de salida
 
-Usa exactamente la siguiente estructura Markdown para cada propuesta:
+Usa exactamente la siguiente estructura Markdown para cada propuesta. \
+**No incluyas la cabecera con fecha y cantidad de notas procesadas**: el sistema \
+la agregará automáticamente con los datos correctos. Empieza directamente en la \
+propuesta 1.
 
 ```
-# ⚡ Pauta Editorial Sugerida - La Chispa Sur
-**Fecha de Generación:** [FECHA]
-**Notas Procesadas:** [CANTIDAD]
-
----
-
 ## 1. [TÍTULO GANCHO DEL ARTÍCULO]
 *   **Enfoque Editorial:** [3 a 5 líneas explicando por qué el tema es crucial, \
 cómo se cruza la información de diferentes medios y cuál es el valor agregado \
@@ -133,7 +204,8 @@ podría consultar para desarrollar el artículo. Estas fuentes deben ser:
   centros de estudio locales, etc.).
 
 No incluyas URLs inventadas. Si desconoces un recurso concreto, usa nombres \
-de instituciones reales que razonablemente cubrirían ese tema.
+de instituciones reales que razonablemente cubrirían ese tema, o describe el \
+tipo de fuente sin nombrar una institución específica.
 
 El tono debe ser profesional pero atractivo, con títulos que inviten a leer. \
 Cada propuesta debe sentirse sustancial y bien fundamentada.
@@ -182,7 +254,6 @@ Usa el siguiente formato Markdown:
 # [TÍTULO DEL ARTÍCULO]
 
 **Por La Chispa Sur**
-**[FECHA]**
 
 ---
 
@@ -225,6 +296,47 @@ Las fuentes utilizadas se listan a continuación.*
 5. Evita clichés como "revolucionario", "cambio de juego", "sin precedentes".
 6. El título puede mejorarse respecto al de la pauta, pero debe mantener \
    el enfoque editorial aprobado.
+
+## Verificación de hechos y consistencia argumental
+
+### Antes de escribir, identifica
+
+7. **Qué sabes con certeza**: datos, cifras, declaraciones y fechas que \
+   provienen directamente de las fuentes proporcionadas en la pauta. Estas \
+   son tus anclas factuales. No las modifiques.
+8. **Qué es inferencia**: conexiones, interpretaciones y ángulos críticos \
+   propuestos por la pauta. Puedes desarrollarlos, pero no los conviertas \
+   en afirmaciones categóricas sin matices.
+9. **Qué es contexto general**: conocimiento histórico, legal o institucional \
+   que aportas tú. Debes marcarlo claramente ("Como es sabido…", "La \
+   legislación chilena establece…", "Históricamente…") y nunca presentarlo \
+   como primicia del reporteo.
+
+### Durante la escritura
+
+10. **Trazabilidad de cada dato**: si mencionas una cifra, porcentaje o fecha \
+    concreta, debe poder rastrearse a una fuente citada en la pauta. Si la \
+    pauta no especifica el número exacto, no lo inventes.
+11. **No conviertas hipótesis en afirmaciones**: las "preguntas abiertas" y \
+    los "ángulos críticos" de la pauta son líneas de investigación, no \
+    conclusiones cerradas. Desarróllalas con matices, presentando evidencia \
+    a favor y en contra cuando exista.
+12. **Consistencia con la línea editorial**: todo el artículo debe mantener \
+    coherencia con la identidad de izquierda y crítica al neoliberalismo de \
+    La Chispa Sur. Si un argumento que estás desarrollando se desliza hacia \
+    una lógica contraria a esa identidad, detente y reformúlalo.
+13. **Cierre coherente**: la conclusión del artículo debe derivarse lógicamente \
+    de los hechos y análisis presentados en el desarrollo. No introduzcas \
+    ideas nuevas en el cierre ni fuerces una moraleja que los datos no sustentan.
+
+### Después de escribir, verifica
+
+14. **Prueba de lectura inversa**: lee el artículo desde el final hacia el \
+    principio. ¿Hay alguna frase que contradiga lo dicho antes? ¿Algún dato \
+    que aparezca solo en el cierre sin haber sido desarrollado?
+15. **Prueba de atribución**: para cada cifra o declaración contundente del \
+    artículo, pregúntate: ¿esto lo dijo alguna fuente concreta o lo deduje yo? \
+    Si es deducción, ¿está presentada como tal?
 """  # noqa: E501
 
 
@@ -254,11 +366,12 @@ def build_user_prompt(filtered_items: list[dict[str, Any]]) -> str:
         return ""
 
     today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    item_count = len(filtered_items)
 
     # Cabecera del prompt
     parts: list[str] = [
         f"Fecha de análisis: {today_str}",
-        f"A continuación se presentan {len(filtered_items)} artículos "
+        f"A continuación se presentan {item_count} artículos "
         f"periodísticos recolectados durante la última semana desde diversos "
         f"canales RSS y scraping web.\n",
         "---",
@@ -280,15 +393,41 @@ def build_user_prompt(filtered_items: list[dict[str, Any]]) -> str:
         parts.append(f"**Resumen:** {summary}")
         parts.append("")
 
-    # Instrucción final
+    # Instrucción final — refuerza los datos clave para evitar errores
     parts.append("---")
     parts.append("")
     parts.append(
         "Con base en los artículos anteriores, genera las tres propuestas "
         "de pauta editorial siguiendo estrictamente el formato y las reglas "
-        "definidas en el system prompt. Recuerda: en las fuentes sugeridas "
-        "cita solo el nombre del medio, nunca incluyas números de artículo "
-        "como 'art. 70' o 'artículo 129'."
+        "definidas en el system prompt."
+    )
+    parts.append("")
+    parts.append(
+        "⚠️  **Recordatorios críticos de precisión:**"
+    )
+    parts.append(
+        f"- La fecha de análisis es **{today_str}** y procesaste exactamente "
+        f"**{item_count} artículos**. No es necesario que incluyas estos datos "
+        f"en tu respuesta: el sistema los agregará automáticamente."
+    )
+    parts.append(
+        "- 🚫 **CERO invención de números**: no menciones ninguna cifra, plazo "
+        "en años, monto en dinero o porcentaje que no aparezca textualmente en "
+        "los resúmenes de arriba. Si el dato no está escrito, no lo uses. Prefiere "
+        "ser vago ('por un plazo definido en la ley') a publicar un número falso."
+    )
+    parts.append(
+        "- Cita solo el **nombre del medio** en las fuentes sugeridas y en "
+        "el texto de la pauta. Nunca incluyas números de artículo como "
+        "'art. 70' o 'artículo 129'."
+    )
+    parts.append(
+        "- Verifica que cada cifra, nombre propio y declaración que menciones "
+        "provenga del material de entrada y esté atribuida al medio correcto."
+    )
+    parts.append(
+        "- Antes de responder, revisa la coherencia entre las tres propuestas: "
+        "no deben existir contradicciones lógicas entre ellas."
     )
 
     return "\n".join(parts)
@@ -356,6 +495,14 @@ def build_article_user_prompt(proposal: dict[str, Any]) -> str:
         "Con base en la propuesta anterior, escribe el artículo completo "
         "siguiendo la estructura y el tono definidos en el system prompt. "
         "Extensión objetivo: ~1000 palabras."
+    )
+    parts.append("")
+    parts.append(
+        "⚠️  **Antes de escribir, repasa las reglas de verificación del system "
+        "prompt**: identifica qué datos son certezas (provienen de las fuentes), "
+        "cuáles son inferencias (desarrollos del ángulo crítico) y cuáles son "
+        "contexto general. No conviertas hipótesis en afirmaciones categóricas "
+        "ni inventes cifras que no estén respaldadas."
     )
 
     return "\n".join(parts)

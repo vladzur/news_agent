@@ -16,13 +16,13 @@ DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
 TEMPERATURE = 0.5
 MAX_TOKENS = 16384  # Pauta semanal: ~1000+ noticias requieren más presupuesto de razonamiento
 ARTICLE_MAX_TOKENS = 16384  # Artículo ~1000 palabras: contenido + overhead de razonamiento
-REASONING_EFFORT = "high"  # "high" o "max" para razonamiento profundo
+REASONING_EFFORT = "low"  # "high" o "max" para razonamiento profundo, "low" para respuestas rápidas y menos profundas
 
 # ---------------------------------------------------------------------------
 # Constantes de la ventana de análisis y formato
 # ---------------------------------------------------------------------------
 TIME_WINDOW_HOURS = 168  # 7 días: cubre la semana completa (lunes a domingo)
-SUMMARY_MAX_CHARS = 200
+SUMMARY_MAX_CHARS = 400  # Suficiente para lead + cifras + atribuciones (reglas de precisión factual)
 
 # ---------------------------------------------------------------------------
 # Archivo de configuración de feeds RSS (por defecto)

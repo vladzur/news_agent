@@ -49,8 +49,10 @@ def save_report(
 ) -> Path:
     """Guarda el reporte editorial en un archivo Markdown.
 
-    Si el contenido ya incluye una cabecera con el formato de La Chispa Sur,
-    se usa tal cual. En caso contrario, se antepone la cabecera automática.
+    La cabecera con fecha y cantidad de artículos se genera siempre desde
+    el código para garantizar precisión. Si el LLM incluyó una cabecera
+    propia, se descarta en favor de la cabecera automática con los datos
+    correctos.
 
     Args:
         content: Texto completo generado por el LLM.
@@ -70,12 +72,45 @@ def save_report(
     filename = build_filename()
     file_path = output_path / filename
 
-    # Si el LLM ya incluyó la cabecera, no la duplicamos
+    # Construir la cabecera correcta con datos verificados
+    correct_header = build_header(item_count)
+
+    # Eliminar cabecera generada por el LLM si existe, para evitar datos
+    # incorrectos de fecha o conteo de artículos. Detectamos la cabecera
+    # por el marcador "# ⚡ Pauta Editorial Sugerida" y eliminamos todo
+    # hasta el primer "## " (inicio de la primera propuesta) o el primer "---".
     header_marker = "# ⚡ Pauta Editorial Sugerida"
-    if content.strip().startswith(header_marker):
-        final_content = content
+    stripped = content.strip()
+
+    if stripped.startswith(header_marker):
+        # El LLM generó una cabecera. Buscar dónde empieza el contenido real.
+        # La cabecera del modelo típicamente termina en "---\n" seguido de "## 1."
+        # o directamente en "## 1."
+        first_proposal = stripped.find("\n## 1. ")
+        if first_proposal == -1:
+            # Fallback: buscar el primer "## " después del marcador
+            first_proposal = stripped.find("\n## ", len(header_marker))
+
+        if first_proposal != -1:
+            body = stripped[first_proposal:].lstrip("\n")
+        else:
+            # Si no encontramos propuestas, buscar después del primer "---"
+            sep = stripped.find("\n---\n", len(header_marker))
+            if sep != -1:
+                body = stripped[sep + len("\n---\n"):].lstrip("\n")
+            else:
+                # Último recurso: usar el contenido tal cual
+                body = stripped
+
+        final_content = correct_header + body
+        logger.info(
+            "Cabecera del LLM reemplazada por cabecera automática con datos "
+            "verificados (fecha y conteo de %d artículos).",
+            item_count,
+        )
     else:
-        final_content = build_header(item_count) + "\n" + content
+        # El LLM no generó cabecera — anteponemos la correcta
+        final_content = correct_header + "\n" + stripped
 
     with open(file_path, "w", encoding="utf-8") as fh:
         fh.write(final_content)

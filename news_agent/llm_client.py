@@ -106,7 +106,7 @@ class LLMClient:
                 max_tokens=self.max_tokens,
                 extra_body={
                     "thinking": {
-                        "type": "enabled",
+                        "type": "disabled" if self.reasoning_effort == "low" else "enabled",
                         "reasoning_effort": self.reasoning_effort,
                     }
                 },
