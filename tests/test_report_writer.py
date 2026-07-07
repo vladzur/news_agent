@@ -72,13 +72,53 @@ class TestSaveReport:
         assert "Texto de prueba" in saved
 
     def test_does_not_duplicate_header(self, tmp_path):
-        """No debe duplicar la cabecera si el contenido ya la incluye."""
+        """No debe duplicar la cabecera: la del LLM se reemplaza por la automática."""
         content = "# ⚡ Pauta Editorial Sugerida - La Chispa Sur\n\nMás contenido."
         file_path = save_report(content, 10, output_dir=tmp_path)
 
         saved = file_path.read_text(encoding="utf-8")
-        # La cabecera debe aparecer solo una vez
+        # La cabecera debe aparecer solo una vez (la automática con datos correctos)
         assert saved.count("# ⚡ Pauta Editorial Sugerida") == 1
+
+    def test_replaces_llm_header_with_correct_count(self, tmp_path):
+        """Debe reemplazar la cabecera del LLM con el conteo correcto de artículos."""
+        # El LLM podría generar una cabecera con un conteo incorrecto
+        content = (
+            "# ⚡ Pauta Editorial Sugerida - La Chispa Sur\n"
+            "**Fecha de Generación:** 2026-01-01\n"
+            "**Notas Procesadas:** 999\n"  # Dato incorrecto
+            "\n---\n"
+            "\n## 1. Título de propuesta\n"
+            "\nContenido real."
+        )
+        file_path = save_report(content, 42, output_dir=tmp_path)
+
+        saved = file_path.read_text(encoding="utf-8")
+        # Debe usar el conteo correcto (42), no el del LLM (999)
+        assert "**Notas Procesadas:** 42" in saved
+        assert "**Notas Procesadas:** 999" not in saved
+        # El contenido real debe preservarse
+        assert "Título de propuesta" in saved
+        assert "Contenido real" in saved
+
+    def test_replaces_llm_header_with_correct_date(self, tmp_path):
+        """Debe reemplazar la cabecera del LLM con la fecha correcta (hoy)."""
+        from datetime import datetime, timezone
+
+        content = (
+            "# ⚡ Pauta Editorial Sugerida - La Chispa Sur\n"
+            "**Fecha de Generación:** 1999-12-31\n"  # Fecha incorrecta
+            "**Notas Procesadas:** 5\n"
+            "\n---\n"
+            "\n## 1. Título\n"
+        )
+        file_path = save_report(content, 5, output_dir=tmp_path)
+
+        saved = file_path.read_text(encoding="utf-8")
+        # La fecha debe ser la actual, no la del LLM
+        today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        assert f"**Fecha de Generación:** {today_str}" in saved
+        assert "**Fecha de Generación:** 1999-12-31" not in saved
 
     def test_adds_header_when_missing(self, tmp_path):
         """Debe añadir la cabecera si el contenido no la incluye."""

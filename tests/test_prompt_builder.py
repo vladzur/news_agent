@@ -37,9 +37,12 @@ class TestBuildSystemPrompt:
         assert "incisivo" in prompt.lower() or "analítico" in prompt.lower()
 
     def test_contains_output_format(self):
-        """Debe especificar el formato de salida Markdown."""
+        """Debe especificar el formato de salida Markdown para las propuestas."""
         prompt = build_system_prompt()
         assert "## 1." in prompt or "TÍTULO GANCHO" in prompt
+        # El formato ya no debe incluir la cabecera con fecha y cantidad:
+        # esos datos los agrega el código automáticamente.
+        assert "# ⚡ Pauta Editorial Sugerida" not in prompt
 
     def test_contains_fuentes_sugeridas_section(self):
         """Debe incluir la sección de Fuentes Sugeridas en el formato de salida."""
@@ -81,6 +84,46 @@ class TestBuildSystemPrompt:
         assert "Prohibido referenciar números de artículo" in prompt \
             or "prohibido referenciar" in prompt.lower()
 
+    def test_contains_verification_section(self):
+        """Debe incluir sección de verificación de datos y consistencia."""
+        prompt = build_system_prompt()
+        assert "Verificación de datos y consistencia" in prompt
+
+    def test_contains_factual_precision_rules(self):
+        """Debe incluir reglas de precisión factual (cifras, atribución, nombres)."""
+        prompt = build_system_prompt()
+        assert "Cifras, porcentajes y fechas" in prompt
+        assert "Atribución correcta" in prompt
+        assert "Nombres propios" in prompt
+
+    def test_contains_logical_consistency_rules(self):
+        """Debe incluir reglas de consistencia lógica entre propuestas."""
+        prompt = build_system_prompt()
+        assert "Coherencia entre propuestas" in prompt
+        assert "Conexión lógica entre hecho y análisis" in prompt
+
+    def test_contains_no_speculation_rule(self):
+        """Debe incluir regla contra la especulación sobre motivaciones."""
+        prompt = build_system_prompt()
+        assert "especulación sobre motivaciones" in prompt.lower() \
+            or "verdaderas intenciones" in prompt
+
+    def test_contains_source_verification_rules(self):
+        """Debe incluir reglas de verificación para fuentes sugeridas."""
+        prompt = build_system_prompt()
+        assert "Fuentes reales y pertinentes" in prompt
+
+    def test_contains_self_verification_checklist(self):
+        """Debe incluir lista de autoverificación antes de entregar."""
+        prompt = build_system_prompt()
+        assert "Autoverificación final" in prompt
+
+    def test_does_not_include_header_in_output_format(self):
+        """El formato de salida no debe incluir la cabecera con fecha/cantidad."""
+        prompt = build_system_prompt()
+        assert "No incluyas la cabecera" in prompt \
+            or "el sistema la agregará" in prompt.lower()
+
 
 class TestBuildArticleSystemPrompt:
     """Pruebas para build_article_system_prompt."""
@@ -115,6 +158,29 @@ class TestBuildArticleSystemPrompt:
     def test_returns_article_system_prompt_constant(self):
         """Debe devolver exactamente la constante ARTICLE_SYSTEM_PROMPT."""
         assert build_article_system_prompt() == ARTICLE_SYSTEM_PROMPT
+
+    def test_contains_verification_section(self):
+        """Debe incluir sección de verificación de hechos y consistencia argumental."""
+        prompt = build_article_system_prompt()
+        assert "Verificación de hechos y consistencia argumental" in prompt
+
+    def test_contains_fact_tracing_rules(self):
+        """Debe incluir reglas de trazabilidad de datos a fuentes."""
+        prompt = build_article_system_prompt()
+        assert "Trazabilidad de cada dato" in prompt
+        assert "no conviertas hipótesis en afirmaciones" in prompt.lower()
+
+    def test_contains_argument_consistency_rules(self):
+        """Debe incluir reglas de consistencia argumental y línea editorial."""
+        prompt = build_article_system_prompt()
+        assert "Consistencia con la línea editorial" in prompt
+        assert "Cierre coherente" in prompt
+
+    def test_contains_post_writing_verification(self):
+        """Debe incluir verificación posterior a la escritura."""
+        prompt = build_article_system_prompt()
+        assert "Después de escribir" in prompt
+        assert "prueba de lectura inversa" in prompt.lower()
 
 
 class TestBuildArticleUserPrompt:
@@ -275,7 +341,8 @@ class TestBuildUserPrompt:
 
         result = build_user_prompt(items)
 
-        assert "nunca incluyas números" in result.lower() \
+        assert "Cita solo el **nombre del medio**" in result \
+            or "Nunca incluyas números de artículo" in result \
             or "nunca incluyas" in result.lower()
 
     def test_empty_items_returns_empty_string(self):
@@ -293,3 +360,46 @@ class TestBuildUserPrompt:
         assert "Fecha de análisis" in result
         # Debe contener un año (2026) en el prompt
         assert "2026" in result
+
+    def test_includes_accuracy_reminders(self):
+        """Debe incluir recordatorios de precisión al final del prompt."""
+        items = [
+            self._make_item("T1", "S1", "R1"),
+        ]
+
+        result = build_user_prompt(items)
+
+        assert "Recordatorios críticos de precisión" in result
+
+    def test_includes_date_and_count_reinforcement(self):
+        """Debe reforzar la fecha y cantidad exacta al final del prompt."""
+        items = [
+            self._make_item("T1", "S1", "R1"),
+            self._make_item("T2", "S2", "R2"),
+        ]
+
+        result = build_user_prompt(items)
+
+        assert "fecha de análisis es" in result.lower()
+        assert "2 artículos" in result or "2 artículo" in result or "**2 artículos**" in result
+
+    def test_includes_consistency_reminder(self):
+        """Debe recordar revisar coherencia entre las tres propuestas."""
+        items = [
+            self._make_item("T1", "S1", "R1"),
+        ]
+
+        result = build_user_prompt(items)
+
+        assert "coherencia" in result.lower() or "contradicciones" in result.lower()
+
+    def test_includes_source_attribution_reminder(self):
+        """Debe recordar verificar atribución correcta de fuentes."""
+        items = [
+            self._make_item("T1", "S1", "R1"),
+        ]
+
+        result = build_user_prompt(items)
+
+        assert "atribuida al medio correcto" in result.lower() \
+            or "nombre del medio" in result.lower()

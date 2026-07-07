@@ -40,16 +40,16 @@ class TestConstants:
         assert TIME_WINDOW_HOURS == 168
 
     def test_expected_summary_chars(self):
-        """Verifica que el truncado de resumen sea de 200 caracteres."""
-        assert SUMMARY_MAX_CHARS == 200
+        """Verifica que el truncado de resumen sea de 400 caracteres."""
+        assert SUMMARY_MAX_CHARS == 400
 
     def test_expected_max_tokens(self):
         """Verifica que max_tokens sea 16384 para pauta semanal."""
         assert MAX_TOKENS == 16384
 
     def test_expected_reasoning_effort(self):
-        """Verifica que el esfuerzo de razonamiento sea 'high'."""
-        assert REASONING_EFFORT == "high"
+        """Verifica que el esfuerzo de razonamiento sea 'low'."""
+        assert REASONING_EFFORT == "low"
 
 
 class TestGetApiKey:
