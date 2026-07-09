@@ -13,16 +13,26 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 DEEPSEEK_MODEL = "deepseek-v4-pro"
 DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
-TEMPERATURE = 0.5
+TEMPERATURE = 0.1
 MAX_TOKENS = 16384  # Pauta semanal: ~1000+ noticias requieren más presupuesto de razonamiento
-ARTICLE_MAX_TOKENS = 16384  # Artículo ~1000 palabras: contenido + overhead de razonamiento
-REASONING_EFFORT = "low"  # "high" o "max" para razonamiento profundo, "low" para respuestas rápidas y menos profundas
+ARTICLE_MAX_TOKENS = 4069  # Artículo ~1000 palabras: contenido + overhead de razonamiento
+REASONING_EFFORT = "high"  # "high" o "max" para razonamiento profundo, "low" para respuestas rápidas y menos profundas
 
 # ---------------------------------------------------------------------------
 # Constantes de la ventana de análisis y formato
 # ---------------------------------------------------------------------------
 TIME_WINDOW_HOURS = 168  # 7 días: cubre la semana completa (lunes a domingo)
-SUMMARY_MAX_CHARS = 400  # Suficiente para lead + cifras + atribuciones (reglas de precisión factual)
+SUMMARY_MAX_CHARS = 700  # Suficiente para lead + cifras + atribuciones (reglas de precisión factual)
+
+# ---------------------------------------------------------------------------
+# Constantes de enriquecimiento de contenido
+# ---------------------------------------------------------------------------
+FULL_CONTENT_FETCH_ENABLED = True  # Control global de enriquecimiento
+MIN_SUMMARY_LENGTH = 150  # Si el resumen RSS < esto, intentar extraer contenido completo
+FULL_CONTENT_TIMEOUT = 15  # Timeout HTTP para cada extracción de artículo (segundos)
+FULL_CONTENT_DELAY = 1.0  # Pausa entre peticiones al mismo dominio (segundos)
+FULL_CONTENT_MAX_WORKERS = 4  # Hilos paralelos para extracción de contenido
+FULL_CONTENT_CACHE_DIR = "cache"  # Directorio para caché de contenido extraído
 
 # ---------------------------------------------------------------------------
 # Archivo de configuración de feeds RSS (por defecto)

@@ -139,10 +139,10 @@ class TestTruncate:
             assert body[-1] in (" ", "a", "e", "i", "o", "u")
 
     def test_default_max_chars(self):
-        """Debe usar el valor por defecto (200) si no se especifica."""
-        text = "a" * 300
+        """Debe usar el valor por defecto (SUMMARY_MAX_CHARS) si no se especifica."""
+        text = "a" * 800  # Más largo que SUMMARY_MAX_CHARS=600
         result = truncate(text)
-        assert len(result) <= 201
+        assert len(result) <= 601  # SUMMARY_MAX_CHARS + posible "…"
 
 
 # ---------------------------------------------------------------------------
@@ -184,14 +184,14 @@ class TestFilterItems:
         assert result[0]["summary_clean"] == "Texto importante"
 
     def test_truncates_long_summary(self):
-        """Debe truncar resúmenes largos a 200 caracteres."""
-        long_text = "x " * 150  # ~300 caracteres
+        """Debe truncar resúmenes largos a SUMMARY_MAX_CHARS (600) caracteres."""
+        long_text = "x " * 500  # ~1000 caracteres
         items = [
             self._make_item("T1", "S1", long_text, 1),
         ]
 
         result = filter_items(items)
-        assert len(result[0]["summary_clean"]) <= 201
+        assert len(result[0]["summary_clean"]) <= 601  # SUMMARY_MAX_CHARS + posible "…"
 
     def test_includes_correct_fields(self):
         """Los items filtrados deben contener las claves esperadas."""
@@ -249,3 +249,107 @@ class TestFilterItems:
         assert len(result) == 2
         sources = {r["source"] for r in result}
         assert sources == {"S1", "S2"}
+
+    # -------------------------------------------------------------------
+    # Tests con full_content (enriquecimiento de contenido)
+    # -------------------------------------------------------------------
+
+    def test_prefers_full_content_over_summary(self):
+        """Cuando full_content está presente, summary_clean debe usarlo."""
+        items = [
+            {
+                "title": "T1",
+                "source": "S1",
+                "summary": "Resumen RSS corto.",
+                "full_content": "Texto completo extraído del artículo con mucho "
+                "más detalle y contexto.",
+                "published_parsed": (
+                    datetime.now(timezone.utc) - timedelta(hours=1)
+                ).timetuple(),
+                "link": "https://example.com/1",
+            },
+        ]
+
+        result = filter_items(items)
+        assert len(result) == 1
+        # Debe preferir full_content
+        assert "Texto completo extraído" in result[0]["summary_clean"]
+
+    def test_falls_back_to_summary_when_no_full_content(self):
+        """Sin full_content, debe usar el summary RSS original."""
+        items = [
+            {
+                "title": "T1",
+                "source": "S1",
+                "summary": "Resumen RSS original.",
+                "published_parsed": (
+                    datetime.now(timezone.utc) - timedelta(hours=1)
+                ).timetuple(),
+                "link": "https://example.com/1",
+            },
+        ]
+
+        result = filter_items(items)
+        assert len(result) == 1
+        assert "Resumen RSS original" in result[0]["summary_clean"]
+
+    def test_preserves_debug_fields(self):
+        """Los campos summary_raw y full_content deben aparecer en el output."""
+        items = [
+            {
+                "title": "T1",
+                "source": "S1",
+                "summary": "Resumen RSS.",
+                "full_content": "Contenido completo.",
+                "published_parsed": (
+                    datetime.now(timezone.utc) - timedelta(hours=1)
+                ).timetuple(),
+                "link": "https://example.com/1",
+            },
+        ]
+
+        result = filter_items(items)
+        assert len(result) == 1
+        assert result[0]["summary_raw"] == "Resumen RSS."
+        assert result[0]["full_content"] == "Contenido completo."
+
+    def test_full_content_is_stripped_and_truncated(self):
+        """El full_content debe pasar por strip_html y truncate igual que summary."""
+        items = [
+            {
+                "title": "T1",
+                "source": "S1",
+                "summary": "Corto.",
+                "full_content": "<p>Texto <b>HTML</b> muy largo. " + ("x " * 500) + "</p>",
+                "published_parsed": (
+                    datetime.now(timezone.utc) - timedelta(hours=1)
+                ).timetuple(),
+                "link": "https://example.com/1",
+            },
+        ]
+
+        result = filter_items(items)
+        assert len(result) == 1
+        # No debe contener etiquetas HTML
+        assert "<p>" not in result[0]["summary_clean"]
+        assert "<b>" not in result[0]["summary_clean"]
+        # Debe estar truncado (el texto sin truncar sería ~1000 chars)
+        assert len(result[0]["summary_clean"]) <= 1001  # SUMMARY_MAX_CHARS + posible "…" + margen
+
+    def test_full_content_none_preserved_in_output(self):
+        """Si no hay full_content, el campo debe aparecer como None."""
+        items = [
+            {
+                "title": "T1",
+                "source": "S1",
+                "summary": "Resumen.",
+                "published_parsed": (
+                    datetime.now(timezone.utc) - timedelta(hours=1)
+                ).timetuple(),
+                "link": None,
+            },
+        ]
+
+        result = filter_items(items)
+        assert len(result) == 1
+        assert result[0]["full_content"] is None

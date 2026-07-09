@@ -1,7 +1,7 @@
 """Módulo de filtrado y limpieza de noticias.
 
 Aplica la ventana de 7 días (168 horas), limpia HTML residual de los resúmenes
-y trunca el texto a 200 caracteres según las especificaciones.
+y trunca el texto según las especificaciones.
 """
 
 import calendar
@@ -133,7 +133,7 @@ def filter_items(
     Aplica en secuencia:
     1. Filtro de ventana de tiempo (168 horas, 7 días).
     2. Limpieza HTML del resumen.
-    3. Truncado a 200 caracteres del resumen limpio.
+    3. Truncado del resumen limpio.
 
     Args:
         raw_items: Lista de artículos crudos desde el RSS fetcher.
@@ -155,7 +155,13 @@ def filter_items(
             continue
 
         # Limpieza HTML + truncado del resumen
-        raw_summary = item.get("summary", "")
+        # Preferir full_content (contenido completo extraído) si está disponible,
+        # de lo contrario usar el resumen RSS original.
+        if item.get("full_content"):
+            raw_summary = item["full_content"]
+        else:
+            raw_summary = item.get("summary", "") or ""
+
         clean_summary = strip_html(raw_summary)
         truncated_summary = truncate(clean_summary, max_chars)
 
@@ -165,6 +171,9 @@ def filter_items(
                 "source": item.get("source", ""),
                 "summary_clean": truncated_summary,
                 "link": item.get("link"),
+                # Campos de depuración preservados para el archivo intermedio
+                "summary_raw": item.get("summary") or "",
+                "full_content": item.get("full_content"),
             }
         )
 

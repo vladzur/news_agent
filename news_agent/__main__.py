@@ -51,6 +51,13 @@ def main() -> None:
         action="store_true",
         help="Activa logging en modo DEBUG para diagnóstico detallado.",
     )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Guarda un archivo JSON intermedio con los artículos procesados "
+        "en debug/articulos_procesados_YYYY_MM_DD.json para depuración "
+        "y comparación manual.",
+    )
 
     # --- Argumentos para escribir artículos desde pauta existente ---
     parser.add_argument(
@@ -114,6 +121,7 @@ def main() -> None:
             feeds_path=args.feeds,
             output_dir=args.output,
             verbose=args.verbose,
+            save_intermediate_data=args.debug,
         )
     except KeyboardInterrupt:
         print("\nEjecución cancelada por el usuario.", file=sys.stderr)
@@ -123,6 +131,8 @@ def main() -> None:
     print(f"   📄 {result['report_path']}")
     print(f"   📊 {result['item_count']} artículos analizados de "
            f"{result['feed_count']} fuentes.")
+    if result.get("debug_path"):
+        print(f"   🔍 Archivo de depuración: {result['debug_path']}")
 
 
 if __name__ == "__main__":

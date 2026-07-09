@@ -10,6 +10,8 @@ from pathlib import Path
 from typing import Any
 
 from .config import ConfigurationError, get_api_key, load_rss_feeds
+from .content_enricher import enrich_items
+from .intermediate_writer import save_intermediate
 from .llm_client import LLMClient, LLMClientError
 from .news_filter import filter_items
 from .prompt_builder import build_system_prompt, build_user_prompt
@@ -43,6 +45,7 @@ def run_pipeline(
     feeds_path: str | Path | None = None,
     output_dir: str | Path = ".",
     verbose: bool = False,
+    save_intermediate_data: bool = False,
 ) -> dict[str, Any]:
     """Ejecuta el pipeline completo del agente de noticias.
 
@@ -50,12 +53,16 @@ def run_pipeline(
         feeds_path: Ruta al archivo JSON de feeds. None = usar default.
         output_dir: Directorio donde guardar el reporte generado.
         verbose: Si es True, activa logging DEBUG.
+        save_intermediate_data: Si es True, guarda un archivo JSON intermedio
+                                con los artículos procesados para depuración.
 
     Returns:
         dict con las claves:
             - report_path (Path): Ruta al archivo generado.
             - item_count (int): Cantidad de artículos analizados.
             - feed_count (int): Cantidad de feeds configurados.
+            - debug_path (Path | None): Ruta al archivo de depuración,
+                                        solo si save_intermediate_data=True.
 
     Raises:
         OrchestratorError: En caso de error fatal que impida continuar.
@@ -100,9 +107,31 @@ def run_pipeline(
     logger.info("Total de artículos crudos recolectados: %d.", len(raw_items))
 
     # -----------------------------------------------------------------------
+    # Paso 3b: Enriquecer contenido de artículos con resúmenes cortos
+    # -----------------------------------------------------------------------
+    enriched_items = enrich_items(raw_items, feeds)
+    logger.info(
+        "Enriquecimiento completado: %d artículos procesados.",
+        len(enriched_items),
+    )
+
+    # -----------------------------------------------------------------------
     # Paso 4: Filtrar por ventana de 168h (7 días), limpiar HTML y truncar
     # -----------------------------------------------------------------------
-    filtered_items = filter_items(raw_items)
+    filtered_items = filter_items(enriched_items)
+
+    # -----------------------------------------------------------------------
+    # Paso 4b: Guardar archivo intermedio de depuración (opcional)
+    # -----------------------------------------------------------------------
+    debug_path: Path | None = None
+    if save_intermediate_data:
+        try:
+            debug_path = save_intermediate(filtered_items, output_dir)
+            logger.info("Archivo intermedio guardado: %s", debug_path)
+        except IOError as exc:
+            logger.warning(
+                "No se pudo guardar el archivo intermedio: %s", exc
+            )
 
     # -----------------------------------------------------------------------
     # Paso 5: Guardia — si no hay noticias, no llamar a la API
@@ -175,4 +204,5 @@ def run_pipeline(
         "report_path": report_path,
         "item_count": len(filtered_items),
         "feed_count": len(feeds),
+        "debug_path": debug_path,
     }

@@ -236,3 +236,86 @@ class TestRunPipeline:
                 result = run_pipeline(feeds_path=feeds_file, output_dir=tmp_path)
 
         assert result["report_path"].parent == tmp_path
+
+    # -------------------------------------------------------------------
+    # Tests de enriquecimiento de contenido en el pipeline
+    # -------------------------------------------------------------------
+
+    def test_pipeline_calls_enrich_items(self, mock_api_key, feeds_file, tmp_path):
+        """El pipeline debe llamar a enrich_items entre fetch_all y filter_items."""
+        raw_items = self._mock_raw_items()
+        llm_response = self._mock_llm_response()
+
+        with patch("news_agent.orchestrator.fetch_all", return_value=raw_items):
+            with patch(
+                "news_agent.orchestrator.enrich_items"
+            ) as mock_enrich:
+                mock_enrich.return_value = raw_items  # Sin cambios
+
+                with patch("news_agent.orchestrator.LLMClient") as mock_client_class:
+                    mock_client = Mock()
+                    mock_client.generate_report.return_value = llm_response
+                    mock_client_class.return_value = mock_client
+
+                    run_pipeline(feeds_path=feeds_file, output_dir=tmp_path)
+
+                # enrich_items debe haberse llamado con los items y la config
+                mock_enrich.assert_called_once()
+                args = mock_enrich.call_args[0]
+                assert args[0] == raw_items
+                assert len(args[1]) == 2  # feeds config
+
+    def test_pipeline_with_debug_flag_creates_file(
+        self, mock_api_key, feeds_file, tmp_path
+    ):
+        """Con save_intermediate_data=True, debe guardar archivo de depuración."""
+        raw_items = self._mock_raw_items()
+        llm_response = self._mock_llm_response()
+
+        with patch("news_agent.orchestrator.fetch_all", return_value=raw_items):
+            with patch(
+                "news_agent.orchestrator.enrich_items"
+            ) as mock_enrich:
+                mock_enrich.return_value = raw_items
+
+                with patch("news_agent.orchestrator.LLMClient") as mock_client_class:
+                    mock_client = Mock()
+                    mock_client.generate_report.return_value = llm_response
+                    mock_client_class.return_value = mock_client
+
+                    result = run_pipeline(
+                        feeds_path=feeds_file,
+                        output_dir=tmp_path,
+                        save_intermediate_data=True,
+                    )
+
+        # Debe incluir debug_path en el resultado
+        assert result["debug_path"] is not None
+        assert result["debug_path"].exists()
+        assert result["debug_path"].name.startswith("articulos_procesados_")
+
+    def test_pipeline_without_debug_flag_no_debug_file(
+        self, mock_api_key, feeds_file, tmp_path
+    ):
+        """Sin save_intermediate_data, no debe crear archivo de depuración."""
+        raw_items = self._mock_raw_items()
+        llm_response = self._mock_llm_response()
+
+        with patch("news_agent.orchestrator.fetch_all", return_value=raw_items):
+            with patch(
+                "news_agent.orchestrator.enrich_items"
+            ) as mock_enrich:
+                mock_enrich.return_value = raw_items
+
+                with patch("news_agent.orchestrator.LLMClient") as mock_client_class:
+                    mock_client = Mock()
+                    mock_client.generate_report.return_value = llm_response
+                    mock_client_class.return_value = mock_client
+
+                    result = run_pipeline(
+                        feeds_path=feeds_file,
+                        output_dir=tmp_path,
+                        save_intermediate_data=False,
+                    )
+
+        assert result["debug_path"] is None

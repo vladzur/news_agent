@@ -193,7 +193,10 @@ def scrape_feed(name: str, url: str, feed_config: dict[str, Any]) -> list[dict[s
     # -----------------------------------------------------------------------
     # Parsear HTML y extraer artículos
     # -----------------------------------------------------------------------
-    soup = BeautifulSoup(response.text, "html.parser")
+    # Usar response.content (bytes) en lugar de response.text para que
+    # BeautifulSoup detecte la codificación desde las meta tags del HTML,
+    # evitando errores de doble codificación UTF-8 → Latin-1.
+    soup = BeautifulSoup(response.content, "html.parser")
     selectors: dict[str, str] = feed_config.get("selectors", {})
 
     article_selector = selectors.get("article", "")
