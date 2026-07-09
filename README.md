@@ -2,7 +2,7 @@
 
 **Curador automatizado de pauta periodística para La Chispa Sur**, medio digital independiente de izquierda, crítico del modelo neoliberal.
 
-El agente recolecta noticias desde canales RSS y scraping web, las filtra por una ventana temporal de 7 días (168 horas), enriquece los resúmenes cortos extrayendo el contenido completo de los artículos con trafilatura, y utiliza el modelo **DeepSeek-V4-Pro** (vía API compatible con OpenAI SDK) para sintetizar **tres propuestas de pauta editorial semanal** con profundidad analítica, tono incisivo y narrativa ágil. También permite **escribir artículos completos (~1000 palabras)** a partir de cualquiera de las propuestas generadas.
+El agente recolecta noticias desde canales RSS y scraping web, las filtra por una ventana temporal de 7 días (168 horas), enriquece los resúmenes cortos extrayendo el contenido completo de los artículos con trafilatura, y utiliza el modelo **DeepSeek-V4-Pro** (vía API compatible con OpenAI SDK) para sintetizar **tres propuestas de pauta editorial semanal** con profundidad analítica, tono incisivo y narrativa ágil. También permite **escribir artículos completos (~1000 palabras)** a partir de cualquiera de las propuestas generadas, con un sistema de **referencias deterministas a fuentes** que asegura que el redactor reciba el contenido completo de los artículos fuente correctos para cada propuesta.
 
 ---
 
@@ -23,15 +23,23 @@ Flujo automatizado que:
 6. **Guardado intermedio de depuración (opcional)** — Con el flag `--debug`, guarda un archivo JSON con los artículos procesados (resumen RSS original, contenido extraído y resumen final) para comparar y ajustar el prompt.
 7. **Análisis con IA** — Envía los artículos filtrados a DeepSeek-V4-Pro con un system prompt que define la identidad editorial de La Chispa Sur (izquierda independiente, rigor periodístico, enfoque chileno, foco territorial en Villarrica y La Araucanía).
 8. **Reporte Markdown** — Genera un archivo `pauta_semanal_AAAA_MM_DD.md` con tres propuestas estructuradas: título gancho, enfoque editorial, puntos clave a desarrollar y fuentes sugeridas para ampliar. La cabecera (fecha y cantidad de notas) se genera automáticamente desde el código para garantizar precisión.
+9. **Companion JSON de fuentes** — Extrae las fuentes sugeridas desde el texto de la pauta, las empareja determinísticamente con los artículos del pipeline por nombre de medio y similitud temática (keywords), enriquece los artículos emparejados con contenido completo y guarda un archivo `pauta_semanal_AAAA_MM_DD_companion.json`. Este archivo permite que el redactor de artículos reciba el contenido completo de las fuentes correctas.
 
-### 2. Escritura de artículo completo
+### 2. Escritura de artículo completo con fuentes verificadas
 
-Toma una propuesta específica de la pauta (1, 2 o 3) y la expande a un artículo de **~1000 palabras**:
+Toma una propuesta específica de la pauta (1, 2 o 3) y la expande a un artículo de **~1000 palabras** con material de origen real y verificado:
 
-- Parsea automáticamente el archivo de pauta para extraer título, enfoque, puntos clave y fuentes.
-- Usa un system prompt de redactor periodístico (identidad La Chispa Sur).
-- Genera un artículo con lead, desarrollo por secciones y fuentes citadas.
-- Guarda el resultado como `articulo_N_slug-del-titulo.md`.
+1. **Parseo de la pauta** — Extrae título, enfoque editorial, puntos clave y fuentes sugeridas desde el archivo markdown generado.
+2. **Emparejamiento determinista de fuentes** — En lugar de depender de números de artículo auto-reportados por el LLM (poco fiables), el sistema:
+   - Extrae los nombres de medios y descripciones temáticas de la sección «Fuentes Sugeridas para Ampliar» de cada propuesta.
+   - Empareja cada fuente con los artículos del pipeline por **nombre del medio** (comparación flexible: case-insensitive, parcial, por primera palabra) y **similitud temática** (solapamiento de keywords entre la descripción de la fuente y el título + contenido del artículo, usando índice Jaccard con bonus por keywords en el título).
+   - Enriquece los artículos emparejados con contenido completo forzando extracción vía `trafilatura` si es necesario.
+   - Guarda un archivo **companion JSON** (`pauta_semanal_AAAA_MM_DD_companion.json`) con el contenido completo de cada artículo fuente.
+3. **Prompt enriquecido** — El redactor recibe una sección `## Material de origen disponible` con el contenido completo de los artículos fuente correctos para su propuesta, permitiéndole escribir con datos verificables en lugar de inventar o depender de memoria.
+4. **Redacción del artículo** — Usa un system prompt de redactor periodístico (identidad La Chispa Sur) que exige trazabilidad de cada dato a las fuentes proporcionadas.
+5. **Artículo final** — Lead, desarrollo por secciones con subtítulos, y fuentes citadas al final. Guardado como `articulo_N_slug-del-titulo.md`.
+
+> **¿Por qué matching determinista y no números de artículo?** En pruebas reales, el LLM que genera la pauta frecuentemente asigna números de artículo incorrectos en el bloque de referencias (ej: mapear una propuesta sobre tala de bosque nativo en Villarrica a artículos sobre salmonicultura o conflictos en Líbano). El matching por nombre de medio + keywords extrae las fuentes directamente del texto de la pauta —que el LLM escribe de forma natural y confiable— y las cruza con los artículos del pipeline sin depender del auto-reporte del modelo.
 
 ### 3. CLI unificado
 
@@ -66,7 +74,8 @@ news_agent/
 ├── prompt_builder.py      # Construcción de system/user prompts editoriales (~545 líneas)
 ├── llm_client.py          # Cliente DeepSeek vía SDK OpenAI (modo compatible)
 ├── report_writer.py       # Escritura de reportes .md y artículos
-└── article_writer.py      # Parseo de pauta + escritura de artículo completo
+├── article_writer.py      # Parseo de pauta + escritura de artículo completo
+└── source_references.py   # Emparejamiento determinista de fuentes y companion JSON
 ```
 
 ### Stack técnico
@@ -235,6 +244,7 @@ Las constantes principales se encuentran en [news_agent/config.py](news_agent/co
 | `FULL_CONTENT_DELAY` | `1.0` | Pausa entre peticiones al mismo dominio (segundos) |
 | `FULL_CONTENT_MAX_WORKERS` | `4` | Hilos paralelos para extracción de contenido |
 | `FULL_CONTENT_CACHE_DIR` | `"cache"` | Directorio para caché de contenido extraído |
+| `SOURCE_ARTICLE_MAX_CHARS` | `2000` | Caracteres máximos de contenido fuente por artículo en el prompt del redactor |
 
 ### Automatización con cron
 
@@ -294,6 +304,34 @@ Al usar `--debug`, se genera un JSON con cada artículo procesado, permitiendo c
 - `summary_raw`: resumen RSS original
 - `full_content`: contenido completo extraído (si se logró enriquecer)
 - `summary_clean`: resumen final enviado al LLM
+
+### Archivo companion de fuentes (`reportes/pauta_semanal_AAAA_MM_DD_companion.json`)
+
+Se genera automáticamente junto con la pauta. Contiene, para cada propuesta, los artículos fuente emparejados con su contenido completo:
+
+```json
+{
+  "metadata": {
+    "generated_at": "2026-07-09T12:00:00",
+    "total_articles_in_pipeline": 200
+  },
+  "proposal_1": {
+    "articles": [
+      {
+        "title": "Condenan a empresa por tala de bosque nativo en Villarrica",
+        "source": "CIPER Chile",
+        "link": "https://...",
+        "summary": "Resumen limpio del artículo...",
+        "content": "Contenido completo extraído con trafilatura (truncado a 2000 chars)..."
+      }
+    ]
+  },
+  "proposal_2": { "articles": [...] },
+  "proposal_3": { "articles": [...] }
+}
+```
+
+Este archivo es leído automáticamente por `article_writer.py` al redactar un artículo, inyectando el contenido como `## Material de origen disponible` en el prompt del redactor.
 
 ### Artículo completo (`articulos/articulo_N_slug-del-titulo.md`)
 
