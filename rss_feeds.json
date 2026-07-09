@@ -23,6 +23,7 @@
         "name": "El Mostrador",
         "url": "https://www.elmostrador.cl",
         "method": "scraping",
+        "enrich": false,
         "selectors": {
             "article": "h2:has(a[href]), h3:has(a[href]), h4:has(a[href])",
             "title": "a[href]",
