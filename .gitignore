@@ -21,6 +21,8 @@ env/
 # Output
 pauta_semanal_*.md
 articulo_*.md
+debug/
+cache/
 
 # OS
 .DS_Store
