@@ -20,6 +20,7 @@ env/
 
 # Output
 pauta_semanal_*.md
+pauta_semanal_*.json
 articulo_*.md
 debug/
 cache/
