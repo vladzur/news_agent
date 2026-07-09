@@ -39,5 +39,13 @@
     {
         "name": "El Ciudadano",
         "url": "https://www.elciudadano.com/feed/"
+    },
+    {
+        "name" :  "The Clinic",
+        "url": "https://www.theclinic.cl/feed/"
+    },
+    {
+        "name": "Radio Universidad de Chile",
+        "url": "https://radio.uchile.cl/feed/"
     }
 ]
