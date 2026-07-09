@@ -267,3 +267,78 @@ class TestWriteArticle:
         assert result["proposal_number"] == 2
         assert result["title"] == "Título del Segundo Artículo"
         assert "articulo_2_" in result["article_path"].name
+
+    def test_passes_source_articles_to_prompt_builder(
+        self, mock_api_key, sample_pauta_file, tmp_path, mock_article_response
+    ):
+        """Debe pasar los source_articles a build_article_user_prompt cuando existen."""
+        mock_source_articles = [
+            {
+                "title": "Artículo fuente",
+                "source": "La Tercera",
+                "link": "https://example.com/1",
+                "summary": "Resumen.",
+                "content": "Contenido completo.",
+            }
+        ]
+
+        with patch(
+            "news_agent.article_writer.load_companion_data",
+            return_value=mock_source_articles,
+        ) as mock_load:
+            with patch(
+                "news_agent.article_writer.build_article_user_prompt",
+                return_value="prompt con fuentes",
+            ) as mock_build:
+                with patch(
+                    "news_agent.article_writer.LLMClient"
+                ) as mock_client_class:
+                    mock_client = Mock()
+                    mock_client.generate_report.return_value = (
+                        mock_article_response
+                    )
+                    mock_client_class.return_value = mock_client
+
+                    write_article(
+                        pauta_path=sample_pauta_file,
+                        article_number=1,
+                        output_dir=tmp_path,
+                    )
+
+        # Verificar que load_companion_data fue llamado
+        mock_load.assert_called_once()
+        # Verificar que build_article_user_prompt recibió los source_articles
+        call_kwargs = mock_build.call_args.kwargs
+        assert "source_articles" in call_kwargs
+        assert call_kwargs["source_articles"] == mock_source_articles
+
+    def test_works_without_companion_data(
+        self, mock_api_key, sample_pauta_file, tmp_path, mock_article_response
+    ):
+        """Debe funcionar normalmente cuando no hay companion (load retorna None)."""
+        with patch(
+            "news_agent.article_writer.load_companion_data",
+            return_value=None,
+        ):
+            with patch(
+                "news_agent.article_writer.build_article_user_prompt",
+                return_value="prompt sin fuentes",
+            ) as mock_build:
+                with patch(
+                    "news_agent.article_writer.LLMClient"
+                ) as mock_client_class:
+                    mock_client = Mock()
+                    mock_client.generate_report.return_value = (
+                        mock_article_response
+                    )
+                    mock_client_class.return_value = mock_client
+
+                    write_article(
+                        pauta_path=sample_pauta_file,
+                        article_number=1,
+                        output_dir=tmp_path,
+                    )
+
+        # Verificar que build_article_user_prompt recibió source_articles=None
+        call_kwargs = mock_build.call_args.kwargs
+        assert call_kwargs.get("source_articles") is None

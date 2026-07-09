@@ -266,7 +266,30 @@ def _get_feed_min_length(feed_config: dict[str, Any] | None) -> int | None:
 
 
 # ---------------------------------------------------------------------------
-# Función principal
+# Funciones públicas
+# ---------------------------------------------------------------------------
+
+
+def fetch_single_article(url: str, timeout: int | None = None) -> str | None:
+    """Extrae el texto completo de un artículo desde su URL.
+
+    Función pública que envuelve _fetch_article_content para ser usada
+    desde otros módulos (ej: source_references) que necesitan extraer
+    contenido de artículos específicos sin pasar por el pipeline de
+    enriquecimiento masivo.
+
+    Args:
+        url: URL del artículo a extraer.
+        timeout: Timeout HTTP en segundos. Si None, usa FULL_CONTENT_TIMEOUT.
+
+    Returns:
+        Texto extraído del artículo, o None si falla la extracción.
+    """
+    return _fetch_article_content(url, timeout)
+
+
+# ---------------------------------------------------------------------------
+# Función principal de enriquecimiento masivo
 # ---------------------------------------------------------------------------
 
 

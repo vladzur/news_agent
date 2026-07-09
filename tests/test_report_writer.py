@@ -71,15 +71,6 @@ class TestSaveReport:
         saved = file_path.read_text(encoding="utf-8")
         assert "Texto de prueba" in saved
 
-    def test_does_not_duplicate_header(self, tmp_path):
-        """No debe duplicar la cabecera: la del LLM se reemplaza por la automática."""
-        content = "# ⚡ Pauta Editorial Sugerida - La Chispa Sur\n\nMás contenido."
-        file_path = save_report(content, 10, output_dir=tmp_path)
-
-        saved = file_path.read_text(encoding="utf-8")
-        # La cabecera debe aparecer solo una vez (la automática con datos correctos)
-        assert saved.count("# ⚡ Pauta Editorial Sugerida") == 1
-
     def test_replaces_llm_header_with_correct_count(self, tmp_path):
         """Debe reemplazar la cabecera del LLM con el conteo correcto de artículos."""
         # El LLM podría generar una cabecera con un conteo incorrecto

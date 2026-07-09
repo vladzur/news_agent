@@ -319,3 +319,95 @@ class TestRunPipeline:
                     )
 
         assert result["debug_path"] is None
+
+    # -------------------------------------------------------------------
+    # Tests de integración del companion de fuentes
+    # -------------------------------------------------------------------
+
+    def _mock_llm_response_with_sources(self):
+        """Respuesta simulada del LLM con sección Fuentes Sugeridas para Ampliar."""
+        return (
+            "# ⚡ Pauta Editorial Sugerida - La Chispa Sur\n"
+            "**Fecha de Generación:** 2026-07-04  \n"
+            "**Notas Procesadas:** 2\n\n"
+            "---\n\n"
+            "## 1. Título de Prueba\n"
+            "*   **Enfoque Editorial:** Análisis de prueba.\n"
+            "*   **Puntos Clave a Desarrollar:**\n"
+            "    1. Punto 1\n"
+            "    2. Punto 2\n"
+            "    3. Punto 3\n"
+            "*   **Fuentes Sugeridas para Ampliar:**\n"
+            "    *   **Feed Uno:** Descripción de la fuente uno.\n"
+            "    *   **Feed Dos:** Descripción de la fuente dos.\n\n"
+            "## 2. Segundo Título\n"
+            "*   **Enfoque Editorial:** Otro análisis.\n"
+            "*   **Fuentes Sugeridas para Ampliar:**\n"
+            "    *   **Feed Uno:** Otra descripción.\n\n"
+            "## 3. Tercer Título\n"
+            "*   **Enfoque Editorial:** Tercer análisis.\n"
+        )
+
+    def test_companion_included_in_result(
+        self, mock_api_key, feeds_file, tmp_path
+    ):
+        """El resultado debe incluir companion_path cuando hay fuentes en la pauta."""
+        raw_items = self._mock_raw_items()
+        llm_response = self._mock_llm_response_with_sources()
+
+        with patch("news_agent.orchestrator.fetch_all", return_value=raw_items):
+            with patch(
+                "news_agent.orchestrator.enrich_items"
+            ) as mock_enrich:
+                mock_enrich.return_value = raw_items
+
+                with patch("news_agent.orchestrator.LLMClient") as mock_client_class:
+                    mock_client = Mock()
+                    mock_client.generate_report.return_value = llm_response
+                    mock_client_class.return_value = mock_client
+
+                    result = run_pipeline(
+                        feeds_path=feeds_file,
+                        output_dir=tmp_path,
+                    )
+
+        # companion_path debe estar presente en el resultado
+        assert "companion_path" in result
+        if result["companion_path"]:
+            assert result["companion_path"].exists()
+            assert result["companion_path"].suffix == ".json"
+
+    def test_companion_failure_does_not_block_pipeline(
+        self, mock_api_key, feeds_file, tmp_path
+    ):
+        """Un fallo en build_companion_data no debe interrumpir el pipeline."""
+        raw_items = self._mock_raw_items()
+        llm_response = self._mock_llm_response()
+
+        with patch("news_agent.orchestrator.fetch_all", return_value=raw_items):
+            with patch(
+                "news_agent.orchestrator.enrich_items"
+            ) as mock_enrich:
+                mock_enrich.return_value = raw_items
+
+                with patch(
+                    "news_agent.orchestrator.build_companion_data",
+                    side_effect=RuntimeError("Error simulado en companion"),
+                ):
+                    with patch(
+                        "news_agent.orchestrator.LLMClient"
+                    ) as mock_client_class:
+                        mock_client = Mock()
+                        mock_client.generate_report.return_value = llm_response
+                        mock_client_class.return_value = mock_client
+
+                        # No debe lanzar excepción
+                        result = run_pipeline(
+                            feeds_path=feeds_file,
+                            output_dir=tmp_path,
+                        )
+
+        # El pipeline debe completarse normalmente
+        assert result["report_path"].exists()
+        # companion_path debe ser None porque build_companion_data falló
+        assert result["companion_path"] is None

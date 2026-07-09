@@ -35,6 +35,13 @@ FULL_CONTENT_MAX_WORKERS = 4  # Hilos paralelos para extracción de contenido
 FULL_CONTENT_CACHE_DIR = "cache"  # Directorio para caché de contenido extraído
 
 # ---------------------------------------------------------------------------
+# Constantes de referencias a fuentes para escritura de artículos
+# ---------------------------------------------------------------------------
+# Máximo de caracteres de contenido fuente por artículo que se incluyen
+# en el prompt del redactor, para no saturar la ventana de contexto del LLM.
+SOURCE_ARTICLE_MAX_CHARS = 2000
+
+# ---------------------------------------------------------------------------
 # Archivo de configuración de feeds RSS (por defecto)
 # ---------------------------------------------------------------------------
 DEFAULT_FEEDS_PATH = "rss_feeds.json"

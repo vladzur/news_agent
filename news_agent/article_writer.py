@@ -14,6 +14,7 @@ from .config import ARTICLE_MAX_TOKENS, get_api_key
 from .llm_client import LLMClient, LLMClientError
 from .prompt_builder import build_article_system_prompt, build_article_user_prompt
 from .report_writer import save_article
+from .source_references import load_companion_data
 
 # ---------------------------------------------------------------------------
 # Logger del módulo
@@ -262,10 +263,26 @@ def write_article(
     )
 
     # -------------------------------------------------------------------
+    # Paso 2b: Cargar material de origen acompañante (si existe)
+    # -------------------------------------------------------------------
+    source_articles = load_companion_data(Path(pauta_path), article_number)
+    if source_articles:
+        logger.info(
+            "Material de origen cargado: %d artículo(s) para la propuesta #%d.",
+            len(source_articles),
+            article_number,
+        )
+    else:
+        logger.info(
+            "No se encontró material de origen acompañante. "
+            "El artículo se escribirá solo con la propuesta de pauta."
+        )
+
+    # -------------------------------------------------------------------
     # Paso 3: Construir prompts
     # -------------------------------------------------------------------
     system_prompt = build_article_system_prompt()
-    user_prompt = build_article_user_prompt(proposal)
+    user_prompt = build_article_user_prompt(proposal, source_articles=source_articles)
 
     logger.info(
         "Prompts construidos: system=%d chars, user=%d chars.",

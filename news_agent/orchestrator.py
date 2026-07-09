@@ -17,6 +17,7 @@ from .news_filter import filter_items
 from .prompt_builder import build_system_prompt, build_user_prompt
 from .report_writer import save_report
 from .rss_fetcher import fetch_all
+from .source_references import build_companion_data
 
 # ---------------------------------------------------------------------------
 # Logger del módulo
@@ -63,6 +64,8 @@ def run_pipeline(
             - feed_count (int): Cantidad de feeds configurados.
             - debug_path (Path | None): Ruta al archivo de depuración,
                                         solo si save_intermediate_data=True.
+            - companion_path (Path | None): Ruta al archivo JSON de fuentes
+                                           acompañantes, o None si no se generó.
 
     Raises:
         OrchestratorError: En caso de error fatal que impida continuar.
@@ -188,7 +191,31 @@ def run_pipeline(
         sys.exit(1)
 
     # -----------------------------------------------------------------------
-    # Paso 9: Resumen final
+    # Paso 9: Construir archivo companion con fuentes enriquecidas
+    # -----------------------------------------------------------------------
+    # El companion se construye a partir del texto de la pauta generada:
+    # extrae las fuentes sugeridas de cada propuesta y las empareja
+    # determinísticamente con los artículos del pipeline.
+    companion_path: Path | None = None
+    try:
+        companion_path = build_companion_data(
+            pauta_text=llm_response,
+            pauta_path=report_path,
+            filtered_items=filtered_items,
+        )
+        if companion_path:
+            logger.info(
+                "Archivo de fuentes acompañantes guardado: %s", companion_path
+            )
+    except Exception as exc:
+        logger.warning(
+            "No se pudo generar el archivo de fuentes acompañantes: %s. "
+            "Los artículos se escribirán sin material de origen.",
+            exc,
+        )
+
+    # -----------------------------------------------------------------------
+    # Paso 10: Resumen final
     # -----------------------------------------------------------------------
     logger.info("=== Pipeline completado exitosamente ===")
     logger.info("Reporte generado: %s", report_path)
@@ -205,4 +232,5 @@ def run_pipeline(
         "item_count": len(filtered_items),
         "feed_count": len(feeds),
         "debug_path": debug_path,
+        "companion_path": companion_path,
     }

@@ -133,6 +133,8 @@ def main() -> None:
            f"{result['feed_count']} fuentes.")
     if result.get("debug_path"):
         print(f"   🔍 Archivo de depuración: {result['debug_path']}")
+    if result.get("companion_path"):
+        print(f"   📎 Fuentes acompañantes: {result['companion_path']}")
 
 
 if __name__ == "__main__":

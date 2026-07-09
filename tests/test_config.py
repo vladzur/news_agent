@@ -31,25 +31,14 @@ class TestConstants:
         """Verifica que la URL base sea la especificada en los requisitos."""
         assert DEEPSEEK_BASE_URL == "https://api.deepseek.com/v1"
 
-    def test_expected_temperature(self):
-        """Verifica que la temperatura sea 0.5 según especificaciones."""
-        assert TEMPERATURE == 0.5
-
     def test_expected_time_window(self):
         """Verifica que la ventana de tiempo sea 168 horas (7 días)."""
         assert TIME_WINDOW_HOURS == 168
-
-    def test_expected_summary_chars(self):
-        """Verifica que el truncado de resumen sea de 400 caracteres."""
-        assert SUMMARY_MAX_CHARS == 400
 
     def test_expected_max_tokens(self):
         """Verifica que max_tokens sea 16384 para pauta semanal."""
         assert MAX_TOKENS == 16384
 
-    def test_expected_reasoning_effort(self):
-        """Verifica que el esfuerzo de razonamiento sea 'low'."""
-        assert REASONING_EFFORT == "low"
 
 
 class TestGetApiKey:

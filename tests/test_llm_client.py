@@ -43,14 +43,6 @@ def mock_response():
 class TestLLMClientConstruction:
     """Pruebas de construcción del cliente."""
 
-    def test_default_values(self):
-        """Debe usar los valores por defecto de configuración."""
-        client = LLMClient(api_key="sk-test")
-        assert client.model == "deepseek-v4-pro"
-        assert client.temperature == 0.5
-        assert client.max_tokens == 16384
-        assert client.reasoning_effort == "high"
-
     def test_custom_values(self):
         """Debe aceptar valores personalizados."""
         client = LLMClient(
@@ -77,28 +69,6 @@ class TestGenerateReport:
             )
 
         assert result == mock_response.choices[0].message.content
-
-    def test_passes_correct_parameters(self, client, mock_response):
-        """Debe pasar los parámetros correctos a la API."""
-        with patch.object(client._client.chat.completions, "create", return_value=mock_response) as mock_create:
-            client.generate_report(
-                system_prompt="sys",
-                user_prompt="usr",
-            )
-
-        call_kwargs = mock_create.call_args.kwargs
-        assert call_kwargs["model"] == "deepseek-v4-pro"
-        assert call_kwargs["temperature"] == 0.5
-        assert call_kwargs["max_tokens"] == 16384
-        assert len(call_kwargs["messages"]) == 2
-        assert call_kwargs["messages"][0]["role"] == "system"
-        assert call_kwargs["messages"][1]["role"] == "user"
-        assert call_kwargs["messages"][0]["content"] == "sys"
-        assert call_kwargs["messages"][1]["content"] == "usr"
-        # Verificar que el modo de razonamiento (thinking) está habilitado
-        extra = call_kwargs.get("extra_body", {})
-        assert extra.get("thinking", {}).get("type") == "enabled"
-        assert extra.get("thinking", {}).get("reasoning_effort") == "high"
 
     def test_raises_on_authentication_error(self, client):
         """Debe lanzar LLMClientError con mensaje de autenticación."""

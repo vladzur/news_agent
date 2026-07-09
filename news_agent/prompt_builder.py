@@ -215,6 +215,9 @@ que dará La Chispa Sur.]
 
 ## 2. [TÍTULO GANCHO DEL ARTÍCULO 2]
 ...
+
+## 3. [TÍTULO GANCHO DEL ARTÍCULO 3]
+...
 ```
 
 ### Instrucciones para las fuentes sugeridas
@@ -484,7 +487,10 @@ def build_article_system_prompt() -> str:
     return ARTICLE_SYSTEM_PROMPT
 
 
-def build_article_user_prompt(proposal: dict[str, Any]) -> str:
+def build_article_user_prompt(
+    proposal: dict[str, Any],
+    source_articles: list[dict[str, Any]] | None = None,
+) -> str:
     """Construye el user prompt para escribir un artículo a partir de una propuesta.
 
     Args:
@@ -493,6 +499,13 @@ def build_article_user_prompt(proposal: dict[str, Any]) -> str:
             - enfoque (str): Enfoque editorial de la propuesta.
             - puntos (list[str]): Lista de puntos clave a desarrollar.
             - fuentes (list[str]): Lista de fuentes sugeridas.
+        source_articles: Lista opcional de artículos fuente con contenido completo
+                        (desde el archivo companion). Cada dict tiene:
+            - title (str): Título del artículo fuente.
+            - source (str): Medio de origen.
+            - link (str): URL del artículo.
+            - summary (str): Resumen limpio.
+            - content (str): Contenido completo extraído (truncado).
 
     Returns:
         str: El prompt de usuario listo para enviar al modelo.
@@ -525,7 +538,44 @@ def build_article_user_prompt(proposal: dict[str, Any]) -> str:
         for fuente in fuentes:
             parts.append(f"- {fuente}")
 
-    parts.append("")
+    # -------------------------------------------------------------------
+    # Material de origen: contenido completo de los artículos referenciados
+    # -------------------------------------------------------------------
+    if source_articles:
+        parts.append("")
+        parts.append("---")
+        parts.append("")
+        parts.append("## Material de origen disponible")
+        parts.append("")
+        parts.append(
+            "A continuación se presentan los artículos periodísticos originales "
+            "que el director editorial usó como base para esta propuesta de "
+            "pauta. Utiliza este material como fuente verificada para tu "
+            "artículo. Las citas textuales, cifras, nombres propios y "
+            "afirmaciones deben extraerse de este contenido cuando sea posible."
+        )
+        parts.append("")
+
+        for i, article in enumerate(source_articles, start=1):
+            art_title = article.get("title", "Sin título")
+            art_source = article.get("source", "Fuente desconocida")
+            art_link = article.get("link", "")
+            art_summary = article.get("summary", "")
+            art_content = article.get("content", "")
+
+            parts.append(f"### Artículo fuente {i}")
+            parts.append(f"**Título:** {art_title}")
+            parts.append(f"**Fuente:** {art_source}")
+            if art_link:
+                parts.append(f"**Enlace:** {art_link}")
+            if art_summary:
+                parts.append(f"**Resumen:** {art_summary}")
+            if art_content:
+                parts.append("")
+                parts.append("**Contenido:**")
+                parts.append(art_content)
+            parts.append("")
+
     parts.append("---")
     parts.append("")
     parts.append(

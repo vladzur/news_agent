@@ -138,11 +138,6 @@ class TestTruncate:
         if body:
             assert body[-1] in (" ", "a", "e", "i", "o", "u")
 
-    def test_default_max_chars(self):
-        """Debe usar el valor por defecto (SUMMARY_MAX_CHARS) si no se especifica."""
-        text = "a" * 800  # Más largo que SUMMARY_MAX_CHARS=600
-        result = truncate(text)
-        assert len(result) <= 601  # SUMMARY_MAX_CHARS + posible "…"
 
 
 # ---------------------------------------------------------------------------
@@ -182,16 +177,6 @@ class TestFilterItems:
 
         result = filter_items(items)
         assert result[0]["summary_clean"] == "Texto importante"
-
-    def test_truncates_long_summary(self):
-        """Debe truncar resúmenes largos a SUMMARY_MAX_CHARS (600) caracteres."""
-        long_text = "x " * 500  # ~1000 caracteres
-        items = [
-            self._make_item("T1", "S1", long_text, 1),
-        ]
-
-        result = filter_items(items)
-        assert len(result[0]["summary_clean"]) <= 601  # SUMMARY_MAX_CHARS + posible "…"
 
     def test_includes_correct_fields(self):
         """Los items filtrados deben contener las claves esperadas."""

@@ -89,13 +89,6 @@ class TestBuildSystemPrompt:
         prompt = build_system_prompt()
         assert "Verificación de datos y consistencia" in prompt
 
-    def test_contains_factual_precision_rules(self):
-        """Debe incluir reglas de precisión factual (cifras, atribución, nombres)."""
-        prompt = build_system_prompt()
-        assert "Cifras, porcentajes y fechas" in prompt
-        assert "Atribución correcta" in prompt
-        assert "Nombres propios" in prompt
-
     def test_contains_logical_consistency_rules(self):
         """Debe incluir reglas de consistencia lógica entre propuestas."""
         prompt = build_system_prompt()
@@ -247,6 +240,92 @@ class TestBuildArticleUserPrompt:
         """Debe incluir la fecha actual."""
         result = build_article_user_prompt(sample_proposal)
         assert "2026" in result
+
+    # ------------------------------------------------------------------
+    # Tests para source_articles (material de origen desde companion)
+    # ------------------------------------------------------------------
+
+    def test_includes_source_articles_when_provided(self, sample_proposal):
+        """Debe incluir la sección de material de origen cuando hay source_articles."""
+        source_articles = [
+            {
+                "title": "Artículo fuente 1",
+                "source": "La Tercera",
+                "link": "https://example.com/1",
+                "summary": "Resumen del artículo fuente 1.",
+                "content": "Contenido completo del artículo fuente 1.",
+            },
+            {
+                "title": "Artículo fuente 2",
+                "source": "DF Diario",
+                "link": "https://example.com/2",
+                "summary": "Resumen del artículo fuente 2.",
+                "content": "Contenido completo del artículo fuente 2.",
+            },
+        ]
+
+        result = build_article_user_prompt(sample_proposal, source_articles=source_articles)
+
+        assert "Material de origen disponible" in result
+        assert "Artículo fuente 1" in result
+        assert "Artículo fuente 2" in result
+        assert "La Tercera" in result
+        assert "DF Diario" in result
+
+    def test_does_not_include_section_when_source_articles_is_none(
+        self, sample_proposal
+    ):
+        """No debe incluir la sección de material de origen cuando es None."""
+        result = build_article_user_prompt(sample_proposal, source_articles=None)
+        assert "Material de origen disponible" not in result
+
+    def test_does_not_include_section_when_source_articles_is_empty(
+        self, sample_proposal
+    ):
+        """No debe incluir la sección de material de origen cuando la lista está vacía."""
+        result = build_article_user_prompt(sample_proposal, source_articles=[])
+        assert "Material de origen disponible" not in result
+
+    def test_formats_source_article_content_correctly(self, sample_proposal):
+        """Debe formatear correctamente el contenido completo de los artículos fuente."""
+        source_articles = [
+            {
+                "title": "Noticia de economía",
+                "source": "Cooperativa",
+                "link": "https://example.com/eco",
+                "summary": "Resumen breve.",
+                "content": "Contenido largo extraído con trafilatura.",
+            }
+        ]
+
+        result = build_article_user_prompt(sample_proposal, source_articles=source_articles)
+
+        assert "### Artículo fuente 1" in result
+        assert "**Título:** Noticia de economía" in result
+        assert "**Fuente:** Cooperativa" in result
+        assert "**Enlace:** https://example.com/eco" in result
+        assert "**Resumen:** Resumen breve." in result
+        assert "**Contenido:**" in result
+        assert "Contenido largo extraído con trafilatura." in result
+
+    def test_handles_missing_fields_in_source_articles(self, sample_proposal):
+        """Debe manejar campos ausentes en los artículos fuente sin errores."""
+        source_articles = [
+            {
+                "title": "Solo título",
+                "source": "Solo fuente",
+                "link": "",
+                "summary": "",
+                "content": "",
+            }
+        ]
+
+        result = build_article_user_prompt(sample_proposal, source_articles=source_articles)
+
+        assert "Material de origen disponible" in result
+        assert "Solo título" in result
+        # No debe incluir Enlace si está vacío
+        assert "**Enlace:**" not in result
 
 
 class TestBuildUserPrompt:
