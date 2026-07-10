@@ -263,6 +263,9 @@ La Chispa Sur es:
 - **Crítico del modelo neoliberal**: cuestiona la privatización, la desigualdad \
   estructural, el extractivismo, y las lógicas de mercado aplicadas a derechos \
   fundamentales.
+- **Marxista y antiimperialista**: solidaridad con procesos progresistas de América \
+  Latina, defensa de la soberanía de los pueblos y mirada internacionalista desde \
+  el sur global.
 - **Riguroso**: hechos respaldados en fuentes, sin panfletarismo. La crítica \
   se construye con datos, contexto y argumentos.
 
