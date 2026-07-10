@@ -48,8 +48,10 @@ _STOP_WORDS: set[str] = {
     "reportaje", "artículo", "información", "datos", "informe",
 }
 
-# Mínimo de caracteres para considerar una palabra como keyword
-_MIN_WORD_LENGTH = 4
+# Mínimo de caracteres para considerar una palabra como keyword.
+# Se usa 3 en lugar de 4 para capturar acrónimos frecuentes en noticias
+# chilenas: CAE, CPI, SII, INE, TPM, TC, CNE, ENAP, etc.
+_MIN_WORD_LENGTH = 3
 
 
 # Score mínimo para considerar un artículo como match relevante
@@ -105,6 +107,127 @@ def extract_proposal_sources(
         logger.warning(
             "No se pudieron extraer fuentes sugeridas desde la pauta. "
             "No se generará archivo companion."
+        )
+
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Extracción de menciones de medios desde el cuerpo narrativo de la pauta
+# ---------------------------------------------------------------------------
+
+
+def _extract_media_mentions_from_body(
+    proposal_block: str,
+    known_sources: set[str],
+) -> list[dict[str, str]]:
+    """Extrae menciones de medios conocidos desde el cuerpo narrativo de una propuesta.
+
+    A diferencia de _extract_source_entries, que solo busca en la sección
+    "Fuentes Sugeridas para Ampliar", esta función escanea todo el bloque
+    de la propuesta en busca de nombres de medios presentes en known_sources.
+
+    Args:
+        proposal_block: Bloque de texto completo de una propuesta individual.
+        known_sources: Conjunto de nombres de medios conocidos (desde filtered_items).
+
+    Returns:
+        Lista de dicts con 'source_name' y 'description' (la oración donde
+        aparece la mención). Sin duplicados por nombre de medio.
+    """
+    mentions: list[dict[str, str]] = []
+    seen_sources: set[str] = set()
+
+    # Ordenar por longitud descendente para evitar que "La Tercera" haga match
+    # antes que "La Tercera – Pulso" (coincidencia parcial)
+    sorted_sources = sorted(known_sources, key=len, reverse=True)
+
+    for source in sorted_sources:
+        source_lower = source.lower().strip()
+        if source_lower in seen_sources:
+            continue
+        if len(source) < 3:
+            continue
+
+        # Buscar menciones del medio en el bloque (case-insensitive)
+        # Capturamos la oración completa que contiene la mención
+        pattern = re.compile(
+            r"([^.]*?\b" + re.escape(source) + r"[^.]*\.)",
+            re.IGNORECASE,
+        )
+
+        for match in pattern.finditer(proposal_block):
+            context = match.group(1).strip()
+
+            # Filtrar contextos triviales o que pertenecen a la sección Fuentes
+            if len(context) < 20:
+                continue
+            if "Fuentes Sugeridas" in context:
+                continue
+
+            mentions.append(
+                {
+                    "source_name": source,
+                    "description": context,
+                }
+            )
+            seen_sources.add(source_lower)
+            break  # Una mención por medio por propuesta es suficiente
+
+    return mentions
+
+
+def extract_media_sources_from_pauta(
+    pauta_text: str,
+    known_sources: set[str],
+) -> dict[int, list[dict[str, str]]]:
+    """Extrae menciones de medios conocidos del texto narrativo de cada propuesta.
+
+    Complementa a extract_proposal_sources: donde esta solo busca en la sección
+    "Fuentes Sugeridas para Ampliar" (que el LLM puebla con instituciones y
+    organismos), extract_media_sources_from_pauta escanea el cuerpo completo
+    de cada propuesta —enfoque editorial, puntos clave, etc.— en busca de
+    nombres de medios que sí están en los feeds RSS.
+
+    Args:
+        pauta_text: Texto completo de la pauta editorial en Markdown.
+        known_sources: Conjunto de nombres de medios conocidos.
+
+    Returns:
+        Diccionario {número_propuesta: [{"source_name": str, "description": str}]}.
+    """
+    result: dict[int, list[dict[str, str]]] = {}
+
+    proposal_pattern = r"##\s+(\d+)\.\s+(.+?)(?=\n##\s+\d+\.\s+|$)"
+    for match in re.finditer(proposal_pattern, pauta_text, re.DOTALL):
+        try:
+            prop_num = int(match.group(1))
+        except (ValueError, IndexError):
+            continue
+
+        block = match.group(0)
+        mentions = _extract_media_mentions_from_body(block, known_sources)
+        if mentions:
+            # Reemplazar la descripción (oración individual) por el bloque
+            # completo de la propuesta. Esto le da a _score_article_match un
+            # contexto rico en palabras clave (enfoque editorial, puntos a
+            # desarrollar) para emparejar contra los artículos del pipeline,
+            # en lugar de depender de una sola oración que puede no compartir
+            # vocabulario con los títulos/resúmenes de los artículos.
+            for mention in mentions:
+                mention["description"] = block
+            result[prop_num] = mentions
+
+    if result:
+        total = sum(len(v) for v in result.values())
+        logger.info(
+            "Menciones de medios extraídas del cuerpo: %d propuesta(s) con %d medio(s).",
+            len(result),
+            total,
+        )
+    else:
+        logger.info(
+            "No se encontraron menciones de medios conocidos en el cuerpo de la pauta."
         )
 
     return result
@@ -429,6 +552,88 @@ def _truncate_content(
 # ---------------------------------------------------------------------------
 
 
+
+
+# ---------------------------------------------------------------------------
+# Extracción determinística de referencias [art. N] desde la pauta
+# ---------------------------------------------------------------------------
+
+
+def extract_article_references(
+    pauta_text: str,
+    filtered_items: list[dict[str, Any]],
+) -> dict[int, list[int]]:
+    """Extrae referencias [art. N] del texto de la pauta de forma determinística.
+
+    Busca todas las ocurrencias del formato [art. N] en el texto de cada
+    propuesta y devuelve los índices de artículo referenciados, agrupados
+    por número de propuesta.
+
+    A diferencia del fuzzy matching (match_sources_to_articles), este método
+    es determinístico: el LLM cita explícitamente el número del artículo, y
+    el sistema lo resuelve directamente sin depender de similitud textual.
+
+    Args:
+        pauta_text: Texto completo de la pauta editorial en Markdown.
+        filtered_items: Lista de artículos filtrados del pipeline.
+
+    Returns:
+        Diccionario {número_propuesta: [índices_artículo]} donde los índices
+        son 1-based (coinciden con los números [art. N] del prompt).
+    """
+    result: dict[int, list[int]] = {}
+
+    # Dividir en propuestas
+    proposal_pattern = r"##\s+(\d+)\.\s+(.+?)(?=\n##\s+\d+\.\s+|$)"
+    for match in re.finditer(proposal_pattern, pauta_text, re.DOTALL):
+        try:
+            prop_num = int(match.group(1))
+        except (ValueError, IndexError):
+            continue
+
+        block = match.group(0)
+
+        # Extraer todos los [art. N] del bloque.
+        # El LLM puede agrupar varias referencias en un mismo bracket:
+        #   [art. 60, 174, 178, 182]
+        # Por eso capturamos todo el contenido dentro de los corchetes
+        # y luego extraemos cada número individual.
+        raw_refs = re.findall(r"\[art\.\s*([\d,\s]+)\]", block)
+        article_nums: list[int] = []
+        for group in raw_refs:
+            for num in re.findall(r"\d+", group):
+                article_nums.append(int(num))
+        article_nums = sorted(set(article_nums))
+
+        # Validar que los números estén en rango
+        valid_nums: list[int] = []
+        for n in article_nums:
+            if 1 <= n <= len(filtered_items):
+                valid_nums.append(n)
+            else:
+                logger.debug(
+                    "Referencia [art. %d] fuera de rango (1-%d), ignorada.",
+                    n,
+                    len(filtered_items),
+                )
+
+        if valid_nums:
+            result[prop_num] = valid_nums
+
+    if result:
+        total = sum(len(v) for v in result.values())
+        logger.info(
+            "Referencias [art. N] extraídas: %d propuesta(s) con %d artículo(s).",
+            len(result),
+            total,
+        )
+    else:
+        logger.info(
+            "No se encontraron referencias [art. N] en la pauta."
+        )
+
+    return result
+
 def build_companion_data(
     pauta_text: str,
     pauta_path: Path,
@@ -455,15 +660,45 @@ def build_companion_data(
     Returns:
         Path al archivo companion JSON generado, o None si no se pudo generar.
     """
-    # Paso 1: Extraer fuentes desde el texto de la pauta
-    proposal_sources = extract_proposal_sources(pauta_text)
-    if not proposal_sources:
-        return None
+    # Paso 1: Extraer referencias [art. N] del texto de la pauta (determinístico).
+    # Este es el método principal: el LLM cita explícitamente los números de
+    # artículo con el formato [art. N], y el sistema los resuelve directamente
+    # sin depender de similitud textual.
+    matched = extract_article_references(pauta_text, filtered_items)
 
-    # Paso 2: Emparejar fuentes con artículos del pipeline
-    matched = match_sources_to_articles(proposal_sources, filtered_items)
     if not matched:
-        return None
+        # Fallback: fuzzy matching por nombre de medio + keywords.
+        # Se usa cuando el LLM no incluyó referencias [art. N] (ej: pautas
+        # generadas con versiones anteriores del prompt o modelos que ignoran
+        # la instrucción de referenciar).
+        logger.info(
+            "Sin referencias [art. N] — usando fuzzy matching como fallback."
+        )
+        proposal_sources = extract_proposal_sources(pauta_text)
+
+        known_sources = {
+            item.get("source", "") for item in filtered_items if item.get("source")
+        }
+        known_sources.discard("")
+        media_mentions = extract_media_sources_from_pauta(pauta_text, known_sources)
+
+        for prop_num, sources in media_mentions.items():
+            if prop_num not in proposal_sources:
+                proposal_sources[prop_num] = []
+            existing_names = {
+                s["source_name"].lower() for s in proposal_sources[prop_num]
+            }
+            for src in sources:
+                if src["source_name"].lower() not in existing_names:
+                    proposal_sources[prop_num].append(src)
+                    existing_names.add(src["source_name"].lower())
+
+        if not proposal_sources:
+            return None
+
+        matched = match_sources_to_articles(proposal_sources, filtered_items)
+        if not matched:
+            return None
 
     # Paso 3: Construir datos enriquecidos por propuesta
     companion_data: dict[str, Any] = {

@@ -78,11 +78,11 @@ class TestBuildSystemPrompt:
         assert "izquierda" in prompt.lower()
         assert "neoliberal" in prompt.lower()
 
-    def test_prohibits_article_number_references(self):
-        """Debe prohibir referencias a números de artículo interno."""
+    def test_requires_article_number_references(self):
+        """Debe exigir referencias a números de artículo con formato [art. N]."""
         prompt = build_system_prompt()
-        assert "Prohibido referenciar números de artículo" in prompt \
-            or "prohibido referenciar" in prompt.lower()
+        assert "Referencia los artículos fuente con su número" in prompt \
+            or "[art. N]" in prompt
 
     def test_contains_verification_section(self):
         """Debe incluir sección de verificación de datos y consistencia."""
@@ -174,6 +174,11 @@ class TestBuildArticleSystemPrompt:
         prompt = build_article_system_prompt()
         assert "Después de escribir" in prompt
         assert "prueba de lectura inversa" in prompt.lower()
+
+    def test_prohibits_internal_art_references(self):
+        """Debe prohibir referencias internas [art. N] en el artículo final."""
+        prompt = build_article_system_prompt()
+        assert "[art. N]" in prompt or "NUNCA incluyas referencias internas" in prompt
 
 
 class TestBuildArticleUserPrompt:
@@ -412,17 +417,17 @@ class TestBuildUserPrompt:
 
         assert "propuestas" in result.lower()
 
-    def test_includes_no_article_numbers_warning(self):
-        """La instrucción final debe recordar no usar números de artículo."""
+    def test_includes_article_reference_instruction(self):
+        """La instrucción final debe recordar usar referencias [art. N]."""
         items = [
             self._make_item("T1", "S1", "R1"),
         ]
 
         result = build_user_prompt(items)
 
-        assert "Cita solo el **nombre del medio**" in result \
-            or "Nunca incluyas números de artículo" in result \
-            or "nunca incluyas" in result.lower()
+        assert "[art. N]" in result \
+            or "Referencia los artículos fuente" in result \
+            or "art. 42" in result
 
     def test_empty_items_returns_empty_string(self):
         """Debe devolver cadena vacía cuando no hay artículos."""

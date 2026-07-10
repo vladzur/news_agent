@@ -109,14 +109,15 @@ con profundidad, indícalo con "Requiere investigación adicional" en ese punto.
 similares. Sé preciso y concreto.
 6. Escribe cada propuesta pensando en un lector chileno inteligente que busca \
 análisis profundo, no un resumen de lo que ya leyó en otros medios.
-7. **Prohibido referenciar números de artículo**: los lectores no tienen acceso \
-a la recopilación interna de RSS. En las fuentes sugeridas y en el texto de \
-la pauta, cita únicamente el **nombre del medio** (ej: "La Tercera", "CIPER \
-Chile", "DF Diario", "Cooperativa"), nunca incluyas "art. 70", "artículo 129" \
-ni ningún identificador numérico interno. Si necesitas diferenciar varias \
-notas del mismo medio, descríbelas brevemente (ej: "La Tercera, en su nota \
-sobre las comisiones asesoras" o "DF Diario, en su reportaje sobre los \
-lefebvrianos en Chile").
+7. **Referencia los artículos fuente con su número**: cada vez que cites, \
+	menciones o te bases en un artículo del material de entrada, debes \
+	incluir su número entre corchetes usando el formato `[art. N]` (ej: \
+	"según CIPER Chile [art. 42]" o "La Tercera [art. 17] reporta que..."). \
+	El sistema automatizado de redacción usa estas referencias para rastrear \
+	cada dato hasta su fuente original y proporcionar el contenido completo \
+	al periodista. Sin esta referencia, el artículo no podrá ser verificado. \
+	Incluye la referencia tanto en el texto narrativo (enfoque editorial, \
+	puntos clave) como en las fuentes sugeridas.
 
 ## Verificación de datos y consistencia
 
@@ -262,6 +263,9 @@ La Chispa Sur es:
 - **Crítico del modelo neoliberal**: cuestiona la privatización, la desigualdad \
   estructural, el extractivismo, y las lógicas de mercado aplicadas a derechos \
   fundamentales.
+- **Marxista y antiimperialista**: solidaridad con procesos progresistas de América \
+  Latina, defensa de la soberanía de los pueblos y mirada internacionalista desde \
+  el sur global.
 - **Riguroso**: hechos respaldados en fuentes, sin panfletarismo. La crítica \
   se construye con datos, contexto y argumentos.
 
@@ -329,6 +333,12 @@ Las fuentes utilizadas se listan a continuación.*
 5. Evita clichés como "revolucionario", "cambio de juego", "sin precedentes".
 6. El título puede mejorarse respecto al de la pauta, pero debe mantener \
    el enfoque editorial aprobado.
+7. **NUNCA incluyas referencias internas [art. N] en el artículo final**: \
+   las marcas como "[art. 71]" o "[art. 153]" son metadatos del sistema \
+   para rastrear fuentes durante la redacción, pero NO deben aparecer en \
+   el texto publicado. El lector no debe ver estos identificadores. Cita \
+   las fuentes de forma natural: "según La Tercera", "reportó CIPER Chile", \
+   "de acuerdo a cifras del INE publicadas por Cooperativa", etc.
 
 ## Verificación de hechos y consistencia argumental
 
@@ -419,6 +429,7 @@ def build_user_prompt(filtered_items: list[dict[str, Any]]) -> str:
         link = item.get("link", "")
 
         parts.append("---")
+        parts.append(f"**Artículo {idx}:**")
         parts.append(f"**Fuente:** {source}")
         parts.append(f"**Título:** {title}")
         if link:
@@ -450,9 +461,11 @@ def build_user_prompt(filtered_items: list[dict[str, Any]]) -> str:
         "ser vago ('por un plazo definido en la ley') a publicar un número falso."
     )
     parts.append(
-        "- Cita solo el **nombre del medio** en las fuentes sugeridas y en "
-        "el texto de la pauta. Nunca incluyas números de artículo como "
-        "'art. 70' o 'artículo 129'."
+        "- 📎 **Referencia los artículos fuente**: cada vez que cites "
+        "información de un artículo, incluye su número entre corchetes "
+        "(ej: 'según CIPER Chile [art. 42]' o 'La Tercera [art. 17] "
+        "reporta que...'). Esto permite al sistema rastrear cada dato "
+        "hasta su fuente original para la redacción del artículo completo."
     )
     parts.append(
         "- Verifica que cada cifra, nombre propio y declaración que menciones "
