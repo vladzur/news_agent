@@ -175,6 +175,11 @@ class TestBuildArticleSystemPrompt:
         assert "Después de escribir" in prompt
         assert "prueba de lectura inversa" in prompt.lower()
 
+    def test_prohibits_internal_art_references(self):
+        """Debe prohibir referencias internas [art. N] en el artículo final."""
+        prompt = build_article_system_prompt()
+        assert "[art. N]" in prompt or "NUNCA incluyas referencias internas" in prompt
+
 
 class TestBuildArticleUserPrompt:
     """Pruebas para build_article_user_prompt."""

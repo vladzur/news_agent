@@ -330,6 +330,12 @@ Las fuentes utilizadas se listan a continuación.*
 5. Evita clichés como "revolucionario", "cambio de juego", "sin precedentes".
 6. El título puede mejorarse respecto al de la pauta, pero debe mantener \
    el enfoque editorial aprobado.
+7. **NUNCA incluyas referencias internas [art. N] en el artículo final**: \
+   las marcas como "[art. 71]" o "[art. 153]" son metadatos del sistema \
+   para rastrear fuentes durante la redacción, pero NO deben aparecer en \
+   el texto publicado. El lector no debe ver estos identificadores. Cita \
+   las fuentes de forma natural: "según La Tercera", "reportó CIPER Chile", \
+   "de acuerdo a cifras del INE publicadas por Cooperativa", etc.
 
 ## Verificación de hechos y consistencia argumental
 
