@@ -9,10 +9,12 @@ import pytest
 from news_agent.source_references import (
     _build_companion_path,
     _extract_keywords,
+    _extract_media_mentions_from_body,
     _score_article_match,
     _source_names_match,
     _truncate_content,
     build_companion_data,
+    extract_media_sources_from_pauta,
     extract_proposal_sources,
     load_companion_data,
     match_sources_to_articles,
@@ -140,6 +142,147 @@ class TestExtractProposalSources:
         names = [e["source_name"] for e in result[1]]
         assert "CIPER Chile" in names
         assert "La Tercera" in names
+
+
+# ---------------------------------------------------------------------------
+# Tests para _extract_media_mentions_from_body
+# ---------------------------------------------------------------------------
+
+
+class TestExtractMediaMentionsFromBody:
+    """Pruebas para _extract_media_mentions_from_body."""
+
+    def test_extracts_known_sources_from_narrative_text(self):
+        """Debe extraer menciones de medios conocidos del cuerpo narrativo."""
+        block = (
+            "## 1. Reforma tributaria en crisis\n"
+            "CIPER Chile reporta que el cobro de garantías del CAE alcanzó "
+            "un récord histórico este trimestre. Según La Tercera, la deuda "
+            "pública sobrepasaría los umbrales deseables. Cooperativa informa "
+            "que expertos advierten sobre el impacto inflacionario."
+        )
+        known = {"CIPER Chile", "La Tercera", "Cooperativa", "DF Diario"}
+
+        result = _extract_media_mentions_from_body(block, known)
+
+        assert len(result) == 3
+        names = {m["source_name"] for m in result}
+        assert names == {"CIPER Chile", "La Tercera", "Cooperativa"}
+
+        # Cada descripción debe contener el nombre del medio
+        for mention in result:
+            assert mention["source_name"].lower() in mention["description"].lower()
+
+    def test_skips_mentions_in_fuentes_sugeridas_section(self):
+        """No debe extraer menciones que están dentro de Fuentes Sugeridas."""
+        block = (
+            "## 1. Propuesta\n"
+            "Análisis del sistema frontal en el sur.\n"
+            "*   **Fuentes Sugeridas para Ampliar:**\n"
+            "    *   **La Tercera:** Su nota sobre el temporal.\n"
+        )
+        known = {"La Tercera"}
+
+        result = _extract_media_mentions_from_body(block, known)
+
+        # La Tercera solo aparece en la sección Fuentes Sugeridas, debe ignorarse
+        assert len(result) == 0
+
+    def test_handles_no_known_sources_in_block(self):
+        """Debe retornar lista vacía si no hay menciones en el bloque."""
+        block = "Un análisis de política nacional sin mencionar medios específicos."
+        known = {"CIPER Chile", "La Tercera"}
+
+        result = _extract_media_mentions_from_body(block, known)
+
+        assert result == []
+
+    def test_only_one_mention_per_source(self):
+        """Debe capturar solo la primera mención de cada medio."""
+        block = (
+            "CIPER Chile publicó una investigación. Más adelante, "
+            "CIPER Chile también reportó sobre otro caso."
+        )
+        known = {"CIPER Chile"}
+
+        result = _extract_media_mentions_from_body(block, known)
+
+        assert len(result) == 1
+
+    def test_requires_minimum_context_length(self):
+        """Debe ignorar contextos demasiado cortos (ruido)."""
+        block = "Según DF. Eso sería todo."
+        known = {"DF Diario", "DF"}
+
+        result = _extract_media_mentions_from_body(block, known)
+
+        # "DF" tiene < 3 caracteres, se ignora directamente
+        # "DF Diario" no aparece
+        assert len(result) == 0
+
+
+# ---------------------------------------------------------------------------
+# Tests para extract_media_sources_from_pauta
+# ---------------------------------------------------------------------------
+
+
+class TestExtractMediaSourcesFromPauta:
+    """Pruebas para extract_media_sources_from_pauta."""
+
+    def test_extracts_media_per_proposal(self):
+        """Debe extraer menciones de medios agrupadas por número de propuesta."""
+        pauta_text = """# Pauta Editorial
+
+## 1. Reforma y deuda
+CIPER Chile reporta que las garantías del CAE alcanzaron un récord.
+La Tercera advierte sobre el umbral de deuda pública. El debate
+legislativo continúa en el Congreso.
+
+## 2. Emergencia climática en el sur
+Cooperativa informa sobre el sistema frontal que afecta a La Araucanía.
+Las lluvias han dañado más de 100 viviendas en la zona lacustre.
+
+## 3. Panorama internacional
+BBC Mundo reporta sobre la escalada del conflicto. Sin embargo,
+las repercusiones en Chile son limitadas.
+"""
+        known = {"CIPER Chile", "La Tercera", "Cooperativa", "BBC Mundo", "DF Diario"}
+
+        result = extract_media_sources_from_pauta(pauta_text, known)
+
+        assert len(result) == 3
+        assert len(result[1]) == 2  # CIPER Chile + La Tercera
+        assert len(result[2]) == 1  # Cooperativa
+        assert len(result[3]) == 1  # BBC Mundo
+
+        names_1 = {m["source_name"] for m in result[1]}
+        assert names_1 == {"CIPER Chile", "La Tercera"}
+
+    def test_returns_empty_when_no_media_mentioned_in_body(self):
+        """Debe retornar vacío si el cuerpo no menciona ningún medio conocido."""
+        pauta_text = """# Pauta
+
+## 1. Propuesta sin medios
+El gobierno anunció nuevas medidas económicas. La oposición criticó
+la falta de diálogo. Expertos debaten sobre el impacto fiscal.
+
+## 2. Otra propuesta sin menciones
+Análisis de la situación política nacional.
+"""
+        known = {"CIPER Chile", "La Tercera", "Cooperativa"}
+
+        result = extract_media_sources_from_pauta(pauta_text, known)
+
+        assert result == {}
+
+    def test_handles_pauta_without_standard_proposal_format(self):
+        """Debe manejar pautas que no tienen el formato ## N. esperado."""
+        pauta_text = "Un texto sin estructura de propuestas."
+        known = {"La Tercera"}
+
+        result = extract_media_sources_from_pauta(pauta_text, known)
+
+        assert result == {}
 
 
 # ---------------------------------------------------------------------------
@@ -554,6 +697,113 @@ class TestBuildCompanionData:
         arts = data["proposal_1"]["articles"]
         cipier_art = [a for a in arts if a["source"] == "CIPER Chile"][0]
         assert cipier_art["content"] == cipier_art["summary"]
+
+    def test_extracts_media_from_body_when_fuentes_sugeridas_has_institutions(
+        self, tmp_path
+    ):
+        """Debe extraer medios del cuerpo aunque Fuentes Sugeridas solo tenga
+        instituciones (CPI, Dipres, Senapred) que no están en los feeds RSS.
+
+        Este es el escenario real del bug: el LLM puebla 'Fuentes Sugeridas'
+        con organismos e instituciones, pero cita los medios reales en el
+        texto narrativo de cada propuesta.
+        """
+        # Artículos que sí coinciden temáticamente con lo que el LLM menciona
+        realistic_items = [
+            {
+                "title": "Cobro de garantías del CAE a morosos alcanza récord histórico",
+                "source": "CIPER Chile",
+                "link": "https://example.com/1",
+                "summary_clean": "El cobro estatal de garantías del CAE "
+                "alcanzó un récord en el último trimestre según cifras oficiales.",
+                "full_content": None,
+            },
+            {
+                "title": "Deuda pública chilena superaría umbrales recomendados",
+                "source": "La Tercera",
+                "link": "https://example.com/2",
+                "summary_clean": "Informes del Ministerio de Hacienda revelan "
+                "que la deuda pública sobrepasaría los niveles considerados "
+                "prudentes por los organismos internacionales.",
+                "full_content": None,
+            },
+            {
+                "title": "Sistema frontal: más de 100 viviendas dañadas en La Araucanía",
+                "source": "Cooperativa",
+                "link": "https://example.com/3",
+                "summary_clean": "Balance del sistema frontal que afectó "
+                "desde Maule a Los Lagos con lluvias intensas y vientos.",
+                "full_content": "Contenido ya extraído del sistema frontal.",
+            },
+            {
+                "title": "Dólar cae bajo los $930 por recuperación del cobre",
+                "source": "DF Diario",
+                "link": "https://example.com/4",
+                "summary_clean": "El tipo de cambio retrocedió favorecido por "
+                "el avance en el precio del cobre y la calma en los mercados.",
+                "full_content": None,
+            },
+        ]
+
+        pauta_with_body_mentions = """# Pauta Editorial
+
+## 1. La invariabilidad tributaria como síntoma
+*   **Enfoque Editorial:** CIPER Chile reporta que el cobro de garantías
+    del CAE alcanzó un récord. La Tercera publicó que la deuda pública
+    sobrepasaría los umbrales deseables. El debate fiscal continúa.
+*   **Puntos Clave a Desarrollar:**
+    1. Contexto fiscal y deuda pública.
+    2. El rol de los senadores de zonas mineras.
+*   **Fuentes Sugeridas para Ampliar:**
+    *   **Consejo de Políticas de Infraestructura (CPI):** Para profundizar
+      en su informe sobre inversión pública.
+    *   **Dipres:** Para obtener cifras oficiales de ejecución presupuestaria.
+
+## 2. Emergencia climática en La Araucanía
+*   **Enfoque Editorial:** Cooperativa informa sobre el sistema frontal
+    que afecta a la zona lacustre. Las lluvias dañaron viviendas en Pucón.
+*   **Fuentes Sugeridas para Ampliar:**
+    *   **Senapred:** Para obtener el detalle de alertas vigentes.
+    *   **Sernageomin:** Para reportes sobre riesgo de remociones en masa.
+
+## 3. Conflicto en Medio Oriente y economía chilena
+*   **Enfoque Editorial:** DF Diario reporta que el dólar cayó bajo los $930
+    por la recuperación del cobre. BBC Mundo cubre los ataques en la región.
+*   **Fuentes Sugeridas para Ampliar:**
+    *   **CNE:** Para analizar la dependencia de combustibles fósiles.
+"""
+
+        pauta_path = tmp_path / "pauta_semanal.md"
+        pauta_path.write_text("# placeholder")
+
+        with patch(
+            "news_agent.source_references.fetch_single_article",
+            return_value=None,
+        ):
+            result = build_companion_data(
+                pauta_text=pauta_with_body_mentions,
+                pauta_path=pauta_path,
+                filtered_items=realistic_items,
+            )
+
+        assert result is not None
+        data = json.loads(result.read_text(encoding="utf-8"))
+
+        # Propuesta 1: CIPER Chile y La Tercera desde el cuerpo
+        arts_1 = data["proposal_1"]["articles"]
+        sources_1 = [a["source"] for a in arts_1]
+        assert "CIPER Chile" in sources_1
+        assert "La Tercera" in sources_1
+
+        # Propuesta 2: Cooperativa desde el cuerpo
+        arts_2 = data["proposal_2"]["articles"]
+        sources_2 = [a["source"] for a in arts_2]
+        assert "Cooperativa" in sources_2
+
+        # Propuesta 3: DF Diario desde el cuerpo (BBC Mundo no está en items)
+        arts_3 = data["proposal_3"]["articles"]
+        sources_3 = [a["source"] for a in arts_3]
+        assert "DF Diario" in sources_3
 
 
 # ---------------------------------------------------------------------------

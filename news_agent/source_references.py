@@ -110,6 +110,119 @@ def extract_proposal_sources(
     return result
 
 
+# ---------------------------------------------------------------------------
+# Extracción de menciones de medios desde el cuerpo narrativo de la pauta
+# ---------------------------------------------------------------------------
+
+
+def _extract_media_mentions_from_body(
+    proposal_block: str,
+    known_sources: set[str],
+) -> list[dict[str, str]]:
+    """Extrae menciones de medios conocidos desde el cuerpo narrativo de una propuesta.
+
+    A diferencia de _extract_source_entries, que solo busca en la sección
+    "Fuentes Sugeridas para Ampliar", esta función escanea todo el bloque
+    de la propuesta en busca de nombres de medios presentes en known_sources.
+
+    Args:
+        proposal_block: Bloque de texto completo de una propuesta individual.
+        known_sources: Conjunto de nombres de medios conocidos (desde filtered_items).
+
+    Returns:
+        Lista de dicts con 'source_name' y 'description' (la oración donde
+        aparece la mención). Sin duplicados por nombre de medio.
+    """
+    mentions: list[dict[str, str]] = []
+    seen_sources: set[str] = set()
+
+    # Ordenar por longitud descendente para evitar que "La Tercera" haga match
+    # antes que "La Tercera – Pulso" (coincidencia parcial)
+    sorted_sources = sorted(known_sources, key=len, reverse=True)
+
+    for source in sorted_sources:
+        source_lower = source.lower().strip()
+        if source_lower in seen_sources:
+            continue
+        if len(source) < 3:
+            continue
+
+        # Buscar menciones del medio en el bloque (case-insensitive)
+        # Capturamos la oración completa que contiene la mención
+        pattern = re.compile(
+            r"([^.]*?\b" + re.escape(source) + r"[^.]*\.)",
+            re.IGNORECASE,
+        )
+
+        for match in pattern.finditer(proposal_block):
+            context = match.group(1).strip()
+
+            # Filtrar contextos triviales o que pertenecen a la sección Fuentes
+            if len(context) < 20:
+                continue
+            if "Fuentes Sugeridas" in context:
+                continue
+
+            mentions.append(
+                {
+                    "source_name": source,
+                    "description": context,
+                }
+            )
+            seen_sources.add(source_lower)
+            break  # Una mención por medio por propuesta es suficiente
+
+    return mentions
+
+
+def extract_media_sources_from_pauta(
+    pauta_text: str,
+    known_sources: set[str],
+) -> dict[int, list[dict[str, str]]]:
+    """Extrae menciones de medios conocidos del texto narrativo de cada propuesta.
+
+    Complementa a extract_proposal_sources: donde esta solo busca en la sección
+    "Fuentes Sugeridas para Ampliar" (que el LLM puebla con instituciones y
+    organismos), extract_media_sources_from_pauta escanea el cuerpo completo
+    de cada propuesta —enfoque editorial, puntos clave, etc.— en busca de
+    nombres de medios que sí están en los feeds RSS.
+
+    Args:
+        pauta_text: Texto completo de la pauta editorial en Markdown.
+        known_sources: Conjunto de nombres de medios conocidos.
+
+    Returns:
+        Diccionario {número_propuesta: [{"source_name": str, "description": str}]}.
+    """
+    result: dict[int, list[dict[str, str]]] = {}
+
+    proposal_pattern = r"##\s+(\d+)\.\s+(.+?)(?=\n##\s+\d+\.\s+|$)"
+    for match in re.finditer(proposal_pattern, pauta_text, re.DOTALL):
+        try:
+            prop_num = int(match.group(1))
+        except (ValueError, IndexError):
+            continue
+
+        block = match.group(0)
+        mentions = _extract_media_mentions_from_body(block, known_sources)
+        if mentions:
+            result[prop_num] = mentions
+
+    if result:
+        total = sum(len(v) for v in result.values())
+        logger.info(
+            "Menciones de medios extraídas del cuerpo: %d propuesta(s) con %d medio(s).",
+            len(result),
+            total,
+        )
+    else:
+        logger.info(
+            "No se encontraron menciones de medios conocidos en el cuerpo de la pauta."
+        )
+
+    return result
+
+
 def _extract_source_entries(proposal_block: str) -> list[dict[str, str]]:
     """Extrae las entradas individuales de la sección Fuentes Sugeridas.
 
@@ -455,8 +568,32 @@ def build_companion_data(
     Returns:
         Path al archivo companion JSON generado, o None si no se pudo generar.
     """
-    # Paso 1: Extraer fuentes desde el texto de la pauta
+    # Paso 1a: Extraer fuentes desde la sección "Fuentes Sugeridas para Ampliar"
     proposal_sources = extract_proposal_sources(pauta_text)
+
+    # Paso 1b: Extraer menciones de medios del cuerpo narrativo de la pauta.
+    # El LLM cita medios reales (CIPER Chile, La Tercera, DF Diario, etc.) en el
+    # texto de cada propuesta, pero en "Fuentes Sugeridas" suele poner instituciones
+    # (CPI, Dipres, Senapred) que no están en los feeds RSS.
+    known_sources = {
+        item.get("source", "") for item in filtered_items if item.get("source")
+    }
+    known_sources.discard("")
+    media_mentions = extract_media_sources_from_pauta(pauta_text, known_sources)
+
+    # Mezclar ambas fuentes: las de "Fuentes Sugeridas" tienen prioridad;
+    # las del cuerpo se agregan solo si el medio no fue capturado ya.
+    for prop_num, sources in media_mentions.items():
+        if prop_num not in proposal_sources:
+            proposal_sources[prop_num] = []
+        existing_names = {
+            s["source_name"].lower() for s in proposal_sources[prop_num]
+        }
+        for src in sources:
+            if src["source_name"].lower() not in existing_names:
+                proposal_sources[prop_num].append(src)
+                existing_names.add(src["source_name"].lower())
+
     if not proposal_sources:
         return None
 

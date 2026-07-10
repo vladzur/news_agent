@@ -22,8 +22,8 @@ ARTICLE_REASONING_EFFORT = "high"  # Razonamiento para redacción de artículos 
 # ---------------------------------------------------------------------------
 # Constantes de la ventana de análisis y formato
 # ---------------------------------------------------------------------------
-TIME_WINDOW_HOURS = 168  # 7 días: cubre la semana completa (lunes a domingo)
-SUMMARY_MAX_CHARS = 700  # Suficiente para lead + cifras + atribuciones (reglas de precisión factual)
+TIME_WINDOW_HOURS = 96  # 4 días: noticias anteriores ya tienen desarrollos posteriores en la ventana
+SUMMARY_MAX_CHARS = 500  # Suficiente para lead + cifras + atribuciones (reglas de precisión factual)
 
 # ---------------------------------------------------------------------------
 # Constantes de enriquecimiento de contenido
