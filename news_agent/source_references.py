@@ -593,9 +593,17 @@ def extract_article_references(
 
         block = match.group(0)
 
-        # Extraer todos los [art. N] del bloque
-        refs = re.findall(r"\[art\.\s*(\d+)\]", block)
-        article_nums = sorted(set(int(n) for n in refs))
+        # Extraer todos los [art. N] del bloque.
+        # El LLM puede agrupar varias referencias en un mismo bracket:
+        #   [art. 60, 174, 178, 182]
+        # Por eso capturamos todo el contenido dentro de los corchetes
+        # y luego extraemos cada número individual.
+        raw_refs = re.findall(r"\[art\.\s*([\d,\s]+)\]", block)
+        article_nums: list[int] = []
+        for group in raw_refs:
+            for num in re.findall(r"\d+", group):
+                article_nums.append(int(num))
+        article_nums = sorted(set(article_nums))
 
         # Validar que los números estén en rango
         valid_nums: list[int] = []

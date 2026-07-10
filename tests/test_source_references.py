@@ -358,6 +358,19 @@ Referencia normal [art. 1], con más espacios [art.  2], y [art.3].
 
         assert result[1] == [1, 2, 3]
 
+    def test_extracts_multiple_numbers_in_single_bracket(self):
+        """Debe extraer todos los números de un bracket con múltiples referencias.
+
+        El LLM puede agrupar varias referencias: [art. 60, 174, 178, 182].
+        """
+        pauta_text = """## 1. Propuesta
+El acuerdo [art. 60, 174, 178, 182] fue criticado por la oposición.
+Además, [art. 143] y [art. 303, 311] complementan el análisis.
+"""
+        result = extract_article_references(pauta_text, [{}] * 500)
+
+        assert result[1] == [60, 143, 174, 178, 182, 303, 311]
+
 
 # ---------------------------------------------------------------------------
 # Tests para _source_names_match
