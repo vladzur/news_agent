@@ -96,9 +96,10 @@ news_agent/
 |-----------|-------|-------------|
 | `model` | `deepseek-v4-pro` | Modelo principal (límite de salida: 384K tokens) |
 | `temperature` | `0.1` | Baja temperatura para maximizar rigurosidad factual y minimizar alucinaciones |
-| `max_tokens` (pauta) | `16384` | Presupuesto compartido entre razonamiento y contenido para ~1000+ noticias semanales |
-| `max_tokens` (artículo) | `4069` | Suficiente para razonamiento + artículo final de ~1000 palabras |
-| `reasoning_effort` | `high` | Razonamiento profundo habilitado |
+| `PAUTA_MAX_TOKENS` | `16384` | Presupuesto compartido entre razonamiento y contenido para ~1000+ noticias semanales |
+| `ARTICLE_MAX_TOKENS` | `8192` | Suficiente para ~1000 palabras en español (~2500 tokens) + razonamiento |
+| `REASONING_EFFORT` | `high` | Razonamiento profundo para la pauta semanal (`high` o `max`) |
+| `ARTICLE_REASONING_EFFORT` | `high` | Razonamiento independiente para redacción de artículos |
 | `base_url` | `https://api.deepseek.com/v1` | Endpoint compatible OpenAI |
 
 ### Modo thinking y distribución de tokens
@@ -108,7 +109,7 @@ DeepSeek-V4-Pro opera con **thinking mode activado** (`reasoning_effort: high`).
 - **`reasoning_content`**: cadena de razonamiento interna (CoT) que el modelo usa para estructurar el análisis.
 - **`content`**: respuesta final visible que se escribe en el archivo de salida.
 
-El parámetro `max_tokens` es el **presupuesto total compartido** entre ambos campos. El razonamiento típicamente consume el 60-80% del presupuesto. Para la pauta semanal se usan 16K tokens para dar espacio al razonamiento sobre grandes volúmenes de noticias (~1000+ artículos). Para la escritura de artículos se usan ~4K tokens, ya que el modelo solo necesita razonar sobre una propuesta concreta.
+El parámetro `max_tokens` es el **presupuesto total compartido** entre ambos campos. El razonamiento típicamente consume el 60-80% del presupuesto. Para la pauta semanal se usan 16K tokens (`PAUTA_MAX_TOKENS`) para dar espacio al razonamiento sobre grandes volúmenes de noticias (~1000+ artículos). Para la escritura de artículos se usan ~8K tokens (`ARTICLE_MAX_TOKENS`), ya que el modelo solo necesita razonar sobre una propuesta concreta.
 
 Si el modelo agota el presupuesto en razonamiento y `content` queda vacío, el cliente tiene un **fallback automático** que rescata `reasoning_content` como último recurso para no perder la ejecución.
 
@@ -233,9 +234,10 @@ Las constantes principales se encuentran en [news_agent/config.py](news_agent/co
 |-----------|-------------------|-------------|
 | `DEEPSEEK_MODEL` | `"deepseek-v4-pro"` | Modelo a utilizar |
 | `TEMPERATURE` | `0.1` | Temperatura de sampling (0.0–2.0). Valor bajo para privilegiar precisión factual |
-| `MAX_TOKENS` | `16384` | Límite de tokens para generación de pauta semanal |
-| `ARTICLE_MAX_TOKENS` | `4069` | Límite de tokens para escritura de artículo (~1000 palabras + razonamiento) |
-| `REASONING_EFFORT` | `"high"` | Esfuerzo de razonamiento (`"low"`, `"high"`, `"max"`) |
+| `PAUTA_MAX_TOKENS` | `16384` | Límite de tokens para generación de pauta semanal |
+| `ARTICLE_MAX_TOKENS` | `8192` | Límite de tokens para escritura de artículo (~1000 palabras + razonamiento) |
+| `REASONING_EFFORT` | `"high"` | Esfuerzo de razonamiento para la pauta (`"high"`, `"max"`, o `None` para deshabilitar) |
+| `ARTICLE_REASONING_EFFORT` | `"high"` | Esfuerzo de razonamiento independiente para redacción de artículos |
 | `TIME_WINDOW_HOURS` | `168` | Ventana de análisis en horas (7 días, lunes a domingo) |
 | `SUMMARY_MAX_CHARS` | `700` | Caracteres máximos por resumen. Amplio para preservar leads, cifras y atribuciones necesarias para la verificación factual |
 | `FULL_CONTENT_FETCH_ENABLED` | `True` | Control global de enriquecimiento de contenido |
@@ -243,8 +245,9 @@ Las constantes principales se encuentran en [news_agent/config.py](news_agent/co
 | `FULL_CONTENT_TIMEOUT` | `15` | Timeout HTTP (segundos) para cada extracción de artículo |
 | `FULL_CONTENT_DELAY` | `1.0` | Pausa entre peticiones al mismo dominio (segundos) |
 | `FULL_CONTENT_MAX_WORKERS` | `4` | Hilos paralelos para extracción de contenido |
-| `FULL_CONTENT_CACHE_DIR` | `"cache"` | Directorio para caché de contenido extraído |
+| `FULL_CONTENT_CACHE_DIR` | Ruta absoluta a `cache/` | Directorio para caché de contenido extraído (resuelto relativo al paquete, cron-safe) |
 | `SOURCE_ARTICLE_MAX_CHARS` | `2000` | Caracteres máximos de contenido fuente por artículo en el prompt del redactor |
+| `COMPANION_MAX_ARTICLES_PER_SOURCE` | `3` | Máximo de artículos del mismo medio incluidos en el companion JSON de fuentes |
 
 ### Automatización con cron
 
