@@ -4,7 +4,6 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from news_agent.config import MIN_SUMMARY_LENGTH
 from news_agent.content_enricher import (
     ContentEnricherError,
     _fetch_article_content,
@@ -42,6 +41,9 @@ def _mock_response(text, status_code=200):
 class TestShouldEnrich:
     """Pruebas para la función de decisión de enriquecimiento."""
 
+    # Valor fijo para tests, independiente de config.py
+    _TEST_MIN_SUMMARY_LENGTH = 150
+
     def test_none_summary_returns_true(self):
         """Un resumen None debe gatillar enriquecimiento."""
         assert _should_enrich(None) is True
@@ -56,16 +58,16 @@ class TestShouldEnrich:
 
     def test_short_summary_returns_true(self):
         """Un resumen bajo el umbral debe gatillar enriquecimiento."""
-        assert _should_enrich("Noticia breve.", MIN_SUMMARY_LENGTH) is True
+        assert _should_enrich("Noticia breve.", self._TEST_MIN_SUMMARY_LENGTH) is True
 
     def test_long_summary_returns_false(self):
         """Un resumen sobre el umbral NO debe gatillar enriquecimiento."""
-        long_text = "X" * (MIN_SUMMARY_LENGTH + 10)
+        long_text = "X" * (self._TEST_MIN_SUMMARY_LENGTH + 10)
         assert _should_enrich(long_text) is False
 
     def test_exact_threshold_returns_false(self):
         """Un resumen justo en el umbral NO debe gatillar enriquecimiento."""
-        exact = "X" * MIN_SUMMARY_LENGTH
+        exact = "X" * self._TEST_MIN_SUMMARY_LENGTH
         assert _should_enrich(exact) is False
 
     def test_custom_threshold(self):

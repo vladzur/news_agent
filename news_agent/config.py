@@ -14,9 +14,10 @@ from pathlib import Path
 DEEPSEEK_MODEL = "deepseek-v4-pro"
 DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
 TEMPERATURE = 0.1
-MAX_TOKENS = 16384  # Pauta semanal: ~1000+ noticias requieren más presupuesto de razonamiento
-ARTICLE_MAX_TOKENS = 4069  # Artículo ~1000 palabras: contenido + overhead de razonamiento
-REASONING_EFFORT = "high"  # "high" o "max" para razonamiento profundo, "low" para respuestas rápidas y menos profundas
+PAUTA_MAX_TOKENS = 16384  # Pauta semanal: ~1000+ noticias requieren más presupuesto de razonamiento
+ARTICLE_MAX_TOKENS = 8192  # Artículo ~1000 palabras en español (~2500 tokens) + razonamiento
+REASONING_EFFORT = "high"  # "high" o "max" para razonamiento profundo; None para deshabilitar thinking mode
+ARTICLE_REASONING_EFFORT = "high"  # Razonamiento para redacción de artículos individuales
 
 # ---------------------------------------------------------------------------
 # Constantes de la ventana de análisis y formato
@@ -32,7 +33,7 @@ MIN_SUMMARY_LENGTH = 150  # Si el resumen RSS < esto, intentar extraer contenido
 FULL_CONTENT_TIMEOUT = 15  # Timeout HTTP para cada extracción de artículo (segundos)
 FULL_CONTENT_DELAY = 1.0  # Pausa entre peticiones al mismo dominio (segundos)
 FULL_CONTENT_MAX_WORKERS = 4  # Hilos paralelos para extracción de contenido
-FULL_CONTENT_CACHE_DIR = "cache"  # Directorio para caché de contenido extraído
+FULL_CONTENT_CACHE_DIR = str(Path(__file__).resolve().parent.parent / "cache")  # Ruta absoluta al dir de caché
 
 # ---------------------------------------------------------------------------
 # Constantes de referencias a fuentes para escritura de artículos
@@ -40,6 +41,10 @@ FULL_CONTENT_CACHE_DIR = "cache"  # Directorio para caché de contenido extraíd
 # Máximo de caracteres de contenido fuente por artículo que se incluyen
 # en el prompt del redactor, para no saturar la ventana de contexto del LLM.
 SOURCE_ARTICLE_MAX_CHARS = 2000
+
+# Máximo de artículos del mismo medio que se incluyen en el companion JSON
+# de fuentes. Controla el volumen de material de origen que recibe el redactor.
+COMPANION_MAX_ARTICLES_PER_SOURCE = 3
 
 # ---------------------------------------------------------------------------
 # Archivo de configuración de feeds RSS (por defecto)
