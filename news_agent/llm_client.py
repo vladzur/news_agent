@@ -12,7 +12,7 @@ from openai import APIError, AuthenticationError, OpenAI
 from .config import (
     DEEPSEEK_BASE_URL,
     DEEPSEEK_MODEL,
-    MAX_TOKENS,
+    PAUTA_MAX_TOKENS,
     REASONING_EFFORT,
     TEMPERATURE,
 )
@@ -55,14 +55,14 @@ class LLMClient:
             api_key: Clave API de DeepSeek.
             model: Modelo a usar. Por defecto DEEPSEEK_MODEL.
             temperature: Temperatura de sampling. Por defecto TEMPERATURE (0.5).
-            max_tokens: Límite de tokens de salida. Por defecto MAX_TOKENS (16384).
+            max_tokens: Límite de tokens de salida. Por defecto PAUTA_MAX_TOKENS (16384).
             base_url: URL base de la API. Por defecto DEEPSEEK_BASE_URL.
-            reasoning_effort: Esfuerzo de razonamiento ("low", "high", "max").
+            reasoning_effort: Esfuerzo de razonamiento ("high", "max", o None).
                               Por defecto REASONING_EFFORT ("high").
         """
         self.model = model or DEEPSEEK_MODEL
         self.temperature = temperature if temperature is not None else TEMPERATURE
-        self.max_tokens = max_tokens if max_tokens is not None else MAX_TOKENS
+        self.max_tokens = max_tokens if max_tokens is not None else PAUTA_MAX_TOKENS
         self.reasoning_effort = (
             reasoning_effort if reasoning_effort is not None else REASONING_EFFORT
         )
@@ -106,7 +106,7 @@ class LLMClient:
                 max_tokens=self.max_tokens,
                 extra_body={
                     "thinking": {
-                        "type": "disabled" if self.reasoning_effort == "low" else "enabled",
+                        "type": "disabled" if self.reasoning_effort is None else "enabled",
                         "reasoning_effort": self.reasoning_effort,
                     }
                 },

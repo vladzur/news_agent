@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .config import SOURCE_ARTICLE_MAX_CHARS
+from .config import COMPANION_MAX_ARTICLES_PER_SOURCE, SOURCE_ARTICLE_MAX_CHARS
 from .content_enricher import fetch_single_article
 
 # ---------------------------------------------------------------------------
@@ -51,8 +51,6 @@ _STOP_WORDS: set[str] = {
 # Mínimo de caracteres para considerar una palabra como keyword
 _MIN_WORD_LENGTH = 4
 
-# Máximo de artículos por fuente en el companion
-_MAX_ARTICLES_PER_SOURCE = 3
 
 # Score mínimo para considerar un artículo como match relevante
 _MIN_MATCH_SCORE = 0.05
@@ -165,7 +163,7 @@ def _extract_source_entries(proposal_block: str) -> list[dict[str, str]]:
             "description": description,
         })
 
-    # Dedicar: no incluir más de _MAX_ARTICLES_PER_SOURCE entradas por fuente
+    # Dedicar: no incluir más de COMPANION_MAX_ARTICLES_PER_SOURCE entradas por fuente
     # para evitar saturar el companion con matches poco relevantes
     seen_names: set[str] = set()
     deduped: list[dict[str, str]] = []
@@ -254,7 +252,7 @@ def match_sources_to_articles(
 
             # Ordenar por score descendente, tomar los mejores
             scored.sort(key=lambda x: x[1], reverse=True)
-            top_n = scored[:_MAX_ARTICLES_PER_SOURCE]
+            top_n = scored[:COMPANION_MAX_ARTICLES_PER_SOURCE]
 
             for idx, score in top_n:
                 matched_indices.add(idx)
