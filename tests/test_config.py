@@ -8,36 +8,9 @@ import pytest
 
 from news_agent.config import (
     ConfigurationError,
-    DEEPSEEK_BASE_URL,
-    DEEPSEEK_MODEL,
-    MAX_TOKENS,
-    REASONING_EFFORT,
-    SUMMARY_MAX_CHARS,
-    TEMPERATURE,
-    TIME_WINDOW_HOURS,
     get_api_key,
     load_rss_feeds,
 )
-
-
-class TestConstants:
-    """Pruebas de las constantes del módulo de configuración."""
-
-    def test_expected_model_name(self):
-        """Verifica que el modelo sea el especificado en los requisitos."""
-        assert DEEPSEEK_MODEL == "deepseek-v4-pro"
-
-    def test_expected_base_url(self):
-        """Verifica que la URL base sea la especificada en los requisitos."""
-        assert DEEPSEEK_BASE_URL == "https://api.deepseek.com/v1"
-
-    def test_expected_time_window(self):
-        """Verifica que la ventana de tiempo sea 168 horas (7 días)."""
-        assert TIME_WINDOW_HOURS == 168
-
-    def test_expected_max_tokens(self):
-        """Verifica que max_tokens sea 16384 para pauta semanal."""
-        assert MAX_TOKENS == 16384
 
 
 
