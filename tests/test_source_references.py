@@ -14,6 +14,7 @@ from news_agent.source_references import (
     _source_names_match,
     _truncate_content,
     build_companion_data,
+    extract_article_references,
     extract_media_sources_from_pauta,
     extract_proposal_sources,
     load_companion_data,
@@ -286,6 +287,79 @@ Análisis de la situación política nacional.
 
 
 # ---------------------------------------------------------------------------
+# Tests para extract_article_references
+# ---------------------------------------------------------------------------
+
+
+class TestExtractArticleReferences:
+    """Pruebas para extract_article_references."""
+
+    def test_extracts_references_from_pauta(self):
+        """Debe extraer referencias [art. N] agrupadas por propuesta."""
+        pauta_text = """# Pauta Editorial
+
+## 1. Reforma tributaria
+El debate fiscal continúa. Según CIPER Chile [art. 3], las garantías
+del CAE alcanzaron un récord. La Tercera [art. 7] también reporta
+sobre la deuda pública.
+
+## 2. Emergencia en el sur
+Cooperativa [art. 12] informa sobre el sistema frontal. Las lluvias
+han dañado viviendas en La Araucanía [art. 15].
+
+## 3. Panorama internacional
+El dólar cayó según DF Diario [art. 8]. BBC Mundo [art. 20] cubre
+los ataques en Medio Oriente.
+"""
+        # filtered_items solo necesita tener suficientes elementos para validar índices
+        dummy_items = [{}] * 50
+
+        result = extract_article_references(pauta_text, dummy_items)
+
+        assert len(result) == 3
+        assert result[1] == [3, 7]
+        assert result[2] == [12, 15]
+        assert result[3] == [8, 20]
+
+    def test_deduplicates_repeated_references(self):
+        """Debe deduplicar referencias repetidas al mismo artículo."""
+        pauta_text = """## 1. Propuesta
+CIPER Chile [art. 5] publicó una investigación. Más adelante,
+CIPER Chile [art. 5] también reportó sobre otro caso.
+"""
+        result = extract_article_references(pauta_text, [{}] * 20)
+
+        assert result[1] == [5]
+
+    def test_ignores_out_of_range_references(self):
+        """Debe ignorar referencias a números de artículo que no existen."""
+        pauta_text = """## 1. Propuesta
+CIPER Chile [art. 5] reporta algo. También [art. 999] está fuera de rango.
+"""
+        result = extract_article_references(pauta_text, [{}] * 10)
+
+        assert result[1] == [5]  # 999 ignorado
+
+    def test_returns_empty_when_no_references(self):
+        """Debe retornar vacío si la pauta no tiene referencias [art. N]."""
+        pauta_text = """## 1. Propuesta
+CIPER Chile reporta algo sin usar el formato de referencia.
+"""
+        result = extract_article_references(pauta_text, [{}] * 10)
+
+        assert result == {}
+
+    def test_handles_various_spacing(self):
+        """Debe manejar variaciones de espaciado en el formato [art. N]."""
+        pauta_text = """## 1. Propuesta
+Referencia normal [art. 1], con más espacios [art.  2], y [art.3].
+"""
+        result = extract_article_references(pauta_text, [{}] * 20)
+
+        assert result[1] == [1, 2, 3]
+
+
+# ---------------------------------------------------------------------------
 # Tests para _source_names_match
 # ---------------------------------------------------------------------------
 
@@ -510,13 +584,14 @@ class TestExtractKeywords:
         assert "sobre" not in result
         assert "para" not in result
 
-    def test_filters_short_words(self):
-        """Debe filtrar palabras de menos de 4 caracteres."""
+    def test_filters_very_short_words(self):
+        """Debe filtrar palabras de menos de 3 caracteres."""
         text = "la sanción al proyecto de ley en el sur"
         result = _extract_keywords(text)
         assert "sanción" in result
         assert "proyecto" in result
-        assert "ley" not in result  # 3 letras
+        assert "ley" in result  # 3 letras: ahora se incluye (acrónimos como CAE, CPI, SII)
+        assert "sur" in result  # 3 letras
 
 
 # ---------------------------------------------------------------------------
@@ -804,6 +879,76 @@ class TestBuildCompanionData:
         arts_3 = data["proposal_3"]["articles"]
         sources_3 = [a["source"] for a in arts_3]
         assert "DF Diario" in sources_3
+
+    def test_uses_deterministic_references_when_available(self, tmp_path):
+        """Debe usar referencias [art. N] como método principal cuando existen.
+
+        Si el LLM incluyó referencias [art. N] en la pauta, el companion debe
+        resolverse determinísticamente sin depender de fuzzy matching.
+        """
+        items = [
+            {
+                "title": "Noticia sobre el CAE",
+                "source": "CIPER Chile",
+                "link": "https://example.com/1",
+                "summary_clean": "Cobro de garantías del CAE.",
+                "full_content": None,
+            },
+            {
+                "title": "Noticia sobre la reforma",
+                "source": "La Tercera",
+                "link": "https://example.com/2",
+                "summary_clean": "Reforma tributaria en el Congreso.",
+                "full_content": None,
+            },
+            {
+                "title": "Noticia sobre el clima",
+                "source": "Cooperativa",
+                "link": "https://example.com/3",
+                "summary_clean": "Sistema frontal en La Araucanía.",
+                "full_content": None,
+            },
+        ]
+
+        pauta_with_refs = """# Pauta Editorial
+
+## 1. Reforma tributaria
+Según CIPER Chile [art. 1], las garantías del CAE alcanzaron un récord.
+La Tercera [art. 2] también reporta sobre el debate en el Congreso.
+*   **Fuentes Sugeridas para Ampliar:**
+    *   **CPI:** Informe de inversión pública.
+
+## 2. Emergencia climática
+Cooperativa [art. 3] informa sobre daños en viviendas por el temporal.
+"""
+
+        pauta_path = tmp_path / "pauta.md"
+        pauta_path.write_text("# placeholder")
+
+        with patch(
+            "news_agent.source_references.fetch_single_article",
+            return_value=None,
+        ):
+            result = build_companion_data(
+                pauta_text=pauta_with_refs,
+                pauta_path=pauta_path,
+                filtered_items=items,
+            )
+
+        assert result is not None
+        data = json.loads(result.read_text(encoding="utf-8"))
+
+        # Propuesta 1: artículos 1 y 2 resueltos determinísticamente
+        arts_1 = data["proposal_1"]["articles"]
+        assert len(arts_1) == 2
+        titles_1 = [a["title"] for a in arts_1]
+        assert "Noticia sobre el CAE" in titles_1
+        assert "Noticia sobre la reforma" in titles_1
+
+        # Propuesta 2: artículo 3
+        arts_2 = data["proposal_2"]["articles"]
+        assert len(arts_2) == 1
+        assert arts_2[0]["title"] == "Noticia sobre el clima"
 
 
 # ---------------------------------------------------------------------------
