@@ -21,7 +21,8 @@ from news_agent.article_writer import (
 
 @pytest.fixture
 def sample_pauta_content():
-    """Contenido de una pauta semanal válida con 3 propuestas."""
+    """Contenido de una pauta semanal válida con 5 propuestas
+    (3 nacionales y 2 internacionales)."""
     return """\
 # ⚡ Pauta Editorial Sugerida - La Chispa Sur
 **Fecha de Generación:** 2026-07-04
@@ -49,13 +50,30 @@ def sample_pauta_content():
     *   Fuente C: Descripción de la fuente C.
 
 ## 3. Título del Tercer Artículo
-*   **Enfoque Editorial:** Enfoque del tercer artículo con perspectiva internacional.
+*   **Enfoque Editorial:** Enfoque del tercer artículo sobre un tema nacional.
+*   **Puntos Clave a Desarrollar:**
+    1. Punto uno nacional.
+    2. Punto dos nacional.
+*   **Fuentes Sugeridas para Ampliar:**
+    *   Fuente D: Descripción de la fuente D.
+    *   Fuente E: Descripción de la fuente E.
+
+## 4. Título del Cuarto Artículo
+*   **Enfoque Editorial:** Enfoque del cuarto artículo con perspectiva internacional.
+*   **Puntos Clave a Desarrollar:**
+    1. Punto uno internacional.
+    2. Punto dos internacional.
+    3. Punto tres internacional.
+*   **Fuentes Sugeridas para Ampliar:**
+    *   Fuente F: Descripción de la fuente F.
+
+## 5. Título del Quinto Artículo
+*   **Enfoque Editorial:** Enfoque del quinto artículo sobre política imperialista.
 *   **Puntos Clave a Desarrollar:**
     1. Punto uno internacional.
     2. Punto dos internacional.
 *   **Fuentes Sugeridas para Ampliar:**
-    *   Fuente D: Descripción de la fuente D.
-    *   Fuente E: Descripción de la fuente E.
+    *   Fuente G: Descripción de la fuente G.
 """
 
 
@@ -125,13 +143,15 @@ class TestExtractListItems:
 class TestParsePautaFile:
     """Pruebas para parse_pauta_file."""
 
-    def test_parses_three_proposals(self, sample_pauta_file):
-        """Debe extraer exactamente 3 propuestas de una pauta válida."""
+    def test_parses_five_proposals(self, sample_pauta_file):
+        """Debe extraer exactamente 5 propuestas de una pauta válida."""
         proposals = parse_pauta_file(sample_pauta_file)
-        assert len(proposals) == 3
+        assert len(proposals) == 5
         assert proposals[0]["number"] == 1
         assert proposals[1]["number"] == 2
         assert proposals[2]["number"] == 3
+        assert proposals[3]["number"] == 4
+        assert proposals[4]["number"] == 5
 
     def test_extracts_title_correctly(self, sample_pauta_file):
         """Debe extraer el título de cada propuesta."""
@@ -170,7 +190,7 @@ class TestParsePautaFile:
             parse_pauta_file(file_path)
 
     def test_raises_when_wrong_number_of_proposals(self, tmp_path):
-        """Debe lanzar PautaParseError si no hay 3 propuestas."""
+        """Debe lanzar PautaParseError si no hay 5 propuestas."""
         content = """# ⚡ Pauta Editorial Sugerida - La Chispa Sur
 ---
 ## 1. Solo una propuesta
@@ -178,13 +198,13 @@ class TestParsePautaFile:
 """
         file_path = tmp_path / "bad_pauta.md"
         file_path.write_text(content, encoding="utf-8")
-        with pytest.raises(PautaParseError, match="3 propuestas"):
+        with pytest.raises(PautaParseError, match="5 propuestas"):
             parse_pauta_file(file_path)
 
     def test_handles_fewer_puntos_in_last_proposal(self, sample_pauta_file):
-        """La tercera propuesta tiene solo 2 puntos — debe manejarlo bien."""
+        """La quinta propuesta tiene solo 2 puntos — debe manejarlo bien."""
         proposals = parse_pauta_file(sample_pauta_file)
-        assert len(proposals[2]["puntos"]) == 2
+        assert len(proposals[4]["puntos"]) == 2
 
 
 # ---------------------------------------------------------------------------
@@ -241,11 +261,11 @@ class TestWriteArticle:
         assert "articulo_1_" in result["article_path"].name
 
     def test_write_article_invalid_number(self, mock_api_key, sample_pauta_file):
-        """Debe lanzar ValueError si el número de artículo no es 1, 2 o 3."""
+        """Debe lanzar ValueError si el número de artículo no está entre 1 y 5."""
         with pytest.raises(ValueError, match="inválido"):
             write_article(
                 pauta_path=sample_pauta_file,
-                article_number=5,
+                article_number=6,
                 output_dir=".",
             )
 
@@ -267,6 +287,25 @@ class TestWriteArticle:
         assert result["proposal_number"] == 2
         assert result["title"] == "Título del Segundo Artículo"
         assert "articulo_2_" in result["article_path"].name
+
+    def test_write_fifth_article(
+        self, mock_api_key, sample_pauta_file, tmp_path, mock_article_response
+    ):
+        """Debe poder escribir el artículo #5 (propuesta internacional)."""
+        with patch("news_agent.article_writer.LLMClient") as mock_client_class:
+            mock_client = Mock()
+            mock_client.generate_report.return_value = mock_article_response
+            mock_client_class.return_value = mock_client
+
+            result = write_article(
+                pauta_path=sample_pauta_file,
+                article_number=5,
+                output_dir=tmp_path,
+            )
+
+        assert result["proposal_number"] == 5
+        assert result["title"] == "Título del Quinto Artículo"
+        assert "articulo_5_" in result["article_path"].name
 
     def test_passes_source_articles_to_prompt_builder(
         self, mock_api_key, sample_pauta_file, tmp_path, mock_article_response

@@ -2,7 +2,19 @@
     {
         "name": "BBC News Mundo",
         "url": "https://feeds.bbci.co.uk/mundo/rss.xml"
-    },    
+    },
+    {
+        "name": "Nodal",
+        "url": "https://www.nodal.am/feed/"
+    },
+    {
+        "name": "Jacobin América Latina",
+        "url": "https://jacobinlat.com/feed/"
+    },
+    {
+        "name": "Prensa Latina",
+        "url": "https://www.prensa-latina.cu/feed/"
+    },
     {
         "name": "Ciper Chile",
         "url": "https://www.ciperchile.cl/feed/"

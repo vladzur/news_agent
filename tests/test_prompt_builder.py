@@ -26,20 +26,35 @@ class TestBuildSystemPrompt:
         prompt = build_system_prompt()
         assert "La Chispa Sur" in prompt
 
-    def test_contains_exactly_three_proposals_rule(self):
-        """Debe indicar que se requieren exactamente 3 propuestas."""
+    def test_contains_exactly_five_proposals_rule(self):
+        """Debe indicar que se requieren exactamente 5 propuestas."""
         prompt = build_system_prompt()
-        assert "tres (3)" in prompt.lower() or "exactamente tres" in prompt.lower()
+        assert "cinco (5)" in prompt.lower() or "exactamente cinco" in prompt.lower()
 
     def test_contains_tone_guidelines(self):
         """Debe incluir directrices de tono editorial."""
         prompt = build_system_prompt()
         assert "incisivo" in prompt.lower() or "analítico" in prompt.lower()
 
+    def test_requires_provocative_headlines(self):
+        """Debe exigir titulares provocadores que no sean microresúmenes."""
+        prompt = build_system_prompt().lower()
+        assert "agresivos, provocadores" in prompt
+        assert "no es el resumen del artículo" in prompt
+        assert "clickbait" in prompt
+
+    def test_requires_firm_grounded_editorial_criticism(self):
+        """Debe exigir crítica firme basada en hechos verificables."""
+        prompt = build_system_prompt().lower()
+        assert "denuncia y cuestiona con fuerza" in prompt
+        assert "evitando acusaciones sin fundamento" in prompt
+
     def test_contains_output_format(self):
         """Debe especificar el formato de salida Markdown para las propuestas."""
         prompt = build_system_prompt()
         assert "## 1." in prompt or "TÍTULO GANCHO" in prompt
+        # El ejemplo de formato debe mostrar las 5 propuestas numeradas.
+        assert "## 5." in prompt
         # El formato ya no debe incluir la cabecera con fecha y cantidad:
         # esos datos los agrega el código automáticamente.
         assert "# ⚡ Pauta Editorial Sugerida" not in prompt
@@ -65,12 +80,21 @@ class TestBuildSystemPrompt:
         assert "chileno" in prompt.lower() or "chilena" in prompt.lower()
 
     def test_contains_geographic_distribution(self):
-        """Debe especificar la distribución geográfica 90% nacional / 10% internacional."""
-        prompt = build_system_prompt()
-        assert "90%" in prompt or "90 %" in prompt
-        assert "10%" in prompt or "10 %" in prompt
-        assert "nacional" in prompt.lower() or "chilenas" in prompt.lower()
-        assert "internacional" in prompt.lower()
+        """Debe especificar la distribución 3 nacionales / 2 internacionales."""
+        prompt = build_system_prompt().lower()
+        assert "tres (3)" in prompt
+        assert "dos (2)" in prompt
+        assert "nacional" in prompt
+        assert "internacional" in prompt
+
+    def test_contains_international_emphasis(self):
+        """Debe exigir foco internacional en hechos que conmocionan al mundo,
+        pueblos oprimidos y políticas imperialistas."""
+        prompt = build_system_prompt().lower()
+        assert "conmocionan al mundo" in prompt
+        assert "pueblos oprimidos" in prompt
+        assert "imperialistas" in prompt
+        assert "estabilidad mundial" in prompt
 
     def test_contains_left_wing_identity(self):
         """Debe incluir la identidad de izquierda y anti-neoliberal."""
@@ -169,6 +193,20 @@ class TestBuildArticleSystemPrompt:
         assert "Consistencia con la línea editorial" in prompt
         assert "Cierre coherente" in prompt
 
+    def test_requires_provocative_article_headline(self):
+        """Debe pedir un titular provocador y no un microresumen."""
+        prompt = build_article_system_prompt().lower()
+        assert "agresivo, provocador" in prompt
+        assert "no lo conviertas en un micro resumen" in prompt
+        assert "llamado claro a la lectura" in prompt
+
+    def test_requires_firm_criticism_without_false_neutrality(self):
+        """Debe rechazar la falsa neutralidad sin permitir acusaciones inventadas."""
+        prompt = build_article_system_prompt().lower()
+        assert "crítica sin falsa neutralidad" in prompt
+        assert "denuncia las relaciones de poder" in prompt
+        assert "no autoriza a inventar" in prompt
+
     def test_contains_post_writing_verification(self):
         """Debe incluir verificación posterior a la escritura."""
         prompt = build_article_system_prompt()
@@ -228,6 +266,15 @@ class TestBuildArticleUserPrompt:
         """Debe incluir la instrucción de escritura."""
         result = build_article_user_prompt(sample_proposal)
         assert "artículo completo" in result.lower() or "escribe" in result.lower()
+
+    def test_reinforces_provocative_headline_and_editorial_criticism(
+        self, sample_proposal
+    ):
+        """Debe reforzar el titular provocador y la crítica fundamentada."""
+        result = build_article_user_prompt(sample_proposal).lower()
+        assert "titular debe ser agresivo, provocador" in result
+        assert "no lo redactes como un micro resumen" in result
+        assert "crítica editorial firme" in result
 
     def test_handles_missing_fuentes(self):
         """Debe funcionar sin fuentes (lista vacía)."""
@@ -417,6 +464,18 @@ class TestBuildUserPrompt:
 
         assert "propuestas" in result.lower()
 
+    def test_instructs_five_proposals(self):
+        """La instrucción final debe pedir cinco propuestas: 3 nacionales y 2 internacionales."""
+        items = [
+            self._make_item("T1", "S1", "R1"),
+        ]
+
+        result = build_user_prompt(items).lower()
+
+        assert "cinco propuestas" in result
+        assert "nacionales" in result
+        assert "internacionales" in result
+
     def test_includes_article_reference_instruction(self):
         """La instrucción final debe recordar usar referencias [art. N]."""
         items = [
@@ -468,7 +527,7 @@ class TestBuildUserPrompt:
         assert "2 artículos" in result or "2 artículo" in result or "**2 artículos**" in result
 
     def test_includes_consistency_reminder(self):
-        """Debe recordar revisar coherencia entre las tres propuestas."""
+        """Debe recordar revisar coherencia entre las cinco propuestas."""
         items = [
             self._make_item("T1", "S1", "R1"),
         ]
@@ -476,6 +535,7 @@ class TestBuildUserPrompt:
         result = build_user_prompt(items)
 
         assert "coherencia" in result.lower() or "contradicciones" in result.lower()
+        assert "cinco" in result.lower()
 
     def test_includes_source_attribution_reminder(self):
         """Debe recordar verificar atribución correcta de fuentes."""

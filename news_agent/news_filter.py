@@ -1,6 +1,6 @@
 """Módulo de filtrado y limpieza de noticias.
 
-Aplica la ventana de 7 días (168 horas), limpia HTML residual de los resúmenes
+Aplica la ventana segun configuracion, limpia HTML residual de los resúmenes
 y trunca el texto según las especificaciones.
 """
 
@@ -131,7 +131,7 @@ def filter_items(
     """Filtra y normaliza una lista de artículos crudos.
 
     Aplica en secuencia:
-    1. Filtro de ventana de tiempo (168 horas, 7 días).
+    1. Filtro de ventana de tiempo.
     2. Limpieza HTML del resumen.
     3. Truncado del resumen limpio.
 

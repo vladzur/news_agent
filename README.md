@@ -2,7 +2,7 @@
 
 **Curador automatizado de pauta periodística para La Chispa Sur**, medio digital independiente de izquierda, crítico del modelo neoliberal.
 
-El agente recolecta noticias desde canales RSS y scraping web, las filtra por una ventana temporal de 7 días (168 horas), enriquece los resúmenes cortos extrayendo el contenido completo de los artículos con trafilatura, y utiliza el modelo **DeepSeek-V4-Pro** (vía API compatible con OpenAI SDK) para sintetizar **tres propuestas de pauta editorial semanal** con profundidad analítica, tono incisivo y narrativa ágil. También permite **escribir artículos completos (~1000 palabras)** a partir de cualquiera de las propuestas generadas, con un sistema de **referencias deterministas a fuentes** que asegura que el redactor reciba el contenido completo de los artículos fuente correctos para cada propuesta.
+El agente recolecta noticias desde canales RSS y scraping web, las filtra por una ventana temporal de 7 días (168 horas), enriquece los resúmenes cortos extrayendo el contenido completo de los artículos con trafilatura, y utiliza el modelo **DeepSeek-V4-Pro** (vía API compatible con OpenAI SDK) para sintetizar **cinco propuestas de pauta editorial semanal (tres de foco nacional y dos de foco internacional)** con profundidad analítica, tono incisivo y narrativa ágil. Las propuestas internacionales priorizan hechos que conmocionan al mundo, pueblos oprimidos y políticas imperialistas que afectan la estabilidad mundial, con mirada antiimperialista desde el sur global. También permite **escribir artículos completos (~1000 palabras)** a partir de cualquiera de las propuestas generadas, con un sistema de **referencias deterministas a fuentes** que asegura que el redactor reciba el contenido completo de los artículos fuente correctos para cada propuesta.
 
 ---
 
@@ -21,13 +21,13 @@ Flujo automatizado que:
 4. **Limpieza HTML** — Elimina etiquetas, comentarios, scripts y decodifica entidades HTML de los resúmenes.
 5. **Truncado inteligente** — Recorta resúmenes a 700 caracteres sin cortar palabras a la mitad.
 6. **Guardado intermedio de depuración (opcional)** — Con el flag `--debug`, guarda un archivo JSON con los artículos procesados (resumen RSS original, contenido extraído y resumen final) para comparar y ajustar el prompt.
-7. **Análisis con IA** — Envía los artículos filtrados a DeepSeek-V4-Pro con un system prompt que define la identidad editorial de La Chispa Sur (izquierda independiente, rigor periodístico, enfoque chileno, foco territorial en Villarrica y La Araucanía).
-8. **Reporte Markdown** — Genera un archivo `pauta_semanal_AAAA_MM_DD.md` con tres propuestas estructuradas: título gancho, enfoque editorial, puntos clave a desarrollar y fuentes sugeridas para ampliar. La cabecera (fecha y cantidad de notas) se genera automáticamente desde el código para garantizar precisión.
+7. **Análisis con IA** — Envía los artículos filtrados a DeepSeek-V4-Pro con un system prompt que define la identidad editorial de La Chispa Sur (izquierda independiente, rigor periodístico, distribución 3 propuestas nacionales + 2 internacionales, foco territorial en Villarrica y La Araucanía).
+8. **Reporte Markdown** — Genera un archivo `pauta_semanal_AAAA_MM_DD.md` con cinco propuestas estructuradas (tres nacionales y dos internacionales): título gancho, enfoque editorial, puntos clave a desarrollar y fuentes sugeridas para ampliar. La cabecera (fecha y cantidad de notas) se genera automáticamente desde el código para garantizar precisión.
 9. **Companion JSON de fuentes** — Extrae las fuentes sugeridas desde el texto de la pauta, las empareja determinísticamente con los artículos del pipeline por nombre de medio y similitud temática (keywords), enriquece los artículos emparejados con contenido completo y guarda un archivo `pauta_semanal_AAAA_MM_DD_companion.json`. Este archivo permite que el redactor de artículos reciba el contenido completo de las fuentes correctas.
 
 ### 2. Escritura de artículo completo con fuentes verificadas
 
-Toma una propuesta específica de la pauta (1, 2 o 3) y la expande a un artículo de **~1000 palabras** con material de origen real y verificado:
+Toma una propuesta específica de la pauta (1 a 5) y la expande a un artículo de **~1000 palabras** con material de origen real y verificado:
 
 1. **Parseo de la pauta** — Extrae título, enfoque editorial, puntos clave y fuentes sugeridas desde el archivo markdown generado.
 2. **Emparejamiento determinista de fuentes** — En lugar de depender de números de artículo auto-reportados por el LLM (poco fiables), el sistema:
@@ -240,6 +240,7 @@ Las constantes principales se encuentran en [news_agent/config.py](news_agent/co
 | `ARTICLE_REASONING_EFFORT` | `"high"` | Esfuerzo de razonamiento independiente para redacción de artículos |
 | `TIME_WINDOW_HOURS` | `168` | Ventana de análisis en horas (7 días, lunes a domingo) |
 | `SUMMARY_MAX_CHARS` | `700` | Caracteres máximos por resumen. Amplio para preservar leads, cifras y atribuciones necesarias para la verificación factual |
+| `NUM_PROPOSALS` | `5` | Propuestas que genera el LLM por pauta (3 nacionales + 2 internacionales) |
 | `FULL_CONTENT_FETCH_ENABLED` | `True` | Control global de enriquecimiento de contenido |
 | `MIN_SUMMARY_LENGTH` | `150` | Si el resumen RSS tiene menos de esto, se intenta extraer el texto completo |
 | `FULL_CONTENT_TIMEOUT` | `15` | Timeout HTTP (segundos) para cada extracción de artículo |
@@ -298,6 +299,15 @@ El agente implementa fail-safe en cada etapa del pipeline:
 
 ## 2. [TÍTULO GANCHO DEL ARTÍCULO 2]
 ...
+
+## 3. [TÍTULO GANCHO DEL ARTÍCULO 3]
+...
+
+## 4. [TÍTULO GANCHO DEL ARTÍCULO 4]
+...
+
+## 5. [TÍTULO GANCHO DEL ARTÍCULO 5]
+...
 ```
 
 ### Archivo de depuración (`debug/articulos_procesados_YYYY_MM_DD.json`)
@@ -330,7 +340,8 @@ Se genera automáticamente junto con la pauta. Contiene, para cada propuesta, lo
     ]
   },
   "proposal_2": { "articles": [...] },
-  "proposal_3": { "articles": [...] }
+  ...
+  "proposal_5": { "articles": [...] }
 }
 ```
 

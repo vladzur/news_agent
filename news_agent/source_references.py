@@ -711,8 +711,17 @@ def build_companion_data(
     total_enriched = 0
     total_failed = 0
 
-    # Incluir las 3 propuestas, incluso si alguna no tiene artículos
-    for prop_num in range(1, 4):
+    # Incluir todas las propuestas presentes en la pauta, incluso si alguna
+    # no tiene artículos emparejados. Los números se derivan del texto para
+    # ser robustos ante pautas con distinta cantidad (el prompt actual
+    # numera 5: ## 1. a ## 5.) y ante pautas legadas de 3 propuestas.
+    proposal_numbers = sorted(
+        {
+            int(m.group(1))
+            for m in re.finditer(r"##\s+(\d+)\.\s+", pauta_text)
+        }
+    )
+    for prop_num in proposal_numbers:
         article_indices = matched.get(prop_num, [])
         articles: list[dict[str, Any]] = []
 
@@ -815,7 +824,7 @@ def load_companion_data(
 
     Args:
         pauta_path: Ruta al archivo .md de la pauta semanal.
-        article_number: Número de propuesta a cargar (1, 2 o 3).
+        article_number: Número de propuesta a cargar (1 a 5).
 
     Returns:
         Lista de diccionarios con los datos de cada artículo fuente

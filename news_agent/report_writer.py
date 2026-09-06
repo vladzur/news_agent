@@ -154,7 +154,7 @@ def save_article(
     Args:
         content: Texto completo del artículo generado por el LLM.
         title: Título del artículo (se usa para generar el slug del archivo).
-        article_number: Número de artículo (1, 2, o 3).
+        article_number: Número de artículo (1 a 5).
         output_dir: Directorio donde se guardará el archivo.
 
     Returns:

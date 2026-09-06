@@ -110,7 +110,17 @@ class TestRunPipeline:
             "*   **Puntos Clave a Desarrollar:**\n"
             "    1. Punto X\n"
             "    2. Punto Y\n"
-            "    3. Punto Z\n"
+            "    3. Punto Z\n\n"
+            "## 4. Cuarto Título Internacional\n"
+            "*   **Enfoque Editorial:** Análisis de un hecho que conmociona al mundo.\n"
+            "*   **Puntos Clave a Desarrollar:**\n"
+            "    1. Punto I\n"
+            "    2. Punto J\n\n"
+            "## 5. Quinto Título Internacional\n"
+            "*   **Enfoque Editorial:** Análisis de política imperialista.\n"
+            "*   **Puntos Clave a Desarrollar:**\n"
+            "    1. Punto K\n"
+            "    2. Punto L\n"
         )
 
     def test_full_pipeline_success(self, mock_api_key, feeds_file, tmp_path):
@@ -345,7 +355,13 @@ class TestRunPipeline:
             "*   **Fuentes Sugeridas para Ampliar:**\n"
             "    *   **Feed Uno:** Otra descripción.\n\n"
             "## 3. Tercer Título\n"
-            "*   **Enfoque Editorial:** Tercer análisis.\n"
+            "*   **Enfoque Editorial:** Tercer análisis.\n\n"
+            "## 4. Cuarto Título Internacional\n"
+            "*   **Enfoque Editorial:** Análisis internacional.\n"
+            "*   **Fuentes Sugeridas para Ampliar:**\n"
+            "    *   **Feed Dos:** Cobertura internacional.\n\n"
+            "## 5. Quinto Título Internacional\n"
+            "*   **Enfoque Editorial:** Política imperialista.\n"
         )
 
     def test_companion_included_in_result(
