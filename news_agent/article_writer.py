@@ -10,7 +10,12 @@ import re
 from pathlib import Path
 from typing import Any
 
-from .config import ARTICLE_MAX_TOKENS, ARTICLE_REASONING_EFFORT, get_api_key
+from .config import (
+    ARTICLE_MAX_TOKENS,
+    ARTICLE_REASONING_EFFORT,
+    NUM_PROPOSALS,
+    get_api_key,
+)
 from .llm_client import LLMClient, LLMClientError
 from .prompt_builder import build_article_system_prompt, build_article_user_prompt
 from .report_writer import save_article
@@ -31,7 +36,8 @@ def parse_pauta_file(filepath: str | Path) -> list[dict[str, Any]]:
 
     Espera el formato Markdown generado por el agente:
     - Cabecera con # ⚡ Pauta Editorial Sugerida
-    - Propuestas numeradas como ## 1. [TÍTULO], ## 2. [TÍTULO], ## 3. [TÍTULO]
+    - Propuestas numeradas como ## 1. [TÍTULO], ## 2. [TÍTULO], ## 3. [TÍTULO],
+      ## 4. [TÍTULO] y ## 5. [TÍTULO]
     - Cada propuesta tiene Enfoque Editorial, Puntos Clave, y Fuentes Sugeridas.
 
     Args:
@@ -46,7 +52,8 @@ def parse_pauta_file(filepath: str | Path) -> list[dict[str, Any]]:
 
     Raises:
         PautaParseError: Si el archivo no existe, no es una pauta válida,
-                         o no contiene exactamente 3 propuestas.
+                         o no contiene exactamente 5 propuestas
+                         (3 nacionales y 2 internacionales).
     """
     path = Path(filepath)
     if not path.exists():
@@ -61,15 +68,15 @@ def parse_pauta_file(filepath: str | Path) -> list[dict[str, Any]]:
             f"falta la cabecera '# ⚡ Pauta Editorial Sugerida'."
         )
 
-    # Dividir por propuestas (## 1., ## 2., ## 3.)
+    # Dividir por propuestas (## 1. a ## 5.)
     # Usamos regex para capturar cada sección de propuesta
     proposal_pattern = r"##\s+(\d+)\.\s+(.+?)(?=\n##\s+\d+\.\s+|$)"
     matches = list(re.finditer(proposal_pattern, content, re.DOTALL))
 
-    if len(matches) != 3:
+    if len(matches) != NUM_PROPOSALS:
         raise PautaParseError(
-            f"Se esperaban 3 propuestas en la pauta, pero se encontraron "
-            f"{len(matches)}."
+            f"Se esperaban {NUM_PROPOSALS} propuestas en la pauta, pero se "
+            f"encontraron {len(matches)}."
         )
 
     proposals: list[dict[str, Any]] = []
@@ -199,7 +206,7 @@ def write_article(
 
     Args:
         pauta_path: Ruta al archivo de pauta semanal.
-        article_number: Número de propuesta a desarrollar (1, 2 o 3).
+        article_number: Número de propuesta a desarrollar (1 a 5).
         output_dir: Directorio donde guardar el artículo generado.
         verbose: Si es True, activa logging DEBUG.
 
@@ -211,7 +218,7 @@ def write_article(
 
     Raises:
         PautaParseError: Si el archivo de pauta no es válido.
-        ValueError: Si el número de artículo no es 1, 2 o 3.
+        ValueError: Si el número de artículo no está entre 1 y 5.
         LLMClientError: Si falla la comunicación con la API.
         SystemExit: Si falta la API key.
     """
@@ -221,9 +228,10 @@ def write_article(
 
     setup_logging(verbose)
 
-    if article_number not in (1, 2, 3):
+    if article_number not in range(1, NUM_PROPOSALS + 1):
         raise ValueError(
-            f"Número de artículo inválido: {article_number}. Debe ser 1, 2 o 3."
+            f"Número de artículo inválido: {article_number}. "
+            f"Debe ser 1 a {NUM_PROPOSALS}."
         )
 
     logger.info(

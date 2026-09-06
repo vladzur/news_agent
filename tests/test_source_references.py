@@ -55,16 +55,30 @@ class TestExtractProposalSources:
 *   **Enfoque Editorial:** Tercer análisis.
 *   **Fuentes Sugeridas para Ampliar:**
     *   **El Mostrador:** Su columna sobre educación.
+
+## 4. Título de Propuesta 4
+*   **Enfoque Editorial:** Análisis internacional.
+*   **Fuentes Sugeridas para Ampliar:**
+    *   **Nodal:** Su cobertura sobre la crisis migratoria en la frontera.
+    *   **Prensa Latina:** Su nota sobre sanciones y soberanía.
+
+## 5. Título de Propuesta 5
+*   **Enfoque Editorial:** Política imperialista.
+*   **Fuentes Sugeridas para Ampliar:**
+    *   **Jacobin América Latina:** Su análisis sobre la militarización regional.
 """
         result = extract_proposal_sources(pauta_text)
 
-        assert len(result) == 3
+        assert len(result) == 5
         assert len(result[1]) == 2
         assert result[1][0]["source_name"] == "CIPER Chile"
         assert "sanción al proyecto en Villarrica" in result[1][0]["description"]
         assert result[1][1]["source_name"] == "DF Diario"
         assert len(result[2]) == 2
         assert len(result[3]) == 1
+        assert len(result[4]) == 2
+        assert result[4][0]["source_name"] == "Nodal"
+        assert len(result[5]) == 1
 
     def test_handles_pauta_without_fuentes_section(self):
         """Debe retornar vacío si no hay sección Fuentes Sugeridas."""
@@ -682,6 +696,16 @@ PAUTA_WITH_SOURCES = """# ⚡ Pauta Editorial Sugerida - La Chispa Sur
 
 ## 3. Título de Propuesta 3
 *   **Enfoque Editorial:** Tercer análisis sin fuentes.
+
+## 4. Título de Propuesta 4
+*   **Enfoque Editorial:** Análisis internacional.
+*   **Fuentes Sugeridas para Ampliar:**
+    *   **Nodal:** Su cobertura sobre la crisis migratoria en la frontera.
+
+## 5. Título de Propuesta 5
+*   **Enfoque Editorial:** Política imperialista.
+*   **Fuentes Sugeridas para Ampliar:**
+    *   **Jacobin América Latina:** Su análisis sobre la militarización regional.
 """
 
 
@@ -738,6 +762,8 @@ class TestBuildCompanionData:
         assert "proposal_1" in data
         assert "proposal_2" in data
         assert "proposal_3" in data
+        assert "proposal_4" in data
+        assert "proposal_5" in data
 
         # Propuesta 1: debe matchear CIPER y Cooperativa
         arts_1 = data["proposal_1"]["articles"]
@@ -749,6 +775,54 @@ class TestBuildCompanionData:
         arts_2 = data["proposal_2"]["articles"]
         assert len(arts_2) >= 1
         assert arts_2[0]["source"] == "La Tercera"
+
+        # Propuestas 4 y 5: presentes aunque sin artículos emparejados
+        # (sus medios no existen en filtered_items)
+        assert data["proposal_4"]["articles"] == []
+        assert data["proposal_5"]["articles"] == []
+
+    def test_builds_companion_from_legacy_three_proposal_pauta(
+        self, tmp_path, filtered_items
+    ):
+        """Debe generar companion con proposal_1..3 para pautas legadas de 3 propuestas."""
+        pauta_path = tmp_path / "pauta_semanal_2026_07_09.md"
+        pauta_path.write_text("# placeholder")
+
+        legacy_pauta = """# ⚡ Pauta Editorial Sugerida - La Chispa Sur
+
+---
+
+## 1. Título de Propuesta 1
+*   **Enfoque Editorial:** Análisis de prueba.
+*   **Fuentes Sugeridas para Ampliar:**
+    *   **CIPER Chile:** Investigación sobre sanción proyecto Villarrica tala bosque nativo.
+
+## 2. Título de Propuesta 2
+*   **Enfoque Editorial:** Otro análisis.
+*   **Fuentes Sugeridas para Ampliar:**
+    *   **La Tercera:** Nota sobre megarreforma tributaria invariabilidad PPD.
+
+## 3. Título de Propuesta 3
+*   **Enfoque Editorial:** Tercer análisis sin fuentes.
+"""
+
+        with patch(
+            "news_agent.source_references.fetch_single_article",
+            return_value="Contenido extraído forzosamente.",
+        ):
+            result = build_companion_data(
+                pauta_text=legacy_pauta,
+                pauta_path=pauta_path,
+                filtered_items=filtered_items,
+            )
+
+        assert result is not None
+        data = json.loads(result.read_text(encoding="utf-8"))
+        assert "proposal_1" in data
+        assert "proposal_2" in data
+        assert "proposal_3" in data
+        assert "proposal_4" not in data
+        assert "proposal_5" not in data
 
     def test_returns_none_when_pauta_has_no_sources(self, tmp_path, filtered_items):
         """Debe retornar None si la pauta no tiene fuentes sugeridas."""
@@ -1003,6 +1077,8 @@ class TestLoadCompanionData:
                 ]
             },
             "proposal_3": {"articles": []},
+            "proposal_4": {"articles": []},
+            "proposal_5": {"articles": []},
         }
 
     def test_loads_articles_for_valid_proposal(self, tmp_path, companion_data):

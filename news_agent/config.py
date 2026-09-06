@@ -26,6 +26,11 @@ TIME_WINDOW_HOURS = 96  # 4 días: noticias anteriores ya tienen desarrollos pos
 SUMMARY_MAX_CHARS = 500  # Suficiente para lead + cifras + atribuciones (reglas de precisión factual)
 
 # ---------------------------------------------------------------------------
+# Constantes de la pauta editorial
+# ---------------------------------------------------------------------------
+NUM_PROPOSALS = 5  # Propuestas por pauta: 3 nacionales + 2 internacionales
+
+# ---------------------------------------------------------------------------
 # Constantes de enriquecimiento de contenido
 # ---------------------------------------------------------------------------
 FULL_CONTENT_FETCH_ENABLED = True  # Control global de enriquecimiento

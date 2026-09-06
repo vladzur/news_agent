@@ -16,6 +16,7 @@ import argparse
 import sys
 
 from .article_writer import PautaParseError, write_article
+from .config import NUM_PROPOSALS
 from .orchestrator import run_pipeline
 
 
@@ -71,9 +72,9 @@ def main() -> None:
         "--article",
         type=int,
         default=None,
-        choices=[1, 2, 3],
+        choices=list(range(1, NUM_PROPOSALS + 1)),
         metavar="N",
-        help="Número de propuesta a desarrollar (1, 2 o 3). "
+        help=f"Número de propuesta a desarrollar (1 a {NUM_PROPOSALS}). "
         "Usar junto con --write-article.",
     )
 
@@ -85,7 +86,7 @@ def main() -> None:
     if args.write_article:
         if args.article is None:
             print(
-                "Error: Debes especificar --article N (1, 2 o 3) "
+                f"Error: Debes especificar --article N (1 a {NUM_PROPOSALS}) "
                 "junto con --write-article.",
                 file=sys.stderr,
             )

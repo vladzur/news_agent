@@ -7,10 +7,16 @@ from pathlib import Path
 import pytest
 
 from news_agent.config import (
+    NUM_PROPOSALS,
     ConfigurationError,
     get_api_key,
     load_rss_feeds,
 )
+
+
+def test_num_proposals_constant():
+    """Debe definir 5 propuestas por pauta (3 nacionales + 2 internacionales)."""
+    assert NUM_PROPOSALS == 5
 
 
 

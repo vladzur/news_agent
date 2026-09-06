@@ -8,7 +8,7 @@
 
 ## 1. Objetivo General
 
-Automatizar la recopilación, filtrado y análisis de la agenda noticiosa nacional e internacional mediante la lectura de canales RSS seleccionados, utilizando el modelo de lenguaje **DeepSeek-V4-Pro** para sintetizar y proponer tres (3) líneas editoriales semanales de alto impacto, profundidad analítica y narrativa ágil.
+Automatizar la recopilación, filtrado y análisis de la agenda noticiosa nacional e internacional mediante la lectura de canales RSS seleccionados, utilizando el modelo de lenguaje **DeepSeek-V4-Pro** para sintetizar y proponer **cinco (5) líneas editoriales semanales —tres (3) de foco nacional y dos (2) de foco internacional—** de alto impacto, profundidad analítica y narrativa ágil.
 
 ## 2. Arquitectura y Componentes del Sistema
 
@@ -53,7 +53,7 @@ El agente debe ceñirse estrictamente al perfil de identidad de *La Chispa Sur*:
 
 - **Tono:** Incisivo, analítico, audaz y de lectura ágil. No debe limitarse a replicar titulares del *mainstream*; su valor radica en **conectar puntos ocultos**, encontrar contradicciones o proponer enfoques de fondo (ensayo, reportaje o columnas de opinión).
   
-- **Restricción de Volumen:** El agente debe entregar **exactamente tres (3) propuestas** por informe. Ni más, ni menos.
+- **Restricción de Volumen:** El agente debe entregar **exactamente cinco (5) propuestas** por informe: **tres (3) de ámbito nacional** y **dos (2) de ámbito internacional**, estas últimas con énfasis en hechos que conmocionan al mundo, pueblos oprimidos y políticas imperialistas que afectan la estabilidad mundial. Ni más, ni menos.
   
 
 ## 4. Formato de Salida Requerido (Output Schema)
@@ -77,6 +77,15 @@ Markdown
     3. [Ángulo crítico, proyección o pregunta abierta para el lector]
 
 ## 2. [TÍTULO GANCHO DEL ARTÍCULO 2]
+...
+
+## 3. [TÍTULO GANCHO DEL ARTÍCULO 3]
+...
+
+## 4. [TÍTULO GANCHO DEL ARTÍCULO 4]
+...
+
+## 5. [TÍTULO GANCHO DEL ARTÍCULO 5]
 ...
 ```
 
