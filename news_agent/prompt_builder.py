@@ -436,16 +436,66 @@ Las fuentes utilizadas se listan a continuación.*
 """  # noqa: E501
 
 
-def build_system_prompt() -> str:
+def _build_main_topics_section(main_topics: list[str]) -> str:
+    """Construye la sección de temas de interés prioritarios para el prompt.
+
+    Args:
+        main_topics: Lista de temas prioritarios no vacía.
+
+    Returns:
+        str: Sección en Markdown con los temas y las instrucciones de prioridad.
+    """
+    bullet_list = "\n".join(f"- {topic}" for topic in main_topics)
+
+    return (
+        "\n\n---\n\n"
+        "## Temas de interés prioritarios (MAIN_TOPICS)\n\n"
+        "Los siguientes temas han sido definidos como prioritarios para esta "
+        "pauta y deben guiar la selección de las cinco propuestas:\n\n"
+        f"{bullet_list}\n\n"
+        "Instrucciones sobre estos temas:\n\n"
+        "1. **Prioridad absoluta sobre la distribución geográfica**: estos "
+        "temas tienen prioridad por sobre la regla de tres (3) propuestas "
+        "nacionales y dos (2) internacionales. Prioriza las cinco propuestas "
+        "en torno a ellos.\n"
+        "2. **Flexibiliza la distribución 3/2 si es necesario**: si un tema "
+        "prioritario exige más propuestas de un ámbito (nacional o "
+        "internacional) que del otro, ajusta la proporción para cubrirlo, "
+        "siempre manteniendo exactamente cinco (5) propuestas.\n"
+        "3. **Sin material suficiente**: si los artículos proporcionados no "
+        "alcanzan para desarrollar un tema prioritario con profundidad, "
+        'indícalo con "Requiere investigación adicional" en ese punto. No '
+        "inventes fuentes, hechos ni cifras para rellenar.\n"
+        "4. **Siguen aplicando todas las reglas de verificación de datos**: "
+        "la prioridad temática no autoriza a inventar números, atribuciones "
+        "ni fuentes. Cada propuesta debe basarse exclusivamente en el "
+        "material de entrada.\n"
+    )
+
+
+def build_system_prompt(main_topics: list[str] | None = None) -> str:
     """Devuelve el system prompt con la identidad editorial de La Chispa Sur.
+
+    Si se indican temas de interés prioritarios, añade una sección que
+    instruye al modelo a priorizarlos por sobre la distribución 3/2.
+
+    Args:
+        main_topics: Lista de temas prioritarios (MAIN_TOPICS). Si es None
+                     o está vacía, se devuelve el prompt base sin cambios.
 
     Returns:
         str: El prompt de sistema completo.
     """
-    return SYSTEM_PROMPT
+    if not main_topics:
+        return SYSTEM_PROMPT
+
+    return SYSTEM_PROMPT + _build_main_topics_section(main_topics)
 
 
-def build_user_prompt(filtered_items: list[dict[str, Any]]) -> str:
+def build_user_prompt(
+    filtered_items: list[dict[str, Any]],
+    main_topics: list[str] | None = None,
+) -> str:
     """Construye el user prompt con los artículos a analizar.
 
     Formatea cada artículo en un bloque numerado con título, fuente y resumen,
@@ -538,6 +588,22 @@ def build_user_prompt(filtered_items: list[dict[str, Any]]) -> str:
         "No obstante, si una noticia local es trivial o sin trascendencia, "
         "omítela: la cercanía geográfica no rebaja el estándar periodístico."
     )
+
+    if main_topics:
+        parts.append("")
+        parts.append(
+            "🎯 **Temas de interés prioritarios (MAIN_TOPICS):** prioriza la "
+            "selección de las cinco propuestas en torno a los siguientes temas, "
+            "flexibilizando la distribución 3 nacionales / 2 internacionales si "
+            "es necesario para cubrirlos:"
+        )
+        for topic in main_topics:
+            parts.append(f"- {topic}")
+        parts.append(
+            "Si no hay material suficiente para alguno de estos temas, indícalo "
+            'con "Requiere investigación adicional" en lugar de inventar '
+            "contenido."
+        )
 
     return "\n".join(parts)
 

@@ -73,6 +73,21 @@ class TestBuildSystemPrompt:
         """Debe devolver exactamente la constante SYSTEM_PROMPT."""
         assert build_system_prompt() == SYSTEM_PROMPT
 
+    def test_without_topics_returns_base_prompt(self):
+        """Sin temas (None o lista vacía) debe devolver el prompt base."""
+        assert build_system_prompt(main_topics=None) == SYSTEM_PROMPT
+        assert build_system_prompt(main_topics=[]) == SYSTEM_PROMPT
+
+    def test_with_topics_appends_priority_section(self):
+        """Con temas debe añadir la sección de prioridad manteniendo el prompt base."""
+        topics = ["genocidio en Gaza", "Agenda de seguridad"]
+        prompt = build_system_prompt(main_topics=topics)
+        assert prompt.startswith(SYSTEM_PROMPT)
+        assert "Temas de interés prioritarios" in prompt
+        assert "prioridad absoluta" in prompt.lower()
+        for topic in topics:
+            assert topic in prompt
+
     def test_contains_chile_focus(self):
         """Debe mencionar el enfoque en Chile."""
         prompt = build_system_prompt()
@@ -547,3 +562,22 @@ class TestBuildUserPrompt:
 
         assert "atribuida al medio correcto" in result.lower() \
             or "nombre del medio" in result.lower()
+
+    def test_includes_main_topics_when_provided(self):
+        """Debe incluir los temas prioritarios cuando se proporcionan."""
+        items = [self._make_item("T1", "S1", "R1")]
+        topics = ["genocidio en Gaza", "Retrocesos laborales"]
+
+        result = build_user_prompt(items, main_topics=topics)
+
+        assert "MAIN_TOPICS" in result
+        assert "genocidio en Gaza" in result
+        assert "Retrocesos laborales" in result
+
+    def test_omits_main_topics_when_not_provided(self):
+        """No debe incluir la sección de temas si no se proporcionan."""
+        items = [self._make_item("T1", "S1", "R1")]
+
+        result = build_user_prompt(items)
+
+        assert "MAIN_TOPICS" not in result
