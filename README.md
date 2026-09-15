@@ -144,6 +144,16 @@ cp .env.example .env
 # DEEPSEEK_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
+### 3b. Configurar temas de interés (opcional)
+
+Puedes acotar el foco de la pauta definiendo la variable de entorno `MAIN_TOPICS` en `.env` como un **array JSON de textos** (con comillas dobles):
+
+```bash
+MAIN_TOPICS=["genocidio en Gaza", "Agenda de seguridad", "Retrocesos laborales"]
+```
+
+Cuando está definida, el agente **prioriza estos temas** en la selección de las cinco propuestas, con **prioridad absoluta sobre la distribución 3 nacionales / 2 internacionales** (que puede flexibilizarse para cubrir un tema prioritario). No es un filtro estricto: si no hay material suficiente para un tema, el agente puede cubrir otro de alto impacto o marcar "Requiere investigación adicional". Si la variable no está definida o está vacía, el agente mantiene su comportamiento habitual.
+
 ### 4. Configurar fuentes
 
 Edita `rss_feeds.json` para agregar, quitar o modificar las fuentes de noticias. Se soportan dos métodos de ingesta:

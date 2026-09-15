@@ -11,7 +11,7 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 # Constantes de configuración del modelo DeepSeek
 # ---------------------------------------------------------------------------
-DEEPSEEK_MODEL = "deepseek-v4-pro"
+DEEPSEEK_MODEL = "deepseek-flash"
 DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
 TEMPERATURE = 0.1
 PAUTA_MAX_TOKENS = 16384  # Pauta semanal: ~1000+ noticias requieren más presupuesto de razonamiento
@@ -231,3 +231,53 @@ def load_rss_feeds(path: str | Path | None = None) -> list[dict]:
             )
 
     return data
+
+
+def get_main_topics() -> list[str]:
+    """Obtiene la lista de temas de interés prioritarios para la pauta.
+
+    Lee la variable de entorno MAIN_TOPICS, que debe contener un array JSON
+    de textos (con comillas dobles), por ejemplo:
+        MAIN_TOPICS=["genocidio en Gaza", "Agenda de seguridad"]
+
+    Returns:
+        list[str]: Lista de temas normalizados (sin espacios sobrantes y sin
+                   elementos vacíos). Vacía si la variable no está definida.
+
+    Raises:
+        ConfigurationError: Si el valor no es un array JSON válido de strings.
+    """
+    raw = os.environ.get("MAIN_TOPICS")
+    if raw is None:
+        return []
+
+    raw = raw.strip()
+    if not raw:
+        return []
+
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ConfigurationError(
+            "La variable de entorno MAIN_TOPICS no contiene JSON válido. "
+            "Debe ser un array de textos con comillas dobles, por ejemplo: "
+            'MAIN_TOPICS=["genocidio en Gaza", "Agenda de seguridad"]'
+        ) from exc
+
+    if not isinstance(data, list):
+        raise ConfigurationError(
+            "La variable de entorno MAIN_TOPICS debe ser un array JSON de "
+            f"textos, pero se encontró {type(data).__name__}."
+        )
+
+    topics: list[str] = []
+    for idx, topic in enumerate(data):
+        if not isinstance(topic, str):
+            raise ConfigurationError(
+                f"El elemento #{idx} de MAIN_TOPICS no es un texto: {topic!r}"
+            )
+        cleaned = topic.strip()
+        if cleaned:
+            topics.append(cleaned)
+
+    return topics

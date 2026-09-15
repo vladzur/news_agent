@@ -9,7 +9,12 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from .config import ConfigurationError, get_api_key, load_rss_feeds
+from .config import (
+    ConfigurationError,
+    get_api_key,
+    get_main_topics,
+    load_rss_feeds,
+)
 from .content_enricher import enrich_items
 from .intermediate_writer import save_intermediate
 from .llm_client import LLMClient, LLMClientError
@@ -40,6 +45,35 @@ def setup_logging(verbose: bool = False) -> None:
     datefmt = "%Y-%m-%d %H:%M:%S"
 
     logging.basicConfig(level=level, format=fmt, datefmt=datefmt)
+
+
+def _load_main_topics() -> list[str]:
+    """Carga y valida los temas de interés prioritarios (MAIN_TOPICS).
+
+    Returns:
+        list[str]: Lista de temas priorizados. Vacía si no se configuraron.
+
+    Raises:
+        SystemExit: Si la configuración de MAIN_TOPICS es inválida.
+    """
+    try:
+        main_topics = get_main_topics()
+    except ConfigurationError as exc:
+        logger.exception("Error de configuración de MAIN_TOPICS: %s", exc)
+        sys.exit(1)
+
+    if main_topics:
+        logger.info(
+            "Temas de interés prioritarios cargados (%d): %s.",
+            len(main_topics),
+            ", ".join(main_topics),
+        )
+    else:
+        logger.info(
+            "No se configuraron temas de interés prioritarios (MAIN_TOPICS)."
+        )
+
+    return main_topics
 
 
 def run_pipeline(
@@ -85,6 +119,11 @@ def run_pipeline(
         sys.exit(1)
 
     logger.info("API Key de DeepSeek validada correctamente.")
+
+    # -----------------------------------------------------------------------
+    # Paso 1b: Cargar temas de interés prioritarios (MAIN_TOPICS)
+    # -----------------------------------------------------------------------
+    main_topics = _load_main_topics()
 
     # -----------------------------------------------------------------------
     # Paso 2: Cargar feeds RSS
@@ -152,8 +191,8 @@ def run_pipeline(
     # -----------------------------------------------------------------------
     # Paso 6: Construir prompts
     # -----------------------------------------------------------------------
-    system_prompt = build_system_prompt()
-    user_prompt = build_user_prompt(filtered_items)
+    system_prompt = build_system_prompt(main_topics=main_topics)
+    user_prompt = build_user_prompt(filtered_items, main_topics=main_topics)
 
     logger.info(
         "Prompts construidos: system_prompt=%d chars, user_prompt=%d chars.",

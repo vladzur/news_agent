@@ -10,6 +10,7 @@ from news_agent.config import (
     NUM_PROPOSALS,
     ConfigurationError,
     get_api_key,
+    get_main_topics,
     load_rss_feeds,
 )
 
@@ -226,3 +227,54 @@ class TestLoadRssFeeds:
         assert len(result) == 1
         # Compatibilidad hacia atrás: sin cambios en el dict retornado
         assert result[0]["name"] == "Medio"
+
+
+class TestGetMainTopics:
+    """Pruebas para la función get_main_topics."""
+
+    def test_returns_empty_list_when_not_set(self, monkeypatch):
+        """Debe devolver lista vacía si MAIN_TOPICS no está definida."""
+        monkeypatch.delenv("MAIN_TOPICS", raising=False)
+        assert get_main_topics() == []
+
+    def test_returns_empty_list_when_blank(self, monkeypatch):
+        """Debe devolver lista vacía si MAIN_TOPICS está vacía o en blanco."""
+        monkeypatch.setenv("MAIN_TOPICS", "   ")
+        assert get_main_topics() == []
+
+    def test_parses_json_array(self, monkeypatch):
+        """Debe parsear un array JSON válido de textos."""
+        monkeypatch.setenv(
+            "MAIN_TOPICS",
+            '["genocidio en Gaza", "Agenda de seguridad", "Retrocesos laborales"]',
+        )
+        assert get_main_topics() == [
+            "genocidio en Gaza",
+            "Agenda de seguridad",
+            "Retrocesos laborales",
+        ]
+
+    def test_strips_whitespace_and_drops_empty(self, monkeypatch):
+        """Debe normalizar espacios y descartar elementos vacíos."""
+        monkeypatch.setenv(
+            "MAIN_TOPICS", '["  Tema uno  ", "", "   ", "Tema dos"]'
+        )
+        assert get_main_topics() == ["Tema uno", "Tema dos"]
+
+    def test_raises_on_invalid_json(self, monkeypatch):
+        """Debe lanzar ConfigurationError si el JSON es inválido."""
+        monkeypatch.setenv("MAIN_TOPICS", "[genocidio en Gaza]")
+        with pytest.raises(ConfigurationError, match="JSON válido"):
+            get_main_topics()
+
+    def test_raises_when_not_a_list(self, monkeypatch):
+        """Debe lanzar ConfigurationError si el valor no es una lista."""
+        monkeypatch.setenv("MAIN_TOPICS", '{"tema": "Gaza"}')
+        with pytest.raises(ConfigurationError, match="array JSON"):
+            get_main_topics()
+
+    def test_raises_when_element_not_string(self, monkeypatch):
+        """Debe lanzar ConfigurationError si algún elemento no es string."""
+        monkeypatch.setenv("MAIN_TOPICS", '["Gaza", 123]')
+        with pytest.raises(ConfigurationError, match="no es un texto"):
+            get_main_topics()

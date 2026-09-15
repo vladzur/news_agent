@@ -59,5 +59,13 @@
     {
         "name": "Radio Universidad de Chile",
         "url": "https://radio.uchile.cl/feed/"
+    },
+    {
+        "name": " La Izquierda Diario",
+        "url": "https://www.laizquierdadiario.com.ve/spip.php?page=backend_ve"
+    },
+    {
+        "name": "Prensa Opal",
+        "url": "https://prensaopal.cl/feed/"
     }
 ]
