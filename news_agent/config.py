@@ -11,7 +11,7 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 # Constantes de configuración del modelo DeepSeek
 # ---------------------------------------------------------------------------
-DEEPSEEK_MODEL = "deepseek-v4-pro"
+DEEPSEEK_MODEL = "deepseek-flash"
 DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
 TEMPERATURE = 0.1
 PAUTA_MAX_TOKENS = 16384  # Pauta semanal: ~1000+ noticias requieren más presupuesto de razonamiento
