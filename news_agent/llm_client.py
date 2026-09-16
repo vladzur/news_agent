@@ -14,7 +14,7 @@ from .config import (
     DEEPSEEK_BASE_URL,
     DEEPSEEK_MODEL,
     PAUTA_MAX_TOKENS,
-    REASONING_EFFORT,
+    PAUTA_REASONING_EFFORT,
     TEMPERATURE,
 )
 
@@ -70,10 +70,11 @@ class LLMClient:
             api_key: Clave API de DeepSeek.
             model: Modelo a usar. Por defecto DEEPSEEK_MODEL.
             temperature: Temperatura de sampling. Por defecto TEMPERATURE (0.5).
-            max_tokens: Límite de tokens de salida. Por defecto PAUTA_MAX_TOKENS (16384).
+            max_tokens: Límite de tokens de salida. Por defecto PAUTA_MAX_TOKENS (32768).
             base_url: URL base de la API. Por defecto DEEPSEEK_BASE_URL.
-            reasoning_effort: Esfuerzo de razonamiento ("high", "max", o None).
-                              Por defecto REASONING_EFFORT ("high").
+            reasoning_effort: Esfuerzo de razonamiento ("high", "medium",
+                              "max", o None). Por defecto
+                              PAUTA_REASONING_EFFORT ("medium").
             response_format: Formato de respuesta solicitado a la API, por
                              ejemplo ``{"type": "json_object"}`` para forzar
                              JSON. Si es None, se usa texto libre (comportamiento
@@ -84,7 +85,9 @@ class LLMClient:
         self.temperature = temperature if temperature is not None else TEMPERATURE
         self.max_tokens = max_tokens if max_tokens is not None else PAUTA_MAX_TOKENS
         self.reasoning_effort = (
-            reasoning_effort if reasoning_effort is not None else REASONING_EFFORT
+            reasoning_effort
+            if reasoning_effort is not None
+            else PAUTA_REASONING_EFFORT
         )
         self.response_format = response_format
 

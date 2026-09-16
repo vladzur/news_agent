@@ -140,21 +140,21 @@ news_agent/
 |-----------|-------|-------------|
 | `model` | `deepseek-v4-pro` | Modelo principal (límite de salida: 384K tokens) |
 | `temperature` | `0.1` | Baja temperatura para maximizar rigurosidad factual y minimizar alucinaciones |
-| `PAUTA_MAX_TOKENS` | `16384` | Presupuesto compartido entre razonamiento y contenido para ~1000+ noticias semanales |
+| `PAUTA_MAX_TOKENS` | `32768` | Presupuesto compartido entre razonamiento y contenido para ~1000+ noticias semanales; ampliado para que quepan las cinco propuestas |
 | `ARTICLE_MAX_TOKENS` | `16384` | Presupuesto compartido entre razonamiento y artículo (~1000 palabras) |
 | `CONTENT_RETRY_MAX_TOKENS` | `8192` | Presupuesto del reintento sin razonamiento cuando la respuesta llega sin contenido visible |
-| `REASONING_EFFORT` | `high` | Razonamiento profundo para la pauta semanal (`high` o `max`) |
+| `PAUTA_REASONING_EFFORT` | `medium` | Razonamiento de la pauta semanal (`medium` libera presupuesto para el contenido; también admite `high`, `max` o `None`) |
 | `ARTICLE_REASONING_EFFORT` | `high` | Razonamiento independiente para redacción de artículos |
 | `base_url` | `https://api.deepseek.com/v1` | Endpoint compatible OpenAI |
 
 ### Modo thinking y distribución de tokens
 
-DeepSeek-V4-Pro opera con **thinking mode activado** (`reasoning_effort: high`). En este modo, los tokens de salida se dividen en dos campos:
+DeepSeek-V4-Pro opera con **thinking mode activado** (`reasoning_effort` configurable por flujo). En este modo, los tokens de salida se dividen en dos campos:
 
 - **`reasoning_content`**: cadena de razonamiento interna (CoT) que el modelo usa para estructurar el análisis.
 - **`content`**: respuesta final visible que se escribe en el archivo de salida.
 
-El parámetro `max_tokens` es el **presupuesto total compartido** entre ambos campos. El razonamiento típicamente consume el 60-80% del presupuesto y, en casos exigentes, puede agotarlo por completo. Para la pauta semanal se usan 16K tokens (`PAUTA_MAX_TOKENS`) para dar espacio al razonamiento sobre grandes volúmenes de noticias (~1000+ artículos). Para la escritura de artículos se usan 16K tokens (`ARTICLE_MAX_TOKENS`): el modelo razona sobre una sola propuesta, pero ese razonamiento puede ser largo y el presupuesto debe alcanzar también para el texto final.
+El parámetro `max_tokens` es el **presupuesto total compartido** entre ambos campos. El razonamiento típicamente consume el 60-80% del presupuesto y, en casos exigentes, puede agotarlo por completo. Para la pauta semanal se usan 32K tokens (`PAUTA_MAX_TOKENS`) con un esfuerzo de razonamiento `medium` (`PAUTA_REASONING_EFFORT`): el razonamiento sobre cientos de noticias consume buena parte del presupuesto, por lo que el resto debe alcanzar para las cinco propuestas. Para la escritura de artículos se usan 16K tokens (`ARTICLE_MAX_TOKENS`) con razonamiento `high`: el modelo razona sobre una sola propuesta, pero ese razonamiento puede ser largo y el presupuesto debe alcanzar también para el texto final.
 
 Si el razonamiento agota el presupuesto y `content` queda vacío, el cliente **no** devuelve `reasoning_content`: el razonamiento interno no es texto publicable. En su lugar, reintenta la llamada con el razonamiento desactivado y un presupuesto ampliado (`CONTENT_RETRY_MAX_TOKENS`), de modo que todos los tokens se destinen al contenido. Si el reintento tampoco devuelve contenido visible, la ejecución falla con un error explícito en lugar de escribir notas internas en el archivo de salida.
 
@@ -332,9 +332,9 @@ Las constantes principales se encuentran en [news_agent/config.py](news_agent/co
 |-----------|-------------------|-------------|
 | `DEEPSEEK_MODEL` | `"deepseek-v4-pro"` | Modelo a utilizar |
 | `TEMPERATURE` | `0.1` | Temperatura de sampling (0.0–2.0). Valor bajo para privilegiar precisión factual |
-| `PAUTA_MAX_TOKENS` | `16384` | Límite de tokens para generación de pauta semanal |
+| `PAUTA_MAX_TOKENS` | `32768` | Límite de tokens para generación de pauta semanal (razonamiento + cinco propuestas) |
 | `ARTICLE_MAX_TOKENS` | `16384` | Presupuesto de escritura de artículo (~1000 palabras + razonamiento) |
-| `REASONING_EFFORT` | `"high"` | Esfuerzo de razonamiento para la pauta (`"high"`, `"max"`, o `None` para deshabilitar) |
+| `PAUTA_REASONING_EFFORT` | `"medium"` | Esfuerzo de razonamiento para la pauta (`"medium"`, `"high"`, `"max"`, o `None` para deshabilitar) |
 | `ARTICLE_REASONING_EFFORT` | `"high"` | Esfuerzo de razonamiento independiente para redacción de artículos |
 | `TIME_WINDOW_HOURS` | `168` | Ventana de análisis en horas (7 días, lunes a domingo) |
 | `SUMMARY_MAX_CHARS` | `700` | Caracteres máximos por resumen. Amplio para preservar leads, cifras y atribuciones necesarias para la verificación factual |

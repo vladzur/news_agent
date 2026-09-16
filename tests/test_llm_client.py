@@ -5,8 +5,8 @@ from unittest.mock import Mock, patch
 import pytest
 from openai import APIError, AuthenticationError
 
+from news_agent.config import PAUTA_MAX_TOKENS, PAUTA_REASONING_EFFORT
 from news_agent.llm_client import LLMClient, LLMClientError
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -55,6 +55,13 @@ class TestLLMClientConstruction:
         assert client.model == "custom-model"
         assert client.temperature == 0.8
         assert client.max_tokens == 1024
+
+    def test_pauta_defaults(self):
+        """Sin argumentos, debe usar el presupuesto y razonamiento de la pauta."""
+        client = LLMClient(api_key="sk-test")
+
+        assert client.max_tokens == PAUTA_MAX_TOKENS
+        assert client.reasoning_effort == PAUTA_REASONING_EFFORT
 
 
 class TestGenerateReport:

@@ -20,7 +20,10 @@ logger = logging.getLogger(__name__)
 DEEPSEEK_MODEL = "deepseek-flash"
 DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
 TEMPERATURE = 0.1
-PAUTA_MAX_TOKENS = 16384  # Pauta semanal: ~1000+ noticias requieren más presupuesto de razonamiento
+# Pauta semanal: las cinco propuestas extensas y el razonamiento sobre cientos
+# de noticias comparten este presupuesto de salida. Se amplió a 32K porque con
+# 16K el razonamiento agotaba el cupo y la pauta quedaba truncada.
+PAUTA_MAX_TOKENS = 32768
 # Artículo ~1000 palabras en español (~2500 tokens) + razonamiento. El
 # presupuesto es COMPARTIDO entre el razonamiento y el contenido final, así que
 # debe dejar margen para ambos: con 8192, el razonamiento de un artículo
@@ -30,7 +33,11 @@ ARTICLE_MAX_TOKENS = 16384
 # El reintento desactiva el razonamiento, por lo que todos estos tokens se
 # destinan al texto final.
 CONTENT_RETRY_MAX_TOKENS = 8192
-REASONING_EFFORT = "high"  # "high" o "max" para razonamiento profundo; None para deshabilitar thinking mode
+# Razonamiento de la pauta: "medium" libera presupuesto del pool compartido
+# para el contenido de las cinco propuestas. Con "high", el razonamiento sobre
+# cientos de noticias agotaba el presupuesto y la pauta se truncaba.
+# Opciones: "high", "medium", "max", o None para deshabilitar thinking mode.
+PAUTA_REASONING_EFFORT = "medium"
 ARTICLE_REASONING_EFFORT = "high"  # Razonamiento para redacción de artículos individuales
 
 # ---------------------------------------------------------------------------

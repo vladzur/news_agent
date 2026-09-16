@@ -7,8 +7,8 @@ from unittest.mock import Mock, patch
 
 import pytest
 
+from news_agent.config import PAUTA_MAX_TOKENS, PAUTA_REASONING_EFFORT
 from news_agent.orchestrator import run_pipeline, setup_logging
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -143,6 +143,23 @@ class TestRunPipeline:
         assert result["feed_count"] == 2
         assert result["report_path"].exists()
         assert result["report_path"].name.startswith("pauta_semanal_")
+
+    def test_llm_client_uses_pauta_budget(self, mock_api_key, feeds_file, tmp_path):
+        """El cliente debe crearse con el presupuesto y razonamiento de la pauta."""
+        raw_items = self._mock_raw_items()
+        llm_response = self._mock_llm_response()
+
+        with patch("news_agent.orchestrator.fetch_all", return_value=raw_items):
+            with patch("news_agent.orchestrator.LLMClient") as mock_client_class:
+                mock_client = Mock()
+                mock_client.generate_report.return_value = llm_response
+                mock_client_class.return_value = mock_client
+
+                run_pipeline(feeds_path=feeds_file, output_dir=tmp_path)
+
+        kwargs = mock_client_class.call_args.kwargs
+        assert kwargs["max_tokens"] == PAUTA_MAX_TOKENS
+        assert kwargs["reasoning_effort"] == PAUTA_REASONING_EFFORT
 
     def test_empty_feeds_exits_gracefully(self, mock_api_key, empty_feeds_file):
         """Debe salir sin error cuando no hay feeds configurados."""
