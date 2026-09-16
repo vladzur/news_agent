@@ -41,27 +41,58 @@ Toma una propuesta específica de la pauta (1 a 5) y la expande a un artículo d
 
 > **¿Por qué matching determinista y no números de artículo?** En pruebas reales, el LLM que genera la pauta frecuentemente asigna números de artículo incorrectos en el bloque de referencias (ej: mapear una propuesta sobre tala de bosque nativo en Villarrica a artículos sobre salmonicultura o conflictos en Líbano). El matching por nombre de medio + keywords extrae las fuentes directamente del texto de la pauta —que el LLM escribe de forma natural y confiable— y las cruza con los artículos del pipeline sin depender del auto-reporte del modelo.
 
-### 3. CLI unificado
+### 3. Repurposing de artículos para redes sociales (RRSS)
 
-El punto de entrada `python -m news_agent` ofrece dos modos:
+Toma un artículo ya publicado (`articulos/articulo_N_slug.md`) y produce un **bundle autocontenido** con todo lo necesario para publicarlo en X, Facebook e Instagram:
+
+1. **Parseo del artículo de origen** — Separa titular, firma, lead, secciones, fuentes citadas, cifras detectadas y oraciones candidatas a cita. Todo lo que se genere después se valida contra este material.
+2. **Copys estructurados (LLM)** — En una sola llamada obtiene y valida:
+   - **Hooks**: de 3 a 5 titulares alternativos de máximo 120 caracteres.
+   - **Síntesis ejecutiva**: de 3 a 5 bullets.
+   - **Hilo de X**: de 5 a 7 tweets, con el gancho como primer tweet y **límite estricto de 280 caracteres por tweet**, hashtags incluidos en el cierre.
+   - **Post de Facebook** con gancho en la primera línea (lo único visible antes del "ver más") y cierre con pregunta.
+   - **Caption de Instagram** con gancho de apertura, cuerpo breve y CTA.
+   - **Tarjeta de cita**, **cifras clave**, **llamado a la acción** y **textos alternativos** por plataforma.
+3. **Prompts visuales (LLM)** — Genera prompts **en inglés** para Flux.1 / SDXL / Midjourney, uno por relación de aspecto: 16:9 (X y Facebook), 1:1 (feed de Instagram) y 9:16 (stories). Cada uno incluye prompt positivo, prompt negativo de marca, parámetros sugeridos y una variante lista para Midjourney con sus flags.
+4. **Banners locales (Pillow)** — Renderiza dos plantillas en cuatro formatos, sin depender de servicios externos:
+
+   | Plantilla | Contenido | Formatos por defecto |
+   |-----------|-----------|----------------------|
+   | `headline_card` | Etiqueta de marca + titular del artículo + barra inferior | X 1600×900, Facebook 1200×630, IG feed 1080×1080, IG story 1080×1920 |
+   | `quote_card` | Comilla destacada + cita + atribución | IG feed 1080×1080, IG story 1080×1920 |
+
+   El diseño se parametriza por un factor de escala respecto de un ancho de referencia, así que una sola implementación sirve para los cuatro tamaños. En el formato vertical respeta las **zonas seguras** superior e inferior (la interfaz de la plataforma las tapa). Si la marca define un logo, se recorta su padding transparente, se escala según `logo_height_ratio` y se pega en la esquina superior derecha; el titular se desplaza hacia abajo si el logo es más alto que la etiqueta de marca.
+
+> **¿Por qué se valida todo en código y no se confía en el LLM?** Las reglas duras de cada plataforma se aplican de forma determinista: recorte al límite de caracteres, largo del hilo, topes de hashtags, normalización de hashtags (`#La Araucania` → `#LaAraucania`) y retiro de los que el modelo haya dejado dentro del cuerpo del texto para no duplicarlos en el tweet de cierre, verificación de que cada cifra exista en el artículo y de que la cita sea **literal**. Si el modelo entrega una cita inventada, el sistema la reemplaza por una oración verificada del propio artículo. El guardarraíl es también editorial: los prompts visuales **no pueden** describir texto en la imagen ni personas reales identificables, y esa regla se verifica en código, no solo en el prompt.
+
+### 4. CLI unificado
+
+El punto de entrada `python -m news_agent` ofrece tres modos:
 
 | Modo | Comando |
 |------|---------|
 | Generar pauta | `python -m news_agent --feeds rss_feeds.json --output ./reportes` |
 | Generar pauta + debug | `python -m news_agent --feeds rss_feeds.json --output ./reportes --debug` |
 | Escribir artículo | `python -m news_agent --write-article reportes/pauta_semanal_AAAA_MM_DD.md --article 1 --output ./articulos` |
+| Repurposing para RRSS | `python -m news_agent --socialize articulos/articulo_1_slug.md --output ./social` |
 
 Flags adicionales:
 
 - `--verbose`: Activa logging nivel DEBUG para diagnóstico detallado.
 - `--output`: Directorio donde guardar los archivos generados.
 - `--debug`: Guarda un archivo JSON intermedio en `debug/articulos_procesados_YYYY_MM_DD.json` con los datos completos de cada artículo (resumen RSS, contenido extraído y resumen final enviado al LLM) para depuración y ajuste de prompts.
+- `--socialize RUTA_ARTICULO`: Activa el modo de repurposing para redes sociales. No se puede combinar con `--feeds`, `--debug`, `--write-article` ni `--article`.
+- `--platforms LISTA`: Plataformas a preparar, separadas por comas (`x,facebook,instagram`). Por defecto, todas. Filtra los Markdown y los banners generados.
+- `--social-config RUTA`: Ruta al JSON de marca y plantillas (por defecto `social_config.json`).
+- `--skip-banners`: Omite el renderizado de banners con Pillow.
+- `--skip-prompts`: Omite la generación de prompts visuales en inglés.
 
 ---
 
 ## 🏗️ Arquitectura
 
 ```
+assets/                     # Recursos gráficos de la marca (logo de los banners)
 news_agent/
 ├── __main__.py            # Punto de entrada CLI (argparse)
 ├── orchestrator.py        # Orquestador del pipeline completo
@@ -75,7 +106,19 @@ news_agent/
 ├── llm_client.py          # Cliente DeepSeek vía SDK OpenAI (modo compatible)
 ├── report_writer.py       # Escritura de reportes .md y artículos
 ├── article_writer.py      # Parseo de pauta + escritura de artículo completo
-└── source_references.py   # Emparejamiento determinista de fuentes y companion JSON
+├── source_references.py   # Emparejamiento determinista de fuentes y companion JSON
+└── social/                # Subsistema de repurposing para redes sociales (RRSS)
+    ├── orchestrator.py    # Flujo RRSS: copys → prompts visuales → banners → bundle
+    ├── article_source.py  # Parseo del artículo Markdown de origen
+    ├── prompt_builder.py  # Prompts de copys (ES) y de prompts visuales (EN)
+    ├── copy_generator.py  # Copys validados contra los límites de plataforma
+    ├── visual_prompts.py  # Prompts en inglés para Flux.1 / SDXL / Midjourney
+    ├── banner_renderer.py # Renderizado local de banners con Pillow
+    ├── platform_specs.py  # Límites y formatos por plataforma
+    ├── text_utils.py      # Recorte por caracteres y normalización de hashtags
+    ├── json_utils.py      # Extracción defensiva de JSON de las respuestas del LLM
+    ├── models.py          # Dataclasses de los artefactos del subsistema
+    └── writer.py          # Escritura del bundle de salida
 ```
 
 ### Stack técnico
@@ -86,8 +129,9 @@ news_agent/
 | Scraping web | `requests` + `beautifulsoup4` | Extracción de artículos desde sitios sin RSS con selectores CSS configurables |
 | Enriquecimiento | `trafilatura` | Extracción del texto completo de artículos con resúmenes RSS insuficientes |
 | Cliente LLM | `openai` (SDK) | Conexión con DeepSeek API en modo compatible |
-| Lenguaje | Python ≥ 3.10 | stdlib + 5 dependencias |
-| Configuración | `.env` + `rss_feeds.json` | Separación de credenciales y fuentes |
+| Renderizado de assets | `Pillow` | Generación local de banners promocionales, sin servicios externos |
+| Lenguaje | Python ≥ 3.10 | stdlib + 6 dependencias |
+| Configuración | `.env` + `rss_feeds.json` + `social_config.json` | Separación de credenciales, fuentes y marca |
 | Testing | `pytest`, `pytest-mock`, `freezegun` | Tests unitarios para todos los módulos |
 
 ### Parámetros del modelo
@@ -97,7 +141,8 @@ news_agent/
 | `model` | `deepseek-v4-pro` | Modelo principal (límite de salida: 384K tokens) |
 | `temperature` | `0.1` | Baja temperatura para maximizar rigurosidad factual y minimizar alucinaciones |
 | `PAUTA_MAX_TOKENS` | `16384` | Presupuesto compartido entre razonamiento y contenido para ~1000+ noticias semanales |
-| `ARTICLE_MAX_TOKENS` | `8192` | Suficiente para ~1000 palabras en español (~2500 tokens) + razonamiento |
+| `ARTICLE_MAX_TOKENS` | `16384` | Presupuesto compartido entre razonamiento y artículo (~1000 palabras) |
+| `CONTENT_RETRY_MAX_TOKENS` | `8192` | Presupuesto del reintento sin razonamiento cuando la respuesta llega sin contenido visible |
 | `REASONING_EFFORT` | `high` | Razonamiento profundo para la pauta semanal (`high` o `max`) |
 | `ARTICLE_REASONING_EFFORT` | `high` | Razonamiento independiente para redacción de artículos |
 | `base_url` | `https://api.deepseek.com/v1` | Endpoint compatible OpenAI |
@@ -109,9 +154,9 @@ DeepSeek-V4-Pro opera con **thinking mode activado** (`reasoning_effort: high`).
 - **`reasoning_content`**: cadena de razonamiento interna (CoT) que el modelo usa para estructurar el análisis.
 - **`content`**: respuesta final visible que se escribe en el archivo de salida.
 
-El parámetro `max_tokens` es el **presupuesto total compartido** entre ambos campos. El razonamiento típicamente consume el 60-80% del presupuesto. Para la pauta semanal se usan 16K tokens (`PAUTA_MAX_TOKENS`) para dar espacio al razonamiento sobre grandes volúmenes de noticias (~1000+ artículos). Para la escritura de artículos se usan ~8K tokens (`ARTICLE_MAX_TOKENS`), ya que el modelo solo necesita razonar sobre una propuesta concreta.
+El parámetro `max_tokens` es el **presupuesto total compartido** entre ambos campos. El razonamiento típicamente consume el 60-80% del presupuesto y, en casos exigentes, puede agotarlo por completo. Para la pauta semanal se usan 16K tokens (`PAUTA_MAX_TOKENS`) para dar espacio al razonamiento sobre grandes volúmenes de noticias (~1000+ artículos). Para la escritura de artículos se usan 16K tokens (`ARTICLE_MAX_TOKENS`): el modelo razona sobre una sola propuesta, pero ese razonamiento puede ser largo y el presupuesto debe alcanzar también para el texto final.
 
-Si el modelo agota el presupuesto en razonamiento y `content` queda vacío, el cliente tiene un **fallback automático** que rescata `reasoning_content` como último recurso para no perder la ejecución.
+Si el razonamiento agota el presupuesto y `content` queda vacío, el cliente **no** devuelve `reasoning_content`: el razonamiento interno no es texto publicable. En su lugar, reintenta la llamada con el razonamiento desactivado y un presupuesto ampliado (`CONTENT_RETRY_MAX_TOKENS`), de modo que todos los tokens se destinen al contenido. Si el reintento tampoco devuelve contenido visible, la ejecución falla con un error explícito en lugar de escribir notas internas en el archivo de salida.
 
 ---
 
@@ -225,7 +270,50 @@ python -m news_agent --feeds rss_feeds.json --output ./reportes --debug
 
 # Escribir artículo completo desde propuesta #1
 python -m news_agent --write-article reportes/pauta_semanal_2026_07_04.md --article 1 --output ./articulos
+
+# Repurposing de un artículo para redes sociales (copys + prompts visuales + banners)
+python -m news_agent --socialize articulos/articulo_1_slug.md --output ./social
+
+# Solo copys y Markdown, sin llamar al modelo para prompts visuales ni renderizar banners
+python -m news_agent --socialize articulos/articulo_1_slug.md --skip-prompts --skip-banners
+
+# Preparar únicamente las piezas de Instagram
+python -m news_agent --socialize articulos/articulo_1_slug.md --platforms instagram
 ```
+
+### 5b. Configurar la marca para RRSS (opcional)
+
+Edita `social_config.json` para ajustar la identidad visual sin tocar código:
+
+```json
+{
+  "brand": {
+    "name": "La Chispa Sur",
+    "handle": "@lachispasur",
+    "tagline": "Periodismo crítico desde el sur",
+    "website": "lachispasur.cl",
+    "logo_path": "assets/logo_lachispasur.png",
+    "logo_height_ratio": 0.11,
+    "colors": { "background": "#0E0E10", "accent": "#DF3224" },
+    "fonts": { "headline": null, "body": null, "kicker": null }
+  }
+}
+```
+
+| Campo | Obligatorio | Descripción |
+|-------|:-----------:|-------------|
+| `brand.name` | ✅ | Nombre de la marca, usado en las etiquetas de los banners |
+| `brand.colors` | ✅ | Paleta del diseño (`background`, `surface`, `text`, `muted`, `accent`, `accent_alt`) |
+| `brand.handle`, `brand.website` | ❌ | Barra inferior de los banners |
+| `brand.logo_path` | ❌ | Ruta a un PNG con transparencia. Si es `null` o el archivo no existe, el banner se genera sin logo y se advierte en el log |
+| `brand.logo_height_ratio` | ❌ | Alto del logo como fracción del ancho del lienzo (por defecto `0.11`). El ancho se limita al 22% para que no invada la etiqueta de marca |
+| `brand.fonts.*` | ❌ | Ruta a un `.ttf` por rol. Si es `null`, se resuelven fuentes del sistema (DejaVu, Liberation, Noto o Arial) y, como último recurso, la fuente por defecto de Pillow |
+| `platforms` | ❌ | Límites por plataforma. Sobrescriben los valores por defecto de `config.py` |
+| `banners.templates`, `banners.sizes` | ✅ | Matriz plantilla → formatos y tamaño de cada formato |
+| `banners.safe_zone` | ❌ | Zonas seguras superior e inferior para los formatos verticales |
+| `visual_prompts.*` | ✅ | Estilo, prompt negativo y sufijo de Midjourney para los prompts de imagen |
+
+Los formatos de banner se nombran con el prefijo de su plataforma (`instagram_feed`, `instagram_story`), lo que permite filtrar por `--platforms` sin mantener un mapa adicional. Además, la variable de entorno `SOCIAL_FONT_DIR` permite apuntar a un directorio propio de fuentes.
 
 ### 6. Ejecutar tests
 
@@ -245,7 +333,7 @@ Las constantes principales se encuentran en [news_agent/config.py](news_agent/co
 | `DEEPSEEK_MODEL` | `"deepseek-v4-pro"` | Modelo a utilizar |
 | `TEMPERATURE` | `0.1` | Temperatura de sampling (0.0–2.0). Valor bajo para privilegiar precisión factual |
 | `PAUTA_MAX_TOKENS` | `16384` | Límite de tokens para generación de pauta semanal |
-| `ARTICLE_MAX_TOKENS` | `8192` | Límite de tokens para escritura de artículo (~1000 palabras + razonamiento) |
+| `ARTICLE_MAX_TOKENS` | `16384` | Presupuesto de escritura de artículo (~1000 palabras + razonamiento) |
 | `REASONING_EFFORT` | `"high"` | Esfuerzo de razonamiento para la pauta (`"high"`, `"max"`, o `None` para deshabilitar) |
 | `ARTICLE_REASONING_EFFORT` | `"high"` | Esfuerzo de razonamiento independiente para redacción de artículos |
 | `TIME_WINDOW_HOURS` | `168` | Ventana de análisis en horas (7 días, lunes a domingo) |
@@ -259,6 +347,17 @@ Las constantes principales se encuentran en [news_agent/config.py](news_agent/co
 | `FULL_CONTENT_CACHE_DIR` | Ruta absoluta a `cache/` | Directorio para caché de contenido extraído (resuelto relativo al paquete, cron-safe) |
 | `SOURCE_ARTICLE_MAX_CHARS` | `2000` | Caracteres máximos de contenido fuente por artículo en el prompt del redactor |
 | `COMPANION_MAX_ARTICLES_PER_SOURCE` | `3` | Máximo de artículos del mismo medio incluidos en el companion JSON de fuentes |
+| `SOCIAL_MAX_TOKENS` | `8192` | Límite de tokens para la generación de copys de RRSS |
+| `SOCIAL_TEMPERATURE` | `0.4` | Temperatura de los copys: creativa, pero fiel a los hechos del artículo |
+| `SOCIAL_VISUAL_MAX_TOKENS` | `4096` | Límite de tokens para la generación de prompts visuales |
+| `SOCIAL_JSON_MAX_RETRIES` | `2` | Reintentos cuando el LLM no devuelve un JSON válido o completo |
+| `DEFAULT_SOCIAL_OUTPUT_DIR` | `"social"` | Directorio base de los bundles de RRSS |
+| `SOCIAL_CONFIG_PATH` | `"social_config.json"` | Archivo de marca y plantillas del subsistema |
+| `SOCIAL_X_MAX_CHARS` | `280` | Límite de caracteres por tweet (se verifica en código) |
+| `SOCIAL_X_THREAD_MIN_TWEETS` / `_MAX_TWEETS` | `5` / `7` | Largo del hilo de X |
+| `SOCIAL_IG_MAX_HASHTAGS` | `25` | Tope de hashtags de Instagram |
+| `SOCIAL_MIN_ARTICLE_WORDS` | `150` | Por debajo de esto el artículo no da material suficiente: aborta antes de llamar a la API |
+| `SOCIAL_BANNER_BASE_WIDTH` | `1080` | Ancho de referencia del diseño de banners |
 
 ### Automatización con cron
 
@@ -280,9 +379,17 @@ El agente implementa fail-safe en cada etapa del pipeline:
 - **Timeout en trafilatura** → timeout configurable por hilo; si se excede, se descarta la extracción y se usa el resumen RSS.
 - **0 noticias en ventana** → aborta antes de llamar a la API (ahorro de tokens).
 - **API key ausente** → error explícito de configuración al inicio.
-- **API devuelve vacío** → aborta con mensaje claro. Si `content` es `None` pero existe `reasoning_content`, se usa este último como fallback automático.
+- **API devuelve vacío** → se reintenta la llamada sin razonamiento y con más presupuesto. Si el reintento tampoco devuelve contenido visible, aborta con un mensaje claro; el razonamiento interno nunca se usa como resultado.
+- **Respuesta sin estructura de artículo** → si el texto no trae titular de nivel 1 y subtítulos de sección, se descarta y se aborta sin escribir archivo, para no publicar contenido inválido.
 - **Directorio de salida inexistente** → `IOError` antes de escribir.
 - **Configuración de scraping inválida** → error descriptivo al cargar `rss_feeds.json` si faltan selectores obligatorios.
+- **Respuesta sin JSON válido en RRSS** → se reintenta la llamada con una nota de corrección, hasta `SOCIAL_JSON_MAX_RETRIES` veces; el JSON se extrae de forma defensiva (bloques de código, texto alrededor, comas finales sueltas).
+- **Copys incompletos** → se reintenta; si se agotan los intentos, aborta sin escribir un bundle a medias.
+- **Prompts visuales fallidos** → el bundle se escribe igualmente con los copys y los banners; el manifiesto registra que quedaron pendientes.
+- **Banner que falla al renderizar** → se registra el error y el bucle continúa; el manifiesto guarda esa pieza como pendiente.
+- **Fuente tipográfica ausente** → se usa la fuente por defecto de Pillow y se advierte en el log.
+- **Artículo demasiado corto para RRSS** → aborta antes de llamar a la API (ahorro de tokens).
+- **Configuración de marca inválida** → error descriptivo al cargar `social_config.json` si falta una sección, un tamaño o una plantilla apunta a un formato inexistente.
 
 ---
 
@@ -360,6 +467,29 @@ Este archivo es leído automáticamente por `article_writer.py` al redactar un a
 ### Artículo completo (`articulos/articulo_N_slug-del-titulo.md`)
 
 Artículo de ~1000 palabras con lead periodístico, desarrollo en 3 secciones con subtítulos, y fuentes citadas al final. Ver ejemplos reales en [articulos/](articulos/).
+
+### Bundle de RRSS (`social/AAAA_MM_DD_slug-del-titulo/`)
+
+Cada ejecución de `--socialize` produce una carpeta autocontenida con todo lo necesario para publicar la pieza:
+
+```
+social/2026_09_14_criminalizacion-de-la-disidencia/
+├── social_copy.json            # Copys estructurados por plataforma, hooks, síntesis, cita y cifras
+├── visual_prompts.json         # Prompts en inglés por aspecto, con negativo y variante de Midjourney
+├── x_thread.md                 # Hilo listo para copiar, con conteo de caracteres por tweet
+├── facebook_post.md            # Post con hashtags, texto alternativo y CTA
+├── instagram_caption.md        # Caption, hashtags, tarjeta de cita y advertencia si la cita no es literal
+├── manifest.json               # Qué se generó, qué falló y con qué artículo se produjo
+└── assets/
+    ├── headline_card_x.png                 # 1600×900
+    ├── headline_card_facebook.png          # 1200×630
+    ├── headline_card_instagram_feed.png    # 1080×1080
+    ├── headline_card_instagram_story.png   # 1080×1920
+    ├── quote_card_instagram_feed.png       # 1080×1080
+    └── quote_card_instagram_story.png      # 1080×1920
+```
+
+El campo `quote_card.verbatim` de `social_copy.json` indica si la cita se verificó palabra por palabra contra el artículo de origen; el manifiesto lo repite en `verified_quote`. El directorio `social/` está en `.gitignore`, mientras que el subsistema de código vive en `news_agent/social/`.
 
 ---
 
