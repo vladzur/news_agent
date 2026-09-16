@@ -1,6 +1,6 @@
 """Módulo cliente de la API de DeepSeek.
 
-Gestiona la conexión con el modelo deepseek-v4-pro a través del SDK
+Gestiona la conexión con el modelo deepseek-flash a través del SDK
 de OpenAI en modo compatible.
 """
 
@@ -14,7 +14,7 @@ from .config import (
     DEEPSEEK_BASE_URL,
     DEEPSEEK_MODEL,
     PAUTA_MAX_TOKENS,
-    REASONING_EFFORT,
+    PAUTA_REASONING_EFFORT,
     TEMPERATURE,
 )
 
@@ -22,6 +22,10 @@ from .config import (
 # Logger del módulo
 # ---------------------------------------------------------------------------
 logger = logging.getLogger(__name__)
+
+# Motivo de término que reporta la API cuando el modelo agotó el presupuesto
+# de salida y la respuesta quedó truncada a mitad de frase.
+TRUNCATED_FINISH_REASON = "length"
 
 
 class LLMClientError(Exception):
@@ -43,6 +47,27 @@ def _reasoning_length(message: Any) -> int:
     """
     reasoning = getattr(message, "reasoning_content", None)
     return len(reasoning) if isinstance(reasoning, str) else 0
+
+
+def _finish_reason(response: Any) -> str | None:
+    """Devuelve el motivo de término de una respuesta, si es una cadena.
+
+    El SDK reporta ``"length"`` cuando el modelo agotó el presupuesto de salida
+    y la respuesta quedó truncada. Se valida que sea una cadena porque en los
+    dobles de prueba el atributo puede ser un objeto simulado.
+
+    Args:
+        response: Respuesta cruda del SDK de OpenAI.
+
+    Returns:
+        str | None: El motivo de término ("stop", "length", …) o None si no
+                    está disponible.
+    """
+    choices = getattr(response, "choices", None)
+    if not choices:
+        return None
+    reason = getattr(choices[0], "finish_reason", None)
+    return reason if isinstance(reason, str) else None
 
 
 class LLMClient:
@@ -70,10 +95,11 @@ class LLMClient:
             api_key: Clave API de DeepSeek.
             model: Modelo a usar. Por defecto DEEPSEEK_MODEL.
             temperature: Temperatura de sampling. Por defecto TEMPERATURE (0.5).
-            max_tokens: Límite de tokens de salida. Por defecto PAUTA_MAX_TOKENS (16384).
+            max_tokens: Límite de tokens de salida. Por defecto PAUTA_MAX_TOKENS (32768).
             base_url: URL base de la API. Por defecto DEEPSEEK_BASE_URL.
-            reasoning_effort: Esfuerzo de razonamiento ("high", "max", o None).
-                              Por defecto REASONING_EFFORT ("high").
+            reasoning_effort: Esfuerzo de razonamiento ("high", "medium",
+                              "max", o None). Por defecto
+                              PAUTA_REASONING_EFFORT ("medium").
             response_format: Formato de respuesta solicitado a la API, por
                              ejemplo ``{"type": "json_object"}`` para forzar
                              JSON. Si es None, se usa texto libre (comportamiento
@@ -84,7 +110,9 @@ class LLMClient:
         self.temperature = temperature if temperature is not None else TEMPERATURE
         self.max_tokens = max_tokens if max_tokens is not None else PAUTA_MAX_TOKENS
         self.reasoning_effort = (
-            reasoning_effort if reasoning_effort is not None else REASONING_EFFORT
+            reasoning_effort
+            if reasoning_effort is not None
+            else PAUTA_REASONING_EFFORT
         )
         self.response_format = response_format
 
@@ -263,6 +291,15 @@ class LLMClient:
                 user_prompt,
                 reasoning_length=_reasoning_length(message),
             )
+        elif _finish_reason(response) == TRUNCATED_FINISH_REASON:
+            # El contenido no está vacío pero llegó cortado a mitad de frase: el
+            # razonamiento consumió el presupuesto compartido. Se reintenta sin
+            # razonamiento para destinar todos los tokens al contenido.
+            content = self._recover_truncated_content(
+                system_prompt,
+                user_prompt,
+                visible_length=len(content),
+            )
 
         # Registrar estadísticas de uso
         usage: Any = response.usage
@@ -332,8 +369,87 @@ class LLMClient:
                 "descarta como resultado porque no es publicable."
             )
 
+        if _finish_reason(retry_response) == TRUNCATED_FINISH_REASON:
+            raise LLMClientError(
+                "La respuesta quedó truncada incluso tras reintentar sin "
+                "razonamiento. Reduce el volumen de entrada o divide la "
+                "generación en varias llamadas."
+            )
+
         logger.info(
             "Reintento sin razonamiento exitoso: %d caracteres de contenido.",
+            len(recovered),
+        )
+        return recovered
+
+    def _recover_truncated_content(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        visible_length: int,
+    ) -> str:
+        """Recupera la respuesta cuando el contenido llegó truncado.
+
+        En modo thinking, ``max_tokens`` es un presupuesto compartido entre el
+        razonamiento y la respuesta final: si el razonamiento consume casi todo
+        el presupuesto, el contenido visible queda cortado a mitad de frase
+        (``finish_reason="length"``) aunque no esté vacío. El reintento desactiva
+        el razonamiento y amplía el presupuesto para destinar todos los tokens al
+        contenido. Si el reintento vuelve a truncarse, se falla de forma
+        explícita en lugar de escribir una salida incompleta.
+
+        Args:
+            system_prompt: Prompt de sistema.
+            user_prompt: Prompt de usuario.
+            visible_length: Caracteres visibles de la respuesta truncada.
+
+        Returns:
+            str: Contenido completo de la respuesta recuperada.
+
+        Raises:
+            LLMClientError: Si el reintento tampoco devuelve contenido completo.
+        """
+        retry_budget = max(self.max_tokens, CONTENT_RETRY_MAX_TOKENS)
+        logger.warning(
+            "La respuesta llegó truncada (finish_reason=%r, %d caracteres "
+            "visibles, presupuesto: %d tokens). Se reintenta sin razonamiento "
+            "con %d tokens.",
+            TRUNCATED_FINISH_REASON,
+            visible_length,
+            self.max_tokens,
+            retry_budget,
+        )
+
+        retry_response = self._request(
+            system_prompt,
+            user_prompt,
+            max_tokens=retry_budget,
+            disable_reasoning=True,
+        )
+
+        if not retry_response.choices:
+            raise LLMClientError(
+                "La API de DeepSeek devolvió una respuesta sin choices en el "
+                "reintento sin razonamiento."
+            )
+
+        recovered = (retry_response.choices[0].message.content or "").strip()
+        if not recovered:
+            raise LLMClientError(
+                "La API devolvió una respuesta sin contenido visible en el "
+                "reintento sin razonamiento tras una respuesta truncada."
+            )
+
+        if _finish_reason(retry_response) == TRUNCATED_FINISH_REASON:
+            raise LLMClientError(
+                "La respuesta siguió truncada tras reintentar sin razonamiento "
+                f"con {retry_budget} tokens. Reduce el volumen de entrada o "
+                "divide la generación en varias llamadas."
+            )
+
+        logger.info(
+            "Reintento sin razonamiento exitoso tras truncamiento: "
+            "%d caracteres de contenido.",
             len(recovered),
         )
         return recovered

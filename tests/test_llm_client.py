@@ -5,8 +5,8 @@ from unittest.mock import Mock, patch
 import pytest
 from openai import APIError, AuthenticationError
 
+from news_agent.config import PAUTA_MAX_TOKENS, PAUTA_REASONING_EFFORT
 from news_agent.llm_client import LLMClient, LLMClientError
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -55,6 +55,13 @@ class TestLLMClientConstruction:
         assert client.model == "custom-model"
         assert client.temperature == 0.8
         assert client.max_tokens == 1024
+
+    def test_pauta_defaults(self):
+        """Sin argumentos, debe usar el presupuesto y razonamiento de la pauta."""
+        client = LLMClient(api_key="sk-test")
+
+        assert client.max_tokens == PAUTA_MAX_TOKENS
+        assert client.reasoning_effort == PAUTA_REASONING_EFFORT
 
 
 class TestGenerateReport:
@@ -132,12 +139,14 @@ class TestGenerateReport:
         assert create.call_count == 2
 
 
-def make_response(content, reasoning=None):
+def make_response(content, reasoning=None, finish_reason="stop"):
     """Construye una respuesta simulada del SDK de OpenAI.
 
     Args:
         content: Contenido visible del mensaje.
         reasoning: Razonamiento interno del mensaje, si lo hay.
+        finish_reason: Motivo de término reportado por la API ("stop",
+                       "length", …).
 
     Returns:
         Mock: Respuesta con una única choice y sin datos de uso.
@@ -148,6 +157,7 @@ def make_response(content, reasoning=None):
 
     choice = Mock()
     choice.message = message
+    choice.finish_reason = finish_reason
 
     response = Mock()
     response.choices = [choice]
@@ -260,3 +270,85 @@ class TestEmptyContentRecovery:
 
         assert result.startswith("# Titular")
         assert create.call_count == 2
+
+
+class TestTruncatedContentRecovery:
+    """Recuperación cuando el contenido visible llega truncado.
+
+    Caso real de la pauta semanal: el razonamiento consumió casi todo el
+    presupuesto compartido y la respuesta quedó cortada a mitad de frase
+    (finish_reason="length") aunque no estaba vacía. Antes el cliente escribía
+    el archivo incompleto sin aviso.
+    """
+
+    def test_retries_when_finish_reason_is_length(self, client):
+        """Una respuesta truncada debe reintentarse sin razonamiento."""
+        truncated = make_response("## 1. Propuesta cortada", finish_reason="length")
+        recovered = make_response("## 1. Propuesta completa\n\n## 2. …")
+
+        with patch.object(
+            client._client.chat.completions,
+            "create",
+            side_effect=[truncated, recovered],
+        ) as create:
+            result = client.generate_report("sys", "usr")
+
+        assert result.startswith("## 1. Propuesta completa")
+        assert create.call_count == 2
+
+    def test_does_not_retry_when_finish_reason_is_stop(self, client):
+        """Una respuesta completa no debe reintentarse."""
+        complete = make_response("## 1. Propuesta completa", finish_reason="stop")
+
+        with patch.object(
+            client._client.chat.completions, "create", return_value=complete
+        ) as create:
+            client.generate_report("sys", "usr")
+
+        assert create.call_count == 1
+
+    def test_disables_thinking_on_truncation_retry(self, client):
+        """El reintento por truncamiento debe desactivar el modo thinking."""
+        truncated = make_response("corte", finish_reason="length")
+        recovered = make_response("completo")
+
+        with patch.object(
+            client._client.chat.completions,
+            "create",
+            side_effect=[truncated, recovered],
+        ) as create:
+            client.generate_report("sys", "usr")
+
+        first, second = create.call_args_list
+        assert first.kwargs["extra_body"]["thinking"]["type"] == "enabled"
+        assert second.kwargs["extra_body"]["thinking"]["type"] == "disabled"
+
+    def test_raises_when_retry_is_also_truncated(self, client):
+        """Si el reintento vuelve a truncarse, debe fallar de forma explícita."""
+        truncated = make_response("corte", finish_reason="length")
+        truncated_again = make_response("otro corte", finish_reason="length")
+
+        with (
+            patch.object(
+                client._client.chat.completions,
+                "create",
+                side_effect=[truncated, truncated_again],
+            ),
+            pytest.raises(LLMClientError, match="truncada"),
+        ):
+            client.generate_report("sys", "usr")
+
+    def test_raises_when_truncation_retry_is_empty(self, client):
+        """Si el reintento no devuelve contenido, debe fallar de forma explícita."""
+        truncated = make_response("corte", finish_reason="length")
+        empty = make_response("")
+
+        with (
+            patch.object(
+                client._client.chat.completions,
+                "create",
+                side_effect=[truncated, empty],
+            ),
+            pytest.raises(LLMClientError, match="sin contenido visible"),
+        ):
+            client.generate_report("sys", "usr")

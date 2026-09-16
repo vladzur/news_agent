@@ -10,6 +10,8 @@ from pathlib import Path
 from typing import Any
 
 from .config import (
+    PAUTA_MAX_TOKENS,
+    PAUTA_REASONING_EFFORT,
     ConfigurationError,
     get_api_key,
     get_main_topics,
@@ -203,7 +205,14 @@ def run_pipeline(
     # -----------------------------------------------------------------------
     # Paso 7: Llamar a la API de DeepSeek
     # -----------------------------------------------------------------------
-    client = LLMClient(api_key=api_key)
+    # Se pasan explícitamente el presupuesto y el razonamiento de la pauta: el
+    # razonamiento comparte presupuesto con el contenido, por lo que un esfuerzo
+    # "high" sobre cientos de noticias podía truncar las cinco propuestas.
+    client = LLMClient(
+        api_key=api_key,
+        max_tokens=PAUTA_MAX_TOKENS,
+        reasoning_effort=PAUTA_REASONING_EFFORT,
+    )
 
     try:
         llm_response = client.generate_report(system_prompt, user_prompt)

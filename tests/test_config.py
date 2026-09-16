@@ -8,6 +8,8 @@ import pytest
 
 from news_agent.config import (
     NUM_PROPOSALS,
+    PAUTA_MAX_TOKENS,
+    PAUTA_REASONING_EFFORT,
     ConfigurationError,
     get_api_key,
     get_main_topics,
@@ -18,6 +20,16 @@ from news_agent.config import (
 def test_num_proposals_constant():
     """Debe definir 5 propuestas por pauta (3 nacionales + 2 internacionales)."""
     assert NUM_PROPOSALS == 5
+
+
+def test_pauta_max_tokens_constant():
+    """El presupuesto de la pauta debe cubrir razonamiento + cinco propuestas."""
+    assert PAUTA_MAX_TOKENS == 65536
+
+
+def test_pauta_reasoning_effort_constant():
+    """La pauta mantiene razonamiento alto; el corte se evita con el presupuesto."""
+    assert PAUTA_REASONING_EFFORT == "high"
 
 
 

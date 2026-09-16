@@ -8,7 +8,7 @@
 
 ## 1. Objetivo General
 
-Automatizar la recopilación, filtrado y análisis de la agenda noticiosa nacional e internacional mediante la lectura de canales RSS seleccionados, utilizando el modelo de lenguaje **DeepSeek-V4-Pro** para sintetizar y proponer **cinco (5) líneas editoriales semanales —tres (3) de foco nacional y dos (2) de foco internacional—** de alto impacto, profundidad analítica y narrativa ágil.
+Automatizar la recopilación, filtrado y análisis de la agenda noticiosa nacional e internacional mediante la lectura de canales RSS seleccionados, utilizando el modelo de lenguaje **DeepSeek-Flash** para sintetizar y proponer **cinco (5) líneas editoriales semanales —tres (3) de foco nacional y dos (2) de foco internacional—** de alto impacto, profundidad analítica y narrativa ágil.
 
 ## 2. Arquitectura y Componentes del Sistema
 
@@ -38,7 +38,7 @@ Automatizar la recopilación, filtrado y análisis de la agenda noticiosa nacion
 
 - **Proveedor:** DeepSeek API.
   
-- **Modelo Especificado:** `deepseek-v4-pro` (o endpoint compatible vía OpenAI SDK).
+- **Modelo Especificado:** `deepseek-flash` (o endpoint compatible vía OpenAI SDK).
   
 - **Hiperparámetros de Control:**
   
