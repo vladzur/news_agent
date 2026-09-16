@@ -2,7 +2,7 @@
 
 **Curador automatizado de pauta periodística para La Chispa Sur**, medio digital independiente de izquierda, crítico del modelo neoliberal.
 
-El agente recolecta noticias desde canales RSS y scraping web, las filtra por una ventana temporal de 7 días (168 horas), enriquece los resúmenes cortos extrayendo el contenido completo de los artículos con trafilatura, y utiliza el modelo **DeepSeek-V4-Pro** (vía API compatible con OpenAI SDK) para sintetizar **cinco propuestas de pauta editorial semanal (tres de foco nacional y dos de foco internacional)** con profundidad analítica, tono incisivo y narrativa ágil. Las propuestas internacionales priorizan hechos que conmocionan al mundo, pueblos oprimidos y políticas imperialistas que afectan la estabilidad mundial, con mirada antiimperialista desde el sur global. También permite **escribir artículos completos (~1000 palabras)** a partir de cualquiera de las propuestas generadas, con un sistema de **referencias deterministas a fuentes** que asegura que el redactor reciba el contenido completo de los artículos fuente correctos para cada propuesta.
+El agente recolecta noticias desde canales RSS y scraping web, las filtra por una ventana temporal de 7 días (168 horas), enriquece los resúmenes cortos extrayendo el contenido completo de los artículos con trafilatura, y utiliza el modelo **DeepSeek-Flash** (vía API compatible con OpenAI SDK) para sintetizar **cinco propuestas de pauta editorial semanal (tres de foco nacional y dos de foco internacional)** con profundidad analítica, tono incisivo y narrativa ágil. Las propuestas internacionales priorizan hechos que conmocionan al mundo, pueblos oprimidos y políticas imperialistas que afectan la estabilidad mundial, con mirada antiimperialista desde el sur global. También permite **escribir artículos completos (~1000 palabras)** a partir de cualquiera de las propuestas generadas, con un sistema de **referencias deterministas a fuentes** que asegura que el redactor reciba el contenido completo de los artículos fuente correctos para cada propuesta.
 
 ---
 
@@ -21,7 +21,7 @@ Flujo automatizado que:
 4. **Limpieza HTML** — Elimina etiquetas, comentarios, scripts y decodifica entidades HTML de los resúmenes.
 5. **Truncado inteligente** — Recorta resúmenes a 700 caracteres sin cortar palabras a la mitad.
 6. **Guardado intermedio de depuración (opcional)** — Con el flag `--debug`, guarda un archivo JSON con los artículos procesados (resumen RSS original, contenido extraído y resumen final) para comparar y ajustar el prompt.
-7. **Análisis con IA** — Envía los artículos filtrados a DeepSeek-V4-Pro con un system prompt que define la identidad editorial de La Chispa Sur (izquierda independiente, rigor periodístico, distribución 3 propuestas nacionales + 2 internacionales, foco territorial en Villarrica y La Araucanía).
+7. **Análisis con IA** — Envía los artículos filtrados a DeepSeek-Flash con un system prompt que define la identidad editorial de La Chispa Sur (izquierda independiente, rigor periodístico, distribución 3 propuestas nacionales + 2 internacionales, foco territorial en Villarrica y La Araucanía).
 8. **Reporte Markdown** — Genera un archivo `pauta_semanal_AAAA_MM_DD.md` con cinco propuestas estructuradas (tres nacionales y dos internacionales): título gancho, enfoque editorial, puntos clave a desarrollar y fuentes sugeridas para ampliar. La cabecera (fecha y cantidad de notas) se genera automáticamente desde el código para garantizar precisión.
 9. **Companion JSON de fuentes** — Extrae las fuentes sugeridas desde el texto de la pauta, las empareja determinísticamente con los artículos del pipeline por nombre de medio y similitud temática (keywords), enriquece los artículos emparejados con contenido completo y guarda un archivo `pauta_semanal_AAAA_MM_DD_companion.json`. Este archivo permite que el redactor de artículos reciba el contenido completo de las fuentes correctas.
 
@@ -138,25 +138,25 @@ news_agent/
 
 | Parámetro | Valor | Descripción |
 |-----------|-------|-------------|
-| `model` | `deepseek-v4-pro` | Modelo principal (límite de salida: 384K tokens) |
+| `model` | `deepseek-flash` | Modelo principal (contexto 1M, salida hasta 384K tokens) |
 | `temperature` | `0.1` | Baja temperatura para maximizar rigurosidad factual y minimizar alucinaciones |
-| `PAUTA_MAX_TOKENS` | `32768` | Presupuesto compartido entre razonamiento y contenido para ~1000+ noticias semanales; ampliado para que quepan las cinco propuestas |
+| `PAUTA_MAX_TOKENS` | `65536` | Presupuesto compartido entre razonamiento y contenido para ~1000+ noticias semanales; ampliado para que quepan las cinco propuestas |
 | `ARTICLE_MAX_TOKENS` | `16384` | Presupuesto compartido entre razonamiento y artículo (~1000 palabras) |
 | `CONTENT_RETRY_MAX_TOKENS` | `8192` | Presupuesto del reintento sin razonamiento cuando la respuesta llega sin contenido visible |
-| `PAUTA_REASONING_EFFORT` | `medium` | Razonamiento de la pauta semanal (`medium` libera presupuesto para el contenido; también admite `high`, `max` o `None`) |
+| `PAUTA_REASONING_EFFORT` | `high` | Razonamiento de la pauta semanal (`high` mantiene la profundidad; el corte se evita con el presupuesto y con la detección de `finish_reason`) |
 | `ARTICLE_REASONING_EFFORT` | `high` | Razonamiento independiente para redacción de artículos |
 | `base_url` | `https://api.deepseek.com/v1` | Endpoint compatible OpenAI |
 
 ### Modo thinking y distribución de tokens
 
-DeepSeek-V4-Pro opera con **thinking mode activado** (`reasoning_effort` configurable por flujo). En este modo, los tokens de salida se dividen en dos campos:
+DeepSeek-Flash opera con **thinking mode activado** (`reasoning_effort` configurable por flujo). En este modo, los tokens de salida se dividen en dos campos:
 
 - **`reasoning_content`**: cadena de razonamiento interna (CoT) que el modelo usa para estructurar el análisis.
 - **`content`**: respuesta final visible que se escribe en el archivo de salida.
 
-El parámetro `max_tokens` es el **presupuesto total compartido** entre ambos campos. El razonamiento típicamente consume el 60-80% del presupuesto y, en casos exigentes, puede agotarlo por completo. Para la pauta semanal se usan 32K tokens (`PAUTA_MAX_TOKENS`) con un esfuerzo de razonamiento `medium` (`PAUTA_REASONING_EFFORT`): el razonamiento sobre cientos de noticias consume buena parte del presupuesto, por lo que el resto debe alcanzar para las cinco propuestas. Para la escritura de artículos se usan 16K tokens (`ARTICLE_MAX_TOKENS`) con razonamiento `high`: el modelo razona sobre una sola propuesta, pero ese razonamiento puede ser largo y el presupuesto debe alcanzar también para el texto final.
+El parámetro `max_tokens` es el **presupuesto total compartido** entre ambos campos. El razonamiento típicamente consume el 60-80% del presupuesto y, en casos exigentes, puede agotarlo por completo. Para la pauta semanal se usan 64K tokens (`PAUTA_MAX_TOKENS`) con un esfuerzo de razonamiento `high` (`PAUTA_REASONING_EFFORT`): el razonamiento sobre cientos de noticias consume buena parte del presupuesto, por lo que el resto debe alcanzar para las cinco propuestas. Para la escritura de artículos se usan 16K tokens (`ARTICLE_MAX_TOKENS`) con razonamiento `high`: el modelo razona sobre una sola propuesta, pero ese razonamiento puede ser largo y el presupuesto debe alcanzar también para el texto final.
 
-Si el razonamiento agota el presupuesto y `content` queda vacío, el cliente **no** devuelve `reasoning_content`: el razonamiento interno no es texto publicable. En su lugar, reintenta la llamada con el razonamiento desactivado y un presupuesto ampliado (`CONTENT_RETRY_MAX_TOKENS`), de modo que todos los tokens se destinen al contenido. Si el reintento tampoco devuelve contenido visible, la ejecución falla con un error explícito en lugar de escribir notas internas en el archivo de salida.
+Si el razonamiento agota el presupuesto y `content` queda vacío, el cliente **no** devuelve `reasoning_content`: el razonamiento interno no es texto publicable. En su lugar, reintenta la llamada con el razonamiento desactivado y un presupuesto ampliado (`CONTENT_RETRY_MAX_TOKENS`), de modo que todos los tokens se destinen al contenido. El mismo mecanismo se aplica cuando la respuesta llega **truncada** (`finish_reason="length"`): con contenido visible pero cortado a mitad de frase, el cliente reintenta sin razonamiento y, si el reintento vuelve a truncarse, falla de forma explícita en lugar de escribir una pauta incompleta. Si el reintento tampoco devuelve contenido visible, la ejecución falla con un error explícito en lugar de escribir notas internas en el archivo de salida.
 
 ---
 
@@ -330,11 +330,11 @@ Las constantes principales se encuentran en [news_agent/config.py](news_agent/co
 
 | Constante | Valor por defecto | Descripción |
 |-----------|-------------------|-------------|
-| `DEEPSEEK_MODEL` | `"deepseek-v4-pro"` | Modelo a utilizar |
+| `DEEPSEEK_MODEL` | `"deepseek-flash"` | Modelo a utilizar |
 | `TEMPERATURE` | `0.1` | Temperatura de sampling (0.0–2.0). Valor bajo para privilegiar precisión factual |
-| `PAUTA_MAX_TOKENS` | `32768` | Límite de tokens para generación de pauta semanal (razonamiento + cinco propuestas) |
+| `PAUTA_MAX_TOKENS` | `65536` | Límite de tokens para generación de pauta semanal (razonamiento + cinco propuestas) |
 | `ARTICLE_MAX_TOKENS` | `16384` | Presupuesto de escritura de artículo (~1000 palabras + razonamiento) |
-| `PAUTA_REASONING_EFFORT` | `"medium"` | Esfuerzo de razonamiento para la pauta (`"medium"`, `"high"`, `"max"`, o `None` para deshabilitar) |
+| `PAUTA_REASONING_EFFORT` | `"high"` | Esfuerzo de razonamiento para la pauta (`"high"`, `"medium"`, `"max"`, o `None` para deshabilitar) |
 | `ARTICLE_REASONING_EFFORT` | `"high"` | Esfuerzo de razonamiento independiente para redacción de artículos |
 | `TIME_WINDOW_HOURS` | `168` | Ventana de análisis en horas (7 días, lunes a domingo) |
 | `SUMMARY_MAX_CHARS` | `700` | Caracteres máximos por resumen. Amplio para preservar leads, cifras y atribuciones necesarias para la verificación factual |

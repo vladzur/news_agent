@@ -24,12 +24,12 @@ def test_num_proposals_constant():
 
 def test_pauta_max_tokens_constant():
     """El presupuesto de la pauta debe cubrir razonamiento + cinco propuestas."""
-    assert PAUTA_MAX_TOKENS == 32768
+    assert PAUTA_MAX_TOKENS == 65536
 
 
 def test_pauta_reasoning_effort_constant():
-    """El razonamiento de la pauta debe liberar presupuesto para el contenido."""
-    assert PAUTA_REASONING_EFFORT == "medium"
+    """La pauta mantiene razonamiento alto; el corte se evita con el presupuesto."""
+    assert PAUTA_REASONING_EFFORT == "high"
 
 
 
