@@ -1,0 +1,95 @@
+{
+  "brand": {
+    "name": "La Chispa Sur",
+    "handle": "@lachispasur",
+    "tagline": "Periodismo crítico desde el sur",
+    "website": "lachispasur.cl",
+    "logo_path": "assets/logo_lachispasur.png",
+    "logo_height_ratio": 0.11,
+    "colors": {
+      "background": "#0E0E10",
+      "surface": "#1A1A1F",
+      "text": "#FFFFFF",
+      "muted": "#A8A8B3",
+      "accent": "#DF3224",
+      "accent_alt": "#F2C14E"
+    },
+    "fonts": {
+      "headline": null,
+      "body": null,
+      "kicker": null
+    }
+  },
+  "platforms": {
+    "x": {
+      "label": "X",
+      "max_chars": 280,
+      "thread_min_tweets": 5,
+      "thread_max_tweets": 7,
+      "max_hashtags": 4
+    },
+    "facebook": {
+      "label": "Facebook",
+      "max_chars": 1200,
+      "max_hashtags": 5
+    },
+    "instagram": {
+      "label": "Instagram",
+      "caption_max_chars": 2200,
+      "max_hashtags": 25
+    }
+  },
+  "banners": {
+    "templates": {
+      "headline_card": [
+        "x",
+        "facebook",
+        "instagram_feed",
+        "instagram_story"
+      ],
+      "quote_card": [
+        "instagram_feed",
+        "instagram_story"
+      ]
+    },
+    "sizes": {
+      "x": [1600, 900],
+      "facebook": [1200, 630],
+      "instagram_feed": [1080, 1080],
+      "instagram_story": [1080, 1920]
+    },
+    "safe_zone": {
+      "instagram_story": {
+        "top": 250,
+        "bottom": 340
+      }
+    }
+  },
+  "visual_prompts": {
+    "style": "editorial conceptual illustration, political newspaper collage aesthetic, high-contrast chiaroscuro lighting, desaturated muted palette with a single saturated accent color, subtle film grain, symbolic and metaphorical imagery, cinematic composition, editorial magazine cover quality",
+    "negative_prompt": "text, letters, words, typography, numbers, captions, subtitles, watermark, signature, logo, brand marks, ui elements, screenshots, charts with labels, recognizable real faces, identifiable public figures, celebrity likeness, deformed hands, extra fingers, extra limbs, low quality, blurry, jpeg artifacts, oversaturated colors",
+    "midjourney_suffix": "--style raw --v 6.1",
+    "aspect_ratios": {
+      "landscape": {
+        "ratio": "16:9",
+        "midjourney_flag": "--ar 16:9",
+        "platforms": ["x", "facebook"]
+      },
+      "square": {
+        "ratio": "1:1",
+        "midjourney_flag": "--ar 1:1",
+        "platforms": ["instagram_feed"]
+      },
+      "portrait": {
+        "ratio": "9:16",
+        "midjourney_flag": "--ar 9:16",
+        "platforms": ["instagram_story"]
+      }
+    },
+    "default_settings": {
+      "steps": 30,
+      "guidance_scale": 4.5,
+      "sampler": "euler"
+    }
+  }
+}
