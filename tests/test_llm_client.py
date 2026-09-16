@@ -118,15 +118,145 @@ class TestGenerateReport:
             with pytest.raises(LLMClientError, match="sin choices"):
                 client.generate_report("sys", "usr")
 
-    def test_handles_none_content(self, client):
-        """Debe devolver cadena vacía si el contenido del mensaje es None."""
-        choice = Mock()
-        choice.message.content = None
-        response = Mock()
-        response.choices = [choice]
-        response.usage = None
+    def test_handles_none_content_by_retrying(self, client):
+        """Sin contenido visible debe reintentar la llamada, no devolver vacío."""
+        empty = make_response(None)
+        recovered = make_response("# Titular\n\n## Sección\n\nCuerpo.")
 
-        with patch.object(client._client.chat.completions, "create", return_value=response):
+        with patch.object(
+            client._client.chat.completions, "create", side_effect=[empty, recovered]
+        ) as create:
             result = client.generate_report("sys", "usr")
 
-        assert result == ""
+        assert result.startswith("# Titular")
+        assert create.call_count == 2
+
+
+def make_response(content, reasoning=None):
+    """Construye una respuesta simulada del SDK de OpenAI.
+
+    Args:
+        content: Contenido visible del mensaje.
+        reasoning: Razonamiento interno del mensaje, si lo hay.
+
+    Returns:
+        Mock: Respuesta con una única choice y sin datos de uso.
+    """
+    message = Mock()
+    message.content = content
+    message.reasoning_content = reasoning
+
+    choice = Mock()
+    choice.message = message
+
+    response = Mock()
+    response.choices = [choice]
+    response.usage = None
+    return response
+
+
+class TestEmptyContentRecovery:
+    """Recuperación cuando el razonamiento agota el presupuesto de salida.
+
+    Caso real que motivó estas pruebas: al escribir un artículo, el razonamiento
+    interno consumió los 8192 tokens del presupuesto compartido, la respuesta
+    llegó sin contenido visible y el texto de razonamiento terminó escrito en el
+    archivo del artículo.
+    """
+
+    def test_retries_without_reasoning_when_content_is_empty(self, client):
+        """Debe reintentar en lugar de devolver el razonamiento interno."""
+        empty = make_response("", reasoning="notas internas de planificación")
+        recovered = make_response("# Titular\n\n## Sección\n\nCuerpo del artículo.")
+
+        with patch.object(
+            client._client.chat.completions, "create", side_effect=[empty, recovered]
+        ) as create:
+            result = client.generate_report("sys", "usr")
+
+        assert result.startswith("# Titular")
+        assert create.call_count == 2
+
+    def test_never_returns_the_internal_reasoning(self, client):
+        """El razonamiento interno no debe llegar nunca al resultado."""
+        response = make_response(
+            "", reasoning="Let me plan the article. Facts from sources:"
+        )
+
+        with (
+            patch.object(
+                client._client.chat.completions, "create", return_value=response
+            ),
+            pytest.raises(LLMClientError, match="sin contenido visible"),
+        ):
+            client.generate_report("sys", "usr")
+
+    def test_disables_thinking_on_the_retry(self, client):
+        """El reintento debe desactivar el modo thinking."""
+        empty = make_response("", reasoning="razonamiento extenso")
+        recovered = make_response("# Titular\n\n## Sección\n\nCuerpo.")
+
+        with patch.object(
+            client._client.chat.completions, "create", side_effect=[empty, recovered]
+        ) as create:
+            client.generate_report("sys", "usr")
+
+        first, second = create.call_args_list
+        assert first.kwargs["extra_body"]["thinking"]["type"] == "enabled"
+        assert second.kwargs["extra_body"]["thinking"]["type"] == "disabled"
+
+    def test_widens_the_budget_on_the_retry(self, client):
+        """El reintento debe reservar presupuesto suficiente para el contenido."""
+        empty = make_response("", reasoning="razonamiento extenso")
+        recovered = make_response("# Titular\n\n## Sección\n\nCuerpo.")
+
+        with patch.object(
+            client._client.chat.completions, "create", side_effect=[empty, recovered]
+        ) as create:
+            client.generate_report("sys", "usr")
+
+        assert create.call_args_list[1].kwargs["max_tokens"] >= client.max_tokens
+
+    def test_raises_when_both_attempts_come_back_empty(self, client):
+        """Si el reintento también falla, debe lanzar un error explícito."""
+        empty = make_response("", reasoning="razonamiento")
+
+        with (
+            patch.object(
+                client._client.chat.completions, "create", return_value=empty
+            ) as create,
+            pytest.raises(LLMClientError, match="dos intentos"),
+        ):
+            client.generate_report("sys", "usr")
+
+        assert create.call_count == 2
+
+    def test_raises_when_the_retry_has_no_choices(self, client):
+        """Un reintento sin choices debe fallar con un error claro."""
+        empty = make_response("", reasoning="razonamiento")
+        no_choices = Mock()
+        no_choices.choices = []
+        no_choices.usage = None
+
+        with (
+            patch.object(
+                client._client.chat.completions,
+                "create",
+                side_effect=[empty, no_choices],
+            ),
+            pytest.raises(LLMClientError, match="sin choices"),
+        ):
+            client.generate_report("sys", "usr")
+
+    def test_recovers_when_there_is_no_reasoning_at_all(self, client):
+        """Sin razonamiento y sin contenido, igual se reintenta la llamada."""
+        empty = make_response("")
+        recovered = make_response("# Titular\n\n## Sección\n\nCuerpo.")
+
+        with patch.object(
+            client._client.chat.completions, "create", side_effect=[empty, recovered]
+        ) as create:
+            result = client.generate_report("sys", "usr")
+
+        assert result.startswith("# Titular")
+        assert create.call_count == 2
