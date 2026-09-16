@@ -10,6 +10,7 @@ from news_agent.article_writer import (
     PautaParseError,
     _extract_list_items,
     _extract_section,
+    looks_like_article,
     parse_pauta_file,
     write_article,
 )
@@ -212,6 +213,48 @@ class TestParsePautaFile:
 # ---------------------------------------------------------------------------
 
 
+class TestLooksLikeArticle:
+    """Guarda de estructura sobre la respuesta del redactor.
+
+    Evita que texto que no es el artículo —como las notas de razonamiento
+    interno del modelo— termine escrito en disco.
+    """
+
+    def test_accepts_a_well_formed_article(self):
+        content = (
+            "# Titular del artículo\n\n"
+            "**Por La Chispa Sur**\n\n"
+            "---\n\n"
+            "Lead del artículo.\n\n"
+            "## Primera sección\n\nCuerpo de la sección.\n"
+        )
+
+        assert looks_like_article(content) is True
+
+    def test_accepts_leading_whitespace(self):
+        assert looks_like_article("\n\n# Titular\n\n## Sección\n") is True
+
+    def test_rejects_internal_reasoning_notes(self):
+        content = (
+            "Let me plan the article. Need ~900-1200 words. "
+            "Facts from sources:\n- La Tercera: informe del Pentágono.\n"
+        )
+
+        assert looks_like_article(content) is False
+
+    def test_rejects_an_article_without_sections(self):
+        assert looks_like_article("# Titular\n\nSolo un lead sin secciones.\n") is False
+
+    def test_rejects_content_without_a_title(self):
+        assert looks_like_article("Un párrafo suelto.\n\n## Sección\n") is False
+
+    def test_rejects_empty_content(self):
+        assert looks_like_article("") is False
+
+    def test_rejects_none(self):
+        assert looks_like_article(None) is False
+
+
 class TestWriteArticle:
     """Pruebas de integración para write_article."""
 
@@ -259,6 +302,31 @@ class TestWriteArticle:
         assert result["title"] == "Título del Primer Artículo"
         assert result["article_path"].exists()
         assert "articulo_1_" in result["article_path"].name
+
+    def test_does_not_save_garbage_from_the_model(
+        self, mock_api_key, sample_pauta_file, tmp_path
+    ):
+        """No debe escribir archivos si la respuesta no es un artículo."""
+        reasoning_garbage = (
+            "Let me plan the article. Need ~900-1200 words.\n"
+            "Facts from sources:\n"
+            "- La Tercera: informe del inspector general del Pentágono.\n"
+        )
+
+        with patch("news_agent.article_writer.LLMClient") as mock_client_class:
+            mock_client = Mock()
+            mock_client.generate_report.return_value = reasoning_garbage
+            mock_client_class.return_value = mock_client
+
+            with pytest.raises(SystemExit) as excinfo:
+                write_article(
+                    pauta_path=sample_pauta_file,
+                    article_number=1,
+                    output_dir=tmp_path,
+                )
+
+        assert excinfo.value.code == 1
+        assert list(tmp_path.glob("articulo_*")) == []
 
     def test_write_article_invalid_number(self, mock_api_key, sample_pauta_file):
         """Debe lanzar ValueError si el número de artículo no está entre 1 y 5."""

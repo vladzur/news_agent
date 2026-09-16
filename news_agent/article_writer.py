@@ -196,6 +196,27 @@ def _extract_list_items(
     return items
 
 
+def looks_like_article(content: str) -> bool:
+    """Comprueba que la respuesta del modelo tenga estructura de artículo.
+
+    Es una guarda de forma, no de estilo: verifica el titular de nivel 1 y al
+    menos un subtítulo de sección, que son las dos marcas que el system prompt
+    del redactor exige. Sirve para detectar respuestas que no son el artículo
+    —por ejemplo, notas de razonamiento interno— antes de escribirlas en disco.
+
+    Args:
+        content: Texto devuelto por el modelo.
+
+    Returns:
+        bool: True si la respuesta parece un artículo publicable.
+    """
+    stripped = (content or "").lstrip()
+    if not stripped.startswith("# "):
+        return False
+
+    return "\n## " in stripped
+
+
 def write_article(
     pauta_path: str | Path,
     article_number: int,
@@ -318,6 +339,16 @@ def write_article(
 
     if not article_content or not article_content.strip():
         logger.error("La API devolvió un artículo vacío.")
+        sys.exit(1)
+
+    if not looks_like_article(article_content):
+        logger.error(
+            "La respuesta del modelo no tiene estructura de artículo (falta el "
+            "titular de nivel 1 o los subtítulos de sección): %d caracteres "
+            "descartados. No se guarda ningún archivo para no publicar "
+            "contenido inválido.",
+            len(article_content),
+        )
         sys.exit(1)
 
     logger.info(
