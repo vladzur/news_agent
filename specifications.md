@@ -108,6 +108,7 @@ Markdown
 Transformar un artículo ya publicado en piezas multiplataforma para **X/Twitter, Facebook e Instagram**, mediante un flujo local que se ejecuta desde el mismo punto de entrada CLI del agente:
 
 ```
+python -m news_agent social --platforms x,instagram
 python -m news_agent --socialize articulos/articulo_1_slug.md --output ./social
 ```
 
@@ -213,3 +214,62 @@ Un color mal escrito, un tamaño inválido o una plantilla que apunte a un forma
 - **Artículo inexistente, vacío o sin titular** → error explícito de parseo y salida con código distinto de cero.
 - **API key ausente** → error explícito de configuración antes de cualquier llamada.
 - **Combinación de argumentos inválida** (`--socialize` junto a `--feeds`, `--debug`, `--write-article` o `--article`, o banderas del subsistema sin `--socialize`) → error de uso en `stderr` y salida con código 2.
+
+## 7. Interfaz de Línea de Comandos (CLI)
+
+### 7.1. Objetivo
+
+El motor se opera desde un CLI por subcomandos que reduce la ejecución de cada flujo a un solo comando y encadena los tres pasos del proceso editorial cuando se quiere de punta a punta. Los modos clásicos por banderas se conservan para los scripts y cron ya desplegados.
+
+### 7.2. Subcomandos
+
+| Comando | Responsabilidad | Entradas | Artefactos |
+|---------|-----------------|----------|------------|
+| `report` | Genera la pauta editorial semanal | `--feeds`, `--output`, `--debug` | `reportes/pauta_semanal_AAAA_MM_DD.md` y su companion JSON |
+| `article` | Escribe una nota desde una propuesta | `--pauta`, `-n/--number`, `--output` | `articulos/articulo_N_slug.md` |
+| `social` | Repurposing para redes sociales | `--article`, `--output`, `--platforms`, `--social-config`, `--skip-banners`, `--skip-prompts` | `social/AAAA_MM_DD_slug/` con copys, prompts, Markdown y banners |
+| `all` | Secuencia completa | `--feeds`, `--base`, `-n/--number`, opciones sociales y `--debug` | Los tres anteriores |
+| `clean` | Limpieza de artefactos antiguos | `--base`, `--target`, `--days`, `--dry-run`, `--yes` | Elimina archivos y bundles |
+
+Todos los comandos aceptan `--verbose`.
+
+### 7.3. Comando secuencial `all`
+
+Ejecuta, en orden y dentro de una misma invocación: la generación de la pauta, la escritura de la nota elegida y el bundle de redes sociales. La pauta y el artículo recién generados se pasan como entrada al paso siguiente, sin intervención manual. Si un paso falla, la ejecución se detiene con su código de error y no se ejecutan los pasos posteriores.
+
+### 7.4. Entradas implícitas y directorio de salida
+
+- **Pauta:** si `article` no recibe `--pauta`, toma la más reciente de `reportes/`. El orden lo da el nombre, que incluye la fecha (`AAAA_MM_DD`).
+- **Artículo:** si `social` no recibe `--article`, toma el de fecha de modificación más reciente de `articulos/`, porque las notas no llevan fecha en el nombre.
+- **Propuesta:** si `article` o `all` no reciben `-n/--number`, muestran los cinco titulares y preguntan cuál desarrollar. Sin terminal interactiva (por ejemplo en un cron) la ejecución falla con código 2 y un mensaje que pide `--number`, en lugar de quedar esperando una respuesta que nunca llegará.
+- **Directorio de salida:** si no se indica `--output`, cada flujo usa su carpeta por defecto (`reportes/`, `articulos/` o `social/`) y la crea si no existe. Una ruta que apunte al directorio actual se rechaza con error de uso, en los subcomandos y también en los modos clásicos.
+- **Sin argumentos:** `python -m news_agent` no ejecuta ningún flujo. Muestra la ayuda y sale con código 2, porque el modo clásico por defecto consumiría tokens de la API y escribiría en el directorio actual sin que el usuario lo haya pedido. Los cron deben indicar el flujo y la salida explícitamente.
+
+### 7.5. Limpieza de artefactos (`clean`)
+
+- **Alcance:** solo los artefactos propios de la herramienta, declarados como patrones en `news_agent/cleanup.py`: pautas y companion JSON de `reportes/`, notas de `articulos/` y bundles de `social/`.
+- **Nunca se elimina** la caché de contenido (`cache/`) ni los recursos de la marca (`assets/`): ninguna entrada fuera de los patrones declarados se considera, aunque sea antigua.
+- **Fecha de referencia:** la fecha codificada en el nombre cuando existe (pautas y bundles) y, cuando no (las notas), la fecha de modificación. La fecha del nombre es la fuente fiable: al clonar o copiar el repositorio, todos los archivos quedan con la fecha de la copia.
+- **Umbral:** `--days N` (por defecto `DEFAULT_CLEAN_MAX_AGE_DAYS`, 30). Se elimina lo que supere ese corte; un valor menor que 1 es un error de uso.
+- **Confirmación:** el comando lista lo que va a eliminar, con antigüedad y tamaño, y pide confirmación. `--dry-run` muestra el listado sin borrar nada y `--yes` omite la confirmación para automatizar.
+- **Aislamiento de fallos:** si un artefacto no se puede eliminar, se registra en el log, el resto del lote continúa y el resumen final informa cuántos fallaron.
+
+### 7.6. Estructura
+
+| Módulo | Responsabilidad |
+|--------|-----------------|
+| `__main__.py` | Punto de entrada: distingue los subcomandos de los modos clásicos por banderas |
+| `cli.py` | Parser de subcomandos, localización de entradas recientes, selección interactiva y handlers |
+| `cleanup.py` | Detección y borrado de artefactos antiguos |
+| `config.py` | Directorios de salida por defecto (`reportes/`, `articulos/`, `social/`) y umbral de limpieza |
+
+> **¿Por qué el subcomando se reconoce solo en la primera posición?** Los modos clásicos siempre empiezan con una bandera, así que exigir que el nombre del comando vaya primero evita que un valor que coincida con un comando (por ejemplo `--output social`) se interprete como una invocación del subcomando `social`.
+
+### 7.7. Códigos de salida
+
+| Código | Significado |
+|:------:|-------------|
+| `0` | Ejecución exitosa (o nada que procesar, sin invocar a la API) |
+| `1` | Error de ejecución: configuración, API, pauta imposible de parsear, artefacto de entrada inexistente |
+| `2` | Error de uso: comando desconocido, opción inválida, plataforma desconocida, falta `--number` sin terminal o `--days` no positivo |
+| `130` | Interrupción con Ctrl+C |
