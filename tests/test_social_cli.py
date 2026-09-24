@@ -168,7 +168,16 @@ class TestSocializeMode:
         main(ARGS + ["--output", "./social"])
 
         assert captured["article_path"] == "articulos/articulo_1_slug.md"
-        assert captured["output_dir"] == "./social"
+        assert captured["output_dir"] == Path("./social")
+
+    def test_defaults_to_the_social_folder_instead_of_the_current_directory(
+        self, captured
+    ):
+        # El modo clásico tampoco escribe en el directorio actual: sin --output
+        # usa la carpeta social/ del proyecto.
+        main(ARGS)
+
+        assert captured["output_dir"] == Path("social")
 
     def test_parses_the_platform_list_before_calling(self, captured):
         main(ARGS + ["--platforms", "instagram,x"])

@@ -65,9 +65,59 @@ Toma un artículo ya publicado (`articulos/articulo_N_slug.md`) y produce un **b
 
 > **¿Por qué se valida todo en código y no se confía en el LLM?** Las reglas duras de cada plataforma se aplican de forma determinista: recorte al límite de caracteres, largo del hilo, topes de hashtags, normalización de hashtags (`#La Araucania` → `#LaAraucania`) y retiro de los que el modelo haya dejado dentro del cuerpo del texto para no duplicarlos en el tweet de cierre, verificación de que cada cifra exista en el artículo y de que la cita sea **literal**. Si el modelo entrega una cita inventada, el sistema la reemplaza por una oración verificada del propio artículo. El guardarraíl es también editorial: los prompts visuales **no pueden** describir texto en la imagen ni personas reales identificables, y esa regla se verifica en código, no solo en el prompt.
 
-### 4. CLI unificado
+### 4. CLI por subcomandos
 
-El punto de entrada `python -m news_agent` ofrece tres modos:
+El punto de entrada `python -m news_agent` ofrece un CLI de subcomandos pensado para el uso diario. Cada paso del flujo es un comando propio y `all` los encadena en una sola ejecución:
+
+| Comando | Qué hace |
+|---------|----------|
+| `report` | Genera la pauta editorial semanal desde los feeds RSS. |
+| `article` | Escribe una nota completa desde una propuesta de la pauta. |
+| `social` | Genera el bundle de redes sociales de un artículo publicado. |
+| `all` | Ejecuta la secuencia completa: pauta → nota → redes sociales. |
+| `clean` | Elimina los artefactos generados con más de N días. |
+
+```bash
+# Secuencia completa: pauta, nota y redes sociales de una sola vez
+python -m news_agent all --number 1
+
+# O cada paso por separado
+python -m news_agent report
+python -m news_agent article --number 2
+python -m news_agent social --platforms x,instagram
+
+# Limpieza de los artefactos con más de 90 días (pide confirmación)
+python -m news_agent clean --days 90
+```
+
+**Entradas implícitas:** si no se indica la pauta o el artículo, el CLI toma el más reciente del directorio correspondiente (`reportes/` o `articulos/`). Cuando `article` o `all` no reciben `--number`, preguntan por la terminal qué propuesta desarrollar, mostrando los cinco titulares; en un cron hay que pasar el número siempre, porque no hay terminal.
+
+**Sin argumentos no se ejecuta nada:** `python -m news_agent` a secas muestra la ayuda y sale con código 2. Antes arrancaba la generación de pauta completa —consumiendo tokens de la API— y escribía el resultado en el directorio actual.
+
+**Nunca escribe en el directorio actual:** cuando se omite `--output`, cada flujo usa su carpeta por defecto (`reportes/`, `articulos/` o `social/`) y la crea si no existe; una ruta que apunte al directorio actual se rechaza con un error de uso. Así la raíz del proyecto no se llena de pautas ni de bundles sueltos.
+
+**Limpieza:** `clean` solo considera los artefactos propios de la herramienta (pautas, companion JSON, notas y bundles `AAAA_MM_DD_slug`). La caché de contenido (`cache/`) y los assets de la marca (`assets/`) quedan **siempre** fuera de su alcance. La antigüedad se ajusta con `--days`, el alcance con `--target` (incluye `--yes` para automatizar y `--dry-run` para revisar qué se borraría sin eliminar nada).
+
+#### Opciones por comando
+
+| Opción | Comandos | Descripción |
+|--------|----------|-------------|
+| `--feeds RUTA` | `report`, `all` | JSON de configuración de feeds RSS (por defecto `rss_feeds.json`). |
+| `--output DIR` | `report`, `article`, `social` | Directorio de salida (por defecto `reportes/`, `articulos/` o `social/`). |
+| `--base DIR` | `all`, `clean` | Directorio base del proyecto, del que se derivan `reportes/`, `articulos/` y `social/` (por defecto `.`). |
+| `--pauta RUTA` | `article` | Pauta a desarrollar (por defecto, la más reciente de `reportes/`). |
+| `--article RUTA` | `social` | Artículo de origen (por defecto, el más reciente de `articulos/`). |
+| `-n`, `--number N` | `article`, `all` | Propuesta a desarrollar (1 a 5). Si se omite, se pregunta por la terminal. |
+| `--platforms LISTA` | `social`, `all` | Plataformas separadas por comas (`x,facebook,instagram`). Por defecto, todas. |
+| `--social-config RUTA` | `social`, `all` | JSON de marca y plantillas (por defecto `social_config.json`). |
+| `--skip-banners` / `--skip-prompts` | `social`, `all` | Omite los banners o los prompts visuales, y con ellos la llamada al modelo que los genera. |
+| `--days N` / `--target` / `--dry-run` / `-y` | `clean` | Antigüedad mínima, alcance, simulación y omisión de la confirmación. |
+| `--debug` | `report`, `all` | Guarda el JSON intermedio de artículos procesados para ajustar el prompt. |
+| `--verbose` | todos | Activa logging nivel DEBUG para diagnóstico detallado. |
+
+#### Modos clásicos por banderas
+
+Se mantienen por compatibilidad con los scripts y los cron ya desplegados:
 
 | Modo | Comando |
 |------|---------|
@@ -76,10 +126,10 @@ El punto de entrada `python -m news_agent` ofrece tres modos:
 | Escribir artículo | `python -m news_agent --write-article reportes/pauta_semanal_AAAA_MM_DD.md --article 1 --output ./articulos` |
 | Repurposing para RRSS | `python -m news_agent --socialize articulos/articulo_1_slug.md --output ./social` |
 
-Flags adicionales:
+Flags de los modos clásicos:
 
 - `--verbose`: Activa logging nivel DEBUG para diagnóstico detallado.
-- `--output`: Directorio donde guardar los archivos generados.
+- `--output`: Directorio donde guardar los archivos generados. Si se omite se usa `reportes/`, `articulos/` o `social/` según el modo, y una ruta que apunte al directorio actual se rechaza: los modos clásicos tampoco escriben en el directorio actual.
 - `--debug`: Guarda un archivo JSON intermedio en `debug/articulos_procesados_YYYY_MM_DD.json` con los datos completos de cada artículo (resumen RSS, contenido extraído y resumen final enviado al LLM) para depuración y ajuste de prompts.
 - `--socialize RUTA_ARTICULO`: Activa el modo de repurposing para redes sociales. No se puede combinar con `--feeds`, `--debug`, `--write-article` ni `--article`.
 - `--platforms LISTA`: Plataformas a preparar, separadas por comas (`x,facebook,instagram`). Por defecto, todas. Filtra los Markdown y los banners generados.
@@ -94,7 +144,9 @@ Flags adicionales:
 ```
 assets/                     # Recursos gráficos de la marca (logo de los banners)
 news_agent/
-├── __main__.py            # Punto de entrada CLI (argparse)
+├── __main__.py            # Punto de entrada CLI (subcomandos + modos clásicos)
+├── cli.py                 # CLI por subcomandos: report, article, social, all, clean
+├── cleanup.py             # Detección y borrado de artefactos antiguos del comando clean
 ├── orchestrator.py        # Orquestador del pipeline completo
 ├── config.py              # Carga de .env, validación de API key, feeds JSON
 ├── rss_fetcher.py         # Ingesta RSS + despacho a scraping según método
@@ -262,23 +314,31 @@ Para medios que no disponen de feed RSS, usa `"method": "scraping"` con selector
 ### 5. Ejecutar
 
 ```bash
-# Generar pauta editorial semanal
-python -m news_agent --feeds rss_feeds.json --output ./reportes
+# Secuencia completa: pauta + nota + redes sociales (pregunta qué propuesta desarrollar)
+python -m news_agent all
+
+# Secuencia completa sin preguntas, para automatizar
+python -m news_agent all --number 1 --platforms x,instagram
+
+# Paso a paso
+python -m news_agent report --feeds rss_feeds.json
+python -m news_agent article --number 1
+python -m news_agent social --platforms x,instagram
 
 # Generar pauta con archivo de depuración intermedio
-python -m news_agent --feeds rss_feeds.json --output ./reportes --debug
-
-# Escribir artículo completo desde propuesta #1
-python -m news_agent --write-article reportes/pauta_semanal_2026_07_04.md --article 1 --output ./articulos
-
-# Repurposing de un artículo para redes sociales (copys + prompts visuales + banners)
-python -m news_agent --socialize articulos/articulo_1_slug.md --output ./social
+python -m news_agent report --debug
 
 # Solo copys y Markdown, sin llamar al modelo para prompts visuales ni renderizar banners
-python -m news_agent --socialize articulos/articulo_1_slug.md --skip-prompts --skip-banners
+python -m news_agent social --skip-prompts --skip-banners
 
 # Preparar únicamente las piezas de Instagram
-python -m news_agent --socialize articulos/articulo_1_slug.md --platforms instagram
+python -m news_agent social --platforms instagram
+
+# Ver qué artefactos antiguos se eliminarían, sin borrar nada
+python -m news_agent clean --days 90 --dry-run
+
+# Eliminar sin confirmación (para cron)
+python -m news_agent clean --days 90 --yes
 ```
 
 ### 5b. Configurar la marca para RRSS (opcional)
@@ -358,15 +418,26 @@ Las constantes principales se encuentran en [news_agent/config.py](news_agent/co
 | `SOCIAL_IG_MAX_HASHTAGS` | `25` | Tope de hashtags de Instagram |
 | `SOCIAL_MIN_ARTICLE_WORDS` | `150` | Por debajo de esto el artículo no da material suficiente: aborta antes de llamar a la API |
 | `SOCIAL_BANNER_BASE_WIDTH` | `1080` | Ancho de referencia del diseño de banners |
+| `DEFAULT_REPORTS_DIR` | `"reportes"` | Directorio de salida por defecto de la pauta |
+| `DEFAULT_ARTICLES_DIR` | `"articulos"` | Directorio de salida por defecto de las notas |
+| `DEFAULT_CLEAN_MAX_AGE_DAYS` | `30` | Antigüedad mínima, en días, que elimina `clean` cuando no se pasa `--days` |
 
 ### Automatización con cron
 
 Para ejecutar el agente de forma semanal (recomendado: domingo a las 23:00 o lunes a las 07:00):
 
 ```bash
-# Ejemplo: todos los lunes a las 07:00 hrs
+# Ejemplo: todos los lunes a las 07:00 hrs, con la secuencia completa
+0 7 * * 1 cd /ruta/al/news_agent && /ruta/al/.venv/bin/python -m news_agent all --number 1
+
+# Equivalente con los modos clásicos (solo la pauta)
 0 7 * * 1 cd /ruta/al/news_agent && /ruta/al/.venv/bin/python -m news_agent --feeds rss_feeds.json --output ./reportes
+
+# Limpieza mensual sin confirmación (día 1 a las 06:00)
+0 6 1 * * cd /ruta/al/news_agent && /ruta/al/.venv/bin/python -m news_agent clean --days 90 --yes
 ```
+
+> En un cron no hay terminal: `all` y `article` necesitan `--number N`, y `clean` necesita `--yes`.
 
 ---
 
