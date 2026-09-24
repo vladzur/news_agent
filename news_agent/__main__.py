@@ -1,10 +1,25 @@
 """Punto de entrada del agente: python -m news_agent.
 
-Permite ejecutar el pipeline de curaduría de pauta editorial, la escritura de
-artículos completos desde una pauta y el repurposing de un artículo para redes
-sociales, todo desde la línea de comandos.
+Ofrece dos interfaces sobre el mismo motor:
 
-Uso:
+1. **CLI simplificado por subcomandos** (recomendado para el uso diario):
+     report   Genera la pauta editorial semanal.
+     article  Escribe una nota completa desde una propuesta de la pauta.
+     social   Genera el bundle de redes sociales de un artículo.
+     all      Encadena los tres pasos anteriores en una sola ejecución.
+     clean    Elimina los artefactos generados con más de N días.
+
+2. **Modos clásicos por banderas**, que se mantienen por compatibilidad con
+   scripts y cron.
+
+Uso con subcomandos:
+    python -m news_agent report --feeds rss_feeds.json
+    python -m news_agent article --number 2
+    python -m news_agent social --platforms x,instagram
+    python -m news_agent all --number 1
+    python -m news_agent clean --days 30 --dry-run
+
+Uso clásico:
     # Generar pauta semanal
     python -m news_agent --feeds rss_feeds.json --output ./reportes
 
@@ -19,14 +34,57 @@ Uso:
 
 import argparse
 import sys
+from collections.abc import Sequence
+from pathlib import Path
 
+from . import cli
 from .article_writer import PautaParseError, write_article
-from .config import NUM_PROPOSALS
+from .cli import (
+    CANCELLED_MESSAGE,
+    print_article_summary,
+    print_report_summary,
+    print_social_summary,
+)
+from .config import (
+    DEFAULT_ARTICLES_DIR,
+    DEFAULT_REPORTS_DIR,
+    DEFAULT_SOCIAL_OUTPUT_DIR,
+    NUM_PROPOSALS,
+)
 from .orchestrator import run_pipeline
 from .social.platform_specs import ALL_PLATFORMS, parse_platforms
 
-# Mensaje común al interrumpir la ejecución con Ctrl+C
-CANCELLED_MESSAGE = "\nEjecución cancelada por el usuario."
+
+def _build_legacy_epilog() -> str:
+    """Construye el pie de ayuda de los modos clásicos.
+
+    Returns:
+        str: Listado de los subcomandos simplificados y ejemplos del modo
+        clásico.
+    """
+    lines = ["Comandos simplificados (recomendados):", ""]
+    lines.extend(
+        f"  {name:<8} {cli.COMMAND_DESCRIPTIONS[name]}" for name in cli.COMMANDS
+    )
+    lines.extend(
+        [
+            "",
+            "Usa '-h' después de un comando para ver sus opciones.",
+            "",
+            "Ejemplos del modo clásico:",
+            "  python -m news_agent --feeds rss_feeds.json --output ./reportes",
+            (
+                "  python -m news_agent --write-article "
+                "reportes/pauta_semanal_2026_07_04.md --article 1 "
+                "--output ./articulos"
+            ),
+            (
+                "  python -m news_agent --socialize articulos/articulo_1_slug.md "
+                "--output ./social"
+            ),
+        ]
+    )
+    return "\n".join(lines)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -37,14 +95,7 @@ def build_parser() -> argparse.ArgumentParser:
     """
     parser = argparse.ArgumentParser(
         description="Agente Inteligente de Contenidos - La Chispa Sur",
-        epilog=(
-            "Ejemplos:\n"
-            "  python -m news_agent --feeds rss_feeds.json --output ./reportes\n"
-            "  python -m news_agent --write-article reportes/pauta_semanal_2026_07_04.md "
-            "--article 1 --output ./articulos\n"
-            "  python -m news_agent --socialize articulos/articulo_1_slug.md "
-            "--output ./social"
-        ),
+        epilog=_build_legacy_epilog(),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
@@ -59,8 +110,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--output",
         type=str,
-        default=".",
-        help="Directorio de salida para los archivos generados (por defecto: .).",
+        default=None,
+        help="Directorio de salida de los archivos generados. Si se omite se "
+        f"usa {DEFAULT_REPORTS_DIR}/, {DEFAULT_ARTICLES_DIR}/ o "
+        f"{DEFAULT_SOCIAL_OUTPUT_DIR}/ según el modo. Nunca se escribe en "
+        "el directorio actual.",
     )
     parser.add_argument(
         "--verbose",
@@ -181,6 +235,30 @@ def _validate_socialize_args(args: argparse.Namespace) -> None:
         sys.exit(2)
 
 
+def _resolve_legacy_output(args: argparse.Namespace, default: str) -> Path:
+    """Resuelve el directorio de salida de un modo clásico.
+
+    Los modos clásicos tampoco escriben en el directorio actual: si no se pasó
+    --output se usa el directorio por defecto del modo, y una ruta que apunte
+    al directorio actual se rechaza.
+
+    Args:
+        args: Argumentos ya parseados.
+        default: Directorio a usar cuando no se pasó --output.
+
+    Returns:
+        Path: Directorio, ya creado, listo para escribir.
+
+    Raises:
+        SystemExit: Si la ruta pedida es inválida o es el directorio actual.
+    """
+    try:
+        return cli.resolve_output_dir(args.output, default)
+    except cli.OutputDirectoryError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(2)
+
+
 def _run_socialize_mode(args: argparse.Namespace) -> None:
     """Ejecuta el modo de repurposing para redes sociales.
 
@@ -203,10 +281,12 @@ def _run_socialize_mode(args: argparse.Namespace) -> None:
         print(f"Error: {exc}", file=sys.stderr)
         sys.exit(2)
 
+    output_dir = _resolve_legacy_output(args, DEFAULT_SOCIAL_OUTPUT_DIR)
+
     try:
         result = run_socialize(
             article_path=args.socialize,
-            output_dir=args.output,
+            output_dir=output_dir,
             config_path=args.social_config,
             platforms=platforms,
             verbose=args.verbose,
@@ -220,17 +300,8 @@ def _run_socialize_mode(args: argparse.Namespace) -> None:
         print(CANCELLED_MESSAGE, file=sys.stderr)
         sys.exit(130)
 
-    print("\n✅ Bundle de RRSS generado exitosamente:")
-    print(f"   📁 {result['bundle_dir']}")
-    print(f"   📝 \"{result['title']}\"")
-    print(f"   📊 Plataformas: {', '.join(result['platforms'])}")
-    print(f"   🖼️  Banners generados: {result['banner_count']}")
-    if result["banner_failed"]:
-        print(f"   ⚠️  Banners fallidos: {result['banner_failed']}")
-    if result["prompts_path"]:
-        print(f"   🎨 Prompts visuales: {result['prompts_path']}")
-    print(f"   🗂️  Copys: {result['copy_path']}")
-    print(f"   🧾 Manifiesto: {result['manifest_path']}")
+    print_social_summary(result)
+
 
 def _run_article_mode(args: argparse.Namespace) -> None:
     """Ejecuta el modo de escritura de artículo desde una pauta.
@@ -246,11 +317,13 @@ def _run_article_mode(args: argparse.Namespace) -> None:
         )
         sys.exit(1)
 
+    output_dir = _resolve_legacy_output(args, DEFAULT_ARTICLES_DIR)
+
     try:
         result = write_article(
             pauta_path=args.write_article,
             article_number=args.article,
-            output_dir=args.output,
+            output_dir=output_dir,
             verbose=args.verbose,
         )
     except PautaParseError as exc:
@@ -263,9 +336,7 @@ def _run_article_mode(args: argparse.Namespace) -> None:
         print(CANCELLED_MESSAGE, file=sys.stderr)
         sys.exit(130)
 
-    print("\n✅ Artículo escrito exitosamente:")
-    print(f"   📄 {result['article_path']}")
-    print(f"   📝 \"{result['title']}\"")
+    print_article_summary(result)
 
 
 def _run_pipeline_mode(args: argparse.Namespace) -> None:
@@ -274,10 +345,12 @@ def _run_pipeline_mode(args: argparse.Namespace) -> None:
     Args:
         args: Argumentos ya parseados del CLI.
     """
+    output_dir = _resolve_legacy_output(args, DEFAULT_REPORTS_DIR)
+
     try:
         result = run_pipeline(
             feeds_path=args.feeds,
-            output_dir=args.output,
+            output_dir=output_dir,
             verbose=args.verbose,
             save_intermediate_data=args.debug,
         )
@@ -285,25 +358,62 @@ def _run_pipeline_mode(args: argparse.Namespace) -> None:
         print(CANCELLED_MESSAGE, file=sys.stderr)
         sys.exit(130)
 
-    print("\n✅ Reporte generado exitosamente:")
-    print(f"   📄 {result['report_path']}")
-    print(f"   📊 {result['item_count']} artículos analizados de "
-           f"{result['feed_count']} fuentes.")
-    if result.get("debug_path"):
-        print(f"   🔍 Archivo de depuración: {result['debug_path']}")
-    if result.get("companion_path"):
-        print(f"   📎 Fuentes acompañantes: {result['companion_path']}")
+    print_report_summary(result)
+
+
+def _extract_command(argv: Sequence[str]) -> str | None:
+    """Devuelve el subcomando cuando la invocación usa el CLI simplificado.
+
+    El subcomando se reconoce solo en la primera posición: los modos clásicos
+    siempre empiezan con una bandera, así que un valor que coincida con el
+    nombre de un comando (por ejemplo ``--output social``) no se confunde.
+
+    Args:
+        argv: Argumentos de la línea de comandos, sin el nombre del programa.
+
+    Returns:
+        str | None: Nombre del subcomando, o None si la invocación es clásica.
+    """
+    if not argv or argv[0].startswith("-"):
+        return None
+    return argv[0]
 
 
 def main(argv: list[str] | None = None) -> None:
     """Función principal del CLI del agente de contenidos.
 
+    Sin argumentos no se ejecuta ningún flujo: se muestra la ayuda y se sale
+    con error de uso, para no consumir tokens de la API ni escribir archivos
+    por accidente.
+
     Args:
         argv: Argumentos de línea de comandos. Si es None, se usan los de
               ``sys.argv``.
     """
+    raw = list(sys.argv[1:] if argv is None else argv)
+
+    command = _extract_command(raw)
+    if command is not None:
+        if command not in cli.COMMANDS:
+            print(
+                f"Error: comando desconocido '{command}'. "
+                f"Comandos disponibles: {', '.join(cli.COMMANDS)}.",
+                file=sys.stderr,
+            )
+            sys.exit(2)
+
+        cli.run(raw)
+        return
+
     parser = build_parser()
-    args = parser.parse_args(argv)
+
+    # Ejecutar el pipeline sin argumentos escribiría la pauta y consumiría
+    # tokens de la API sin que el usuario lo haya pedido.
+    if not raw:
+        parser.print_help()
+        sys.exit(2)
+
+    args = parser.parse_args(raw)
 
     _validate_socialize_args(args)
 
