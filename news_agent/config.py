@@ -146,6 +146,22 @@ SOCIAL_FONT_REGULAR_CANDIDATES = (
 )
 
 # ---------------------------------------------------------------------------
+# Directorios de salida por defecto del CLI por subcomandos
+# ---------------------------------------------------------------------------
+# El CLI de subcomandos (report/article/social/all/clean) usa estos
+# directorios cuando no se indica --output. Coinciden con la estructura
+# versionada del repositorio para que una ejecución sin argumentos escriba
+# siempre en el mismo lugar.
+DEFAULT_REPORTS_DIR = "reportes"
+DEFAULT_ARTICLES_DIR = "articulos"
+
+# Antigüedad máxima por defecto (en días) de los artefactos que elimina el
+# subcomando ``clean``. La caché de contenido y los assets de la marca nunca
+# se eliminan: el comando solo considera los patrones declarados en
+# ``news_agent.cleanup.CLEAN_PATTERNS``.
+DEFAULT_CLEAN_MAX_AGE_DAYS = 30
+
+# ---------------------------------------------------------------------------
 # Archivo de configuración de feeds RSS (por defecto)
 # ---------------------------------------------------------------------------
 DEFAULT_FEEDS_PATH = "rss_feeds.json"
