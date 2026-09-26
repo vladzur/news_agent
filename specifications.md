@@ -145,9 +145,11 @@ El único origen admitido es un **artículo Markdown ya publicado** (`articulos/
 ### 6.4. Capa de prompts visuales
 
 - **Idioma obligatorio: inglés.** Un prompt por relación de aspecto, filtrado por las plataformas pedidas: `16:9` (X y Facebook), `1:1` (feed de Instagram) y `9:16` (stories).
+- **Estilo por defecto: arte digital vívido y caricatura editorial estilizada**, con paleta saturada, figuras exageradas y tono satírico, en lugar de ilustración conceptual apagada. La directriz de estilo vive en `social_config.json`.
 - **Restricciones verificadas en código**, no solo sugeridas en el prompt:
   - Prohibido describir **texto, letras, números o tipografía** en la imagen, porque los modelos de difusión los renderizan como artefactos.
-  - Prohibido representar **personas reales identificables** (evita suplantación de figuras públicas): el poder, el Estado o los pueblos se representan de forma simbólica.
+  - Permitido **caricaturizar a las figuras públicas nombradas** en el artículo (presidentes, senadores, alcaldes, ministros, líderes de partido), siempre con estilo ilustrado y rasgos exagerados. Prohibido el retrato fotorrealista y el *deepfake*. Prohibido mostrar de forma reconocible a víctimas, menores o personas privadas: se representan como figuras anónimas con el rostro girado o abstraído.
+  - Obligatorio nombrar una **paleta de color** en cada prompt: un prompt sin señales cromáticas se rechaza, porque devuelve ilustraciones planas y sin contraste.
   - Prohibida la **violencia explícita**.
   - Prompt positivo entre 25 y 200 palabras, en inglés.
 - **Salida por aspecto:** prompt positivo, prompt negativo (el de marca más los agregados específicos del artículo, sin duplicar términos), variante lista para Midjourney con sus flags (`--ar`, estilo, `--v`, `--no`) y parámetros sugeridos (pasos, guidance, sampler).

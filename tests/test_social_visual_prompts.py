@@ -12,6 +12,7 @@ from news_agent.social.visual_prompts import (
     build_visual_prompts,
     enabled_aspects,
     generate_visual_prompts,
+    has_colour_signal,
     looks_like_spanish,
     spanish_signal_count,
     validate_visual_prompt,
@@ -20,12 +21,13 @@ from tests.test_social_copy_generator import FakeClient
 
 # Prompt válido, en inglés y sin referencias a texto
 VALID_PROMPT = (
-    "A lone wooden chair standing on a flooded street at dusk, its shadow "
-    "stretching into the water, an enormous concrete wall rising behind it, "
-    "cold blue-grey palette with a single ember-red glow on the horizon, "
-    "heavy overcast sky, wide composition with generous negative space, "
-    "muted desaturated tones, subtle film grain, editorial conceptual "
-    "photography style, dramatic chiaroscuro lighting"
+    "A stylised editorial caricature of a nameless bureaucrat in an oversized "
+    "suit sinking into a flooded city street at dusk, a towering concrete wall "
+    "looming behind him with a defiant grin painted across it, vibrant digital "
+    "painting with a bold saturated teal and warm amber palette, glowing "
+    "crimson-red horizon, expressive brush strokes and cel shading, wide "
+    "composition with generous negative space, dramatic coloured rim light, "
+    "witty and critical mood, high detail, magazine cover quality"
 )
 
 
@@ -42,6 +44,7 @@ class TestModuleContract:
         assert callable(generate_visual_prompts)
         assert callable(enabled_aspects)
         assert callable(validate_visual_prompt)
+        assert callable(has_colour_signal)
 
     def test_generation_error_is_an_exception(self):
         assert issubclass(VisualPromptGenerationError, Exception)
@@ -87,8 +90,20 @@ class TestEnabledAspects:
 class TestValidateVisualPrompt:
     """Reglas duras que debe cumplir un prompt positivo."""
 
-    def test_accepts_a_conceptual_english_prompt(self):
+    def test_accepts_a_colourful_english_prompt(self):
         validate_visual_prompt(VALID_PROMPT)
+
+    def test_rejects_a_prompt_without_colour(self):
+        prompt = (
+            "A lone wooden chair standing on a flooded street at dusk, its "
+            "shadow stretching across the wet asphalt, an enormous concrete "
+            "wall rising behind it, heavy overcast sky, wide composition with "
+            "generous negative space, subtle film grain, somber mood, "
+            "editorial photography style, dramatic side lighting"
+        )
+
+        with pytest.raises(VisualPromptGenerationError, match="color"):
+            validate_visual_prompt(prompt)
 
     def test_rejects_an_empty_prompt(self):
         with pytest.raises(VisualPromptGenerationError, match="vacío"):
@@ -143,6 +158,19 @@ class TestSpanishHeuristic:
 
     def test_flags_a_spanish_prompt(self):
         assert looks_like_spanish("los muros del sur para la gente") is True
+
+
+class TestColourSignal:
+    """Detección de señales cromáticas en un prompt positivo."""
+
+    def test_detects_a_named_colour(self):
+        assert has_colour_signal("a red flag over a grey wall") is True
+
+    def test_detects_the_word_palette(self):
+        assert has_colour_signal("soft palette with gentle contrast") is True
+
+    def test_ignores_a_colourless_prompt(self):
+        assert has_colour_signal("a dark room with a single chair") is False
 
 
 # ---------------------------------------------------------------------------

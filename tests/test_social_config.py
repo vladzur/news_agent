@@ -269,6 +269,31 @@ class TestRepositoryConfigCoherence:
         assert "letters" in negative
         assert "watermark" in negative
 
+    def test_visual_style_prefers_colourful_digital_art(self, social_config):
+        style = social_config["visual_prompts"]["style"].lower()
+
+        assert "digital" in style
+        assert "caricature" in style
+        assert "saturated" in style
+
+    def test_negative_prompt_excludes_dull_results(self, social_config):
+        negative = social_config["visual_prompts"]["negative_prompt"].lower()
+
+        assert "desaturated" in negative
+        assert "monochrome" in negative
+
+    def test_negative_prompt_excludes_photorealistic_portraits(self, social_config):
+        negative = social_config["visual_prompts"]["negative_prompt"].lower()
+
+        assert "deepfake" in negative
+        assert "photorealistic" in negative
+
+    def test_negative_prompt_does_not_ban_public_figures(self, social_config):
+        negative = social_config["visual_prompts"]["negative_prompt"].lower()
+
+        assert "public figures" not in negative
+        assert "real faces" not in negative
+
     def test_aspect_ratios_cover_every_platform(self, social_config):
         platforms = set()
         for spec in social_config["visual_prompts"]["aspect_ratios"].values():

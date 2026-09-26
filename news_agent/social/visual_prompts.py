@@ -4,10 +4,13 @@ Los prompts alimentan Flux.1, SDXL o Midjourney. El subsistema no genera
 imágenes: entrega al diseñador un prompt positivo en inglés, el prompt
 negativo de marca y una variante lista para Midjourney.
 
-La restricción central es que la imagen no contenga texto ni personas reales
-identificables. Esa regla se verifica en código, no solo en el prompt, porque
-los modelos de difusión tienden a inventar tipografía y a reproducir rostros
-de figuras públicas.
+La restricción central es que la imagen no contenga texto. Esa regla se
+verifica en código, no solo en el prompt, porque los modelos de difusión
+tienden a inventar tipografía. El retrato de personas reales queda acotado a
+caricaturas estilizadas de figuras públicas nombradas en el artículo, nunca a
+retratos fotorrealistas. Del mismo modo, se exige que cada prompt nombre una
+paleta de color: los prompts sin señales cromáticas devuelven ilustraciones
+planas y sin contraste, que es justo el resultado que se busca evitar.
 """
 
 import logging
@@ -91,6 +94,17 @@ _SPANISH_WORD_RE = re.compile(
 # Cantidad de señales en español a partir de la cual se rechaza el prompt
 _SPANISH_SIGNAL_THRESHOLD = 2
 
+# Señales de color. Un prompt sin ninguna de estas palabras produce imágenes
+# planas y desaturadas, así que su ausencia se rechaza.
+_COLOUR_SIGNAL_RE = re.compile(
+    r"\b(?:red|crimson|scarlet|vermilion|orange|amber|yellow|gold|golden|"
+    r"lime|olive|emerald|green|teal|turquoise|cyan|blue|azure|navy|"
+    r"indigo|violet|purple|magenta|pink|rose|brown|rust|sepia|terracotta|"
+    r"beige|cream|black|white|grey|gray|charcoal|neon|pastel|"
+    r"iridescent|rainbow|colou?rs?|colou?rful|vivid|saturated|palette)\b",
+    re.IGNORECASE,
+)
+
 # Nota que se agrega al prompt cuando la respuesta anterior no fue utilizable
 _RETRY_NOTE = (
     "\n\n## Correction\n\nYour previous answer was not usable ({reason}). "
@@ -157,6 +171,23 @@ def looks_like_spanish(text: str) -> bool:
     return spanish_signal_count(text) >= _SPANISH_SIGNAL_THRESHOLD
 
 
+def has_colour_signal(prompt: str) -> bool:
+    """Indica si un prompt nombra alguna señal cromática.
+
+    Los modelos de difusión devuelven ilustraciones planas y sin contraste
+    cuando el prompt no menciona color. La marca pide arte digital vívido, así
+    que se exige al menos una palabra de color, la palabra "palette" o un
+    término de intensidad cromática.
+
+    Args:
+        prompt: Prompt positivo en inglés.
+
+    Returns:
+        bool: True si el prompt nombra color.
+    """
+    return _COLOUR_SIGNAL_RE.search(prompt or "") is not None
+
+
 def validate_visual_prompt(prompt: str) -> None:
     """Valida un prompt positivo contra las restricciones de marca.
 
@@ -165,8 +196,9 @@ def validate_visual_prompt(prompt: str) -> None:
 
     Raises:
         VisualPromptGenerationError: Si el prompt está vacío, tiene un largo
-                                     fuera de rango, no está en inglés o
-                                     describe texto.
+                                     fuera de rango, no está en inglés, no
+                                     nombra una paleta de color o describe
+                                     texto.
     """
     words = prompt.split()
     if not words:
@@ -181,6 +213,12 @@ def validate_visual_prompt(prompt: str) -> None:
         raise VisualPromptGenerationError(
             "El prompt visual debe estar en inglés, pero se detectaron "
             "palabras funcionales en español."
+        )
+
+    if not has_colour_signal(prompt):
+        raise VisualPromptGenerationError(
+            "El prompt visual no nombra ninguna paleta de color; se rechaza "
+            "porque produce ilustraciones planas y sin contraste."
         )
 
     artifacts = _find_text_artifacts(prompt)
