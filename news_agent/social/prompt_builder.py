@@ -6,8 +6,10 @@ Hay dos familias de prompts, con contratos deliberadamente distintos:
   esquema se genera desde la configuración para que el prompt y el validador
   nunca se separen.
 - **Prompts visuales**: salida en inglés, pensada para Flux.1, SDXL y
-  Midjourney, con la restricción de no incluir texto ni personas reales
-  identificables en la imagen.
+  Midjourney, con arte digital vívido y caricatura estilizada como estilo \
+  por defecto y paleta de color obligatoria. La imagen no puede contener \
+  texto, y el retrato de personas reales queda acotado a caricaturas \
+  estilizadas de figuras públicas nombradas en el artículo.
 
 Ambas familias separan la identidad editorial (system prompt) de la tarea y el
 esquema de salida (user prompt), igual que el resto del agente.
@@ -122,28 +124,46 @@ that a designer will paste into a diffusion model.
 as artefacts, so never describe signs, headlines, labels, numbers, documents \
 with legible writing, banners or logos. If the concept needs a poster or a \
 newspaper, describe it as blurred, folded or out of focus.
-3. Never depict real, identifiable people. No politicians, no public figures, \
-no recognisable faces. Represent power, the state or the people through \
-symbolic and abstract imagery instead (an empty podium, a fence casting a \
-shadow, a hand releasing a paper bird, a lit match in the rain).
-4. No explicit violence: no blood, no wounds, no weapons aimed at people, no \
-bodies. Convey conflict through tension, composition and metaphor.
-5. No brand names, no watermarks, no artist signatures, no UI elements.
+3. Public figures may be caricatured, but only the ones **named in the \
+article material**: presidents, senators, mayors, ministers, party leaders. \
+Exaggerate their features, posture and props so they read as caricature. \
+Never invent people the article does not mention.
+4. Never depict private individuals. Victims, neighbours, workers, minors and \
+anyone named only as an affected party must not be shown recognisably: keep \
+their faces turned away, in shadow or abstracted into shapes.
+5. Caricatures must always look drawn, never photographic. No photorealistic \
+portraits, no deepfake realism, no fake photojournalism about real people.
+6. No explicit violence: no blood, no wounds, no weapons aimed at people, no \
+bodies. Convey conflict through tension, composition and metaphor. Never show \
+violence against a real person.
+7. No brand names, no watermarks, no artist signatures, no UI elements.
 
 ## Style
 
-- Editorial conceptual illustration with a political-poster sensibility: \
-symbolism, metaphor, collage, chiaroscuro lighting, strong silhouettes.
-- Muted, desaturated palette built on dark neutrals and bone whites, with a \
-single saturated accent colour used sparingly.
-- Subtle film grain and print texture, as if it were a magazine cover.
+- Default to vivid digital art and stylised editorial caricature, never \
+austere conceptual minimalism: expressive characters, exaggerated \
+proportions, oversized objects and playful composition.
+- Colour is mandatory. Every prompt must name a concrete, saturated palette, \
+for example "electric teal and warm amber" or "crimson red against sunlit \
+yellow". Never propose monochrome, desaturated or grey-only palettes.
+- Name the medium or technique explicitly: digital painting, caricature, \
+cartoon illustration, cel-shaded 3D render, graphic-novel ink, and so on.
+- Exaggerate through scale and proportion: a colossal hand, a towering \
+figure, one oversized object dominating a tiny landscape.
+- Named public figures become caricatures: instantly recognisable through \
+exaggerated features, posture and props, always illustrated, never \
+photographic. Everyone else stays a generic archetype: a nameless \
+bureaucrat, a generic worker, a faceless crowd.
+- Keep a critical and satirical tone: irony and humour are welcome, cruelty \
+towards victims is not.
 - Describe, in this order: subject and metaphor, composition and framing, \
-lighting, palette, mood, medium and style. Comma-separated descriptors, \
-never instructions such as "generate" or "create an image of".
+colour palette, lighting, mood, medium and style. Comma-separated \
+descriptors, never instructions such as "generate" or "create an image of".
 - Aim for 60 to 120 words per prompt.
-- The three prompts must share one coherent visual concept, adapted to each \
-aspect ratio. In the vertical format, keep the top and bottom areas free of \
-essential elements, because the platform interface covers them.
+- The three prompts must share one coherent visual concept and one shared \
+palette, adapted to each aspect ratio. In the vertical format, keep the top \
+and bottom areas free of essential elements, because the platform interface \
+covers them.
 """
 
 
@@ -398,8 +418,8 @@ def build_visual_prompt_user_prompt(
         "",
         ("Write one English image-generation prompt for each of the aspect "
         "ratios listed below, based on the article material. The three "
-        "prompts must describe the same visual concept adapted to each "
-        "frame."),
+        "prompts must describe the same visual concept and share one colour "
+        "palette, adapted to each frame."),
         "",
         "## Article material",
         "",
@@ -432,6 +452,31 @@ def build_visual_prompt_user_prompt(
 
     parts.extend(["", "## Style directive (apply to every prompt)", "", style])
 
+    parts.extend(
+        [
+            "",
+            "## Style requirements (apply to every prompt)",
+            "",
+            ("1. Name a concrete, saturated colour palette in every prompt. "
+            "A prompt without a named palette is rejected."),
+            ("2. Name the medium or technique explicitly: digital painting, "
+            "caricature, cartoon illustration, cel-shaded render, "
+            "graphic-novel ink, and so on."),
+            ("3. Prefer vivid, colourful digital art and stylised caricature "
+            "over austere conceptual illustration."),
+            ("4. Keep one shared palette across the three prompts so the set "
+            "reads as a single campaign."),
+            ("5. Caricature the public figures named in the article material "
+            "(presidents, senators, mayors, ministers, party leaders) with "
+            "exaggerated, clearly illustrated features."),
+            ("6. Never invent people, and never depict victims, minors or "
+            "private individuals recognisably: keep their faces turned away "
+            "or abstracted into shapes."),
+            ("7. Keep every caricature clearly drawn, never photorealistic: "
+            "no fake photographs and no deepfake realism."),
+        ]
+    )
+
     parts.extend(["", "## Aspect ratios", ""])
     if isinstance(aspects, dict):
         for name, spec in aspects.items():
@@ -456,7 +501,7 @@ def build_visual_prompt_user_prompt(
             '  "prompts": [',
             "    {",
             '      "aspect": "landscape",',
-            '      "prompt": "English prompt of 60 to 120 words",',
+            '      "prompt": "English prompt with a named palette and medium",',
             ('      "extra_negative": "Comma-separated artefacts to avoid, '
             'may be an empty string"'),
             "    }",
@@ -468,6 +513,8 @@ def build_visual_prompt_user_prompt(
             "names listed above."),
             ("- `prompt` must be written in English and must never mention "
             "text, letters, signs or numbers."),
+            ("- `prompt` must always name a saturated colour palette and a "
+            "medium or technique, and must aim for 60 to 120 words."),
             ("- `extra_negative` adds article-specific artefacts to avoid on "
             "top of the standard negative prompt. Never repeat the standard "
             "negative prompt here."),

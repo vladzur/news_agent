@@ -66,8 +66,8 @@
     }
   },
   "visual_prompts": {
-    "style": "editorial conceptual illustration, political newspaper collage aesthetic, high-contrast chiaroscuro lighting, desaturated muted palette with a single saturated accent color, subtle film grain, symbolic and metaphorical imagery, cinematic composition, editorial magazine cover quality",
-    "negative_prompt": "text, letters, words, typography, numbers, captions, subtitles, watermark, signature, logo, brand marks, ui elements, screenshots, charts with labels, recognizable real faces, identifiable public figures, celebrity likeness, deformed hands, extra fingers, extra limbs, low quality, blurry, jpeg artifacts, oversaturated colors",
+    "style": "vibrant digital art and stylised editorial caricature, expressive exaggerated figures with playful proportions, rich saturated colour palette of crimson red, warm yellow and deep teal, bold cinematic lighting, textured digital painting with visible brushwork, satirical and critical tone, high detail, magazine cover quality",
+    "negative_prompt": "text, letters, words, typography, numbers, captions, subtitles, watermark, signature, logo, brand marks, ui elements, screenshots, charts with labels, photorealistic deepfake, hyperrealistic photograph, fake photojournalism, uncanny realistic face, deformed hands, extra fingers, extra limbs, low quality, blurry, jpeg artifacts, desaturated, monochrome, grayscale, washed-out colors, dull grey palette, flat unlit shading, unfinished sketch",
     "midjourney_suffix": "--style raw --v 6.1",
     "aspect_ratios": {
       "landscape": {

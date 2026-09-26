@@ -208,12 +208,14 @@ def visual_payload() -> dict:
         dict: Payload con un prompt por aspecto declarado.
     """
     base = (
-        "A lone wooden chair standing on a flooded city street at dusk, its "
-        "shadow stretching into the water, an enormous concrete wall rising "
-        "behind it, cold blue-grey palette with a single ember-red glow on the "
-        "horizon, heavy overcast sky, wide composition with generous negative "
-        "space, muted desaturated tones, subtle film grain, editorial "
-        "conceptual photography style, dramatic chiaroscuro lighting"
+        "A stylised editorial caricature of a nameless official in an "
+        "oversized suit standing on a flooded city street at dusk, a towering "
+        "concrete wall looming behind him with a defiant grin painted across "
+        "it, vibrant digital painting with a bold saturated teal and warm "
+        "amber palette, glowing crimson-red horizon, expressive brush strokes "
+        "and cel shading, wide composition with generous negative space, "
+        "dramatic coloured rim light, witty and critical mood, high detail, "
+        "magazine cover quality"
     )
     return {
         "prompts": [

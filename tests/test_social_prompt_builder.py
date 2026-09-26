@@ -152,16 +152,50 @@ class TestVisualSystemPrompt:
 
         assert "NO text" in prompt
 
-    def test_forbids_identifiable_people(self, social_config):
+    def test_allows_caricaturing_named_public_figures(self, social_config):
         prompt = build_visual_prompt_system_prompt(social_config)
 
-        assert "identifiable people" in prompt
-        assert "politicians" in prompt
+        assert "caricature" in prompt.lower()
+        assert "public figures" in prompt
+
+    def test_requires_named_within_the_article(self, social_config):
+        prompt = build_visual_prompt_system_prompt(social_config)
+
+        assert "named in the article" in prompt
+
+    def test_forbids_photorealistic_portraits(self, social_config):
+        prompt = build_visual_prompt_system_prompt(social_config).lower()
+
+        assert "photorealistic" in prompt
+        assert "deepfake" in prompt
+
+    def test_protects_private_individuals(self, social_config):
+        prompt = build_visual_prompt_system_prompt(social_config).lower()
+
+        assert "private individuals" in prompt
+        assert "victims" in prompt
 
     def test_forbids_explicit_violence(self, social_config):
         prompt = build_visual_prompt_system_prompt(social_config)
 
         assert "No explicit violence" in prompt
+
+    def test_prefers_colourful_digital_art(self, social_config):
+        prompt = build_visual_prompt_system_prompt(social_config).lower()
+
+        assert "digital art" in prompt
+        assert "caricature" in prompt
+
+    def test_requires_a_named_colour_palette(self, social_config):
+        prompt = build_visual_prompt_system_prompt(social_config)
+
+        assert "Colour is mandatory" in prompt
+
+    def test_forbids_colourless_palettes(self, social_config):
+        prompt = build_visual_prompt_system_prompt(social_config).lower()
+
+        assert "monochrome" in prompt
+        assert "desaturated" in prompt
 
 
 class TestVisualUserPrompt:
@@ -219,3 +253,30 @@ class TestVisualUserPrompt:
         prompt = build_visual_prompt_user_prompt(article, social_copy, social_config)
 
         assert "Markdown code fences" in prompt
+
+    def test_states_the_style_requirements(self, article, social_copy, social_config):
+        prompt = build_visual_prompt_user_prompt(article, social_copy, social_config)
+
+        assert "Style requirements" in prompt
+        assert "Name a concrete, saturated colour palette" in prompt
+
+    def test_rejects_prompts_without_a_named_palette(
+        self, article, social_copy, social_config
+    ):
+        prompt = build_visual_prompt_user_prompt(article, social_copy, social_config)
+
+        assert "without a named palette is rejected" in prompt
+
+    def test_requests_caricatures_of_named_public_figures(
+        self, article, social_copy, social_config
+    ):
+        prompt = build_visual_prompt_user_prompt(article, social_copy, social_config)
+
+        assert "Caricature the public figures named in the article" in prompt
+
+    def test_forbids_recognisable_private_individuals(
+        self, article, social_copy, social_config
+    ):
+        prompt = build_visual_prompt_user_prompt(article, social_copy, social_config)
+
+        assert "private individuals" in prompt
