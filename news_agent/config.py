@@ -146,6 +146,52 @@ SOCIAL_FONT_REGULAR_CANDIDATES = (
 )
 
 # ---------------------------------------------------------------------------
+# Constantes del subsistema de tríptico impreso
+# ---------------------------------------------------------------------------
+# El tríptico condensa la pauta completa (cinco propuestas) en una hoja oficio
+# doblada en tres: cinco mini-notas, una por propuesta, más un panel de
+# portada. Cada nota se mide contra el tope de una columna y media y, si se
+# pasa, solo se advierte: el texto nunca se recorta de forma automática porque
+# un recorte mutila la redacción.
+TRIPTYCH_MAX_TOKENS = 8192
+TRIPTYCH_REASONING_EFFORT = "high"
+# Más baja que la del copy de RRSS: el texto impreso debe ser sobrio y fiel a
+# la pauta, no ingenioso.
+TRIPTYCH_TEMPERATURE = 0.3
+# Reintentos cuando la respuesta del modelo no trae un objeto JSON válido.
+TRIPTYCH_JSON_MAX_RETRIES = 2
+# Bajo este largo la nota no tiene material suficiente para publicarse: es un
+# error estructural y no una advertencia de estilo.
+TRIPTYCH_NOTE_MIN_CHARS = 250
+
+# Geometría por defecto: hoja oficio (21,59 x 33,02 cm) con margen de 15 mm.
+TRIPTYCH_PAGE_WIDTH_MM = 215.9
+TRIPTYCH_PAGE_HEIGHT_MM = 330.2
+TRIPTYCH_MARGIN_MM = 15.0
+TRIPTYCH_COLUMNS_PER_SIDE = 3
+TRIPTYCH_SIDES = 2
+TRIPTYCH_FOLD_TYPES = ("roll", "gate", "z")
+TRIPTYCH_DEFAULT_FOLD = "roll"
+
+# Tipografía: monospace de 12 pt. El avance de carácter se expresa en emes
+# (DejaVu Sans Mono avanza 0,6025 em) porque es lo que convierte los puntos en
+# ancho y permite derivar cuántos caracteres entran en cada columna.
+TRIPTYCH_FONT_FAMILY = "monospace"
+TRIPTYCH_FONT_SIZE_PT = 12.0
+TRIPTYCH_CHAR_WIDTH_EM = 0.6025
+TRIPTYCH_LINE_HEIGHT_RATIO = 1.2
+
+# Tope de largo de cada nota y objetivo de redacción que se le pide al modelo.
+TRIPTYCH_BLOCK_MAX_COLUMNS = 1.5
+TRIPTYCH_BODY_TARGET_CHARS = 700
+TRIPTYCH_KEY_DATA_ITEMS = 3
+TRIPTYCH_MAX_WORDS_PER_SENTENCE = 15
+
+# Directorio de salida y archivo de configuración del tríptico impreso.
+DEFAULT_PRINT_OUTPUT_DIR = "impresos"
+TRIPTYCH_CONFIG_PATH = "triptych_config.json"
+
+# ---------------------------------------------------------------------------
 # Directorios de salida por defecto del CLI por subcomandos
 # ---------------------------------------------------------------------------
 # El CLI de subcomandos (report/article/social/all/clean) usa estos
@@ -544,6 +590,305 @@ def load_social_config(path: str | Path | None = None) -> dict:
     _validate_social_sections(data)
     _validate_brand_section(data["brand"])
     _validate_banners_section(data["banners"])
+
+    return data
+
+
+def _read_triptych_config_file(file_path: Path) -> dict:
+    """Lee el archivo JSON de configuración del tríptico impreso.
+
+    Args:
+        file_path: Ruta al archivo JSON.
+
+    Returns:
+        dict: Contenido del archivo.
+
+    Raises:
+        ConfigurationError: Si el archivo no existe, no es JSON válido o no
+                            contiene un objeto.
+    """
+    if not file_path.exists():
+        raise ConfigurationError(
+            f"Archivo de configuración del tríptico no encontrado: "
+            f"{file_path.resolve()}"
+        )
+
+    try:
+        with open(file_path, encoding="utf-8") as fh:
+            data = json.load(fh)
+    except json.JSONDecodeError as exc:
+        raise ConfigurationError(
+            f"El archivo {file_path.resolve()} no contiene JSON válido: {exc}"
+        ) from exc
+
+    if not isinstance(data, dict):
+        raise ConfigurationError(
+            f"Se esperaba un objeto JSON en {file_path.resolve()}, "
+            f"pero se encontró {type(data).__name__}."
+        )
+
+    return data
+
+
+def _is_number(value: object) -> bool:
+    """Comprueba que el valor sea un número, excluyendo los booleanos.
+
+    Args:
+        value: Valor a comprobar.
+
+    Returns:
+        bool: True si es un entero o un decimal real.
+    """
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _require_positive_number(section: str, field: str, value: object) -> None:
+    """Exige que un campo de configuración sea un número mayor que cero.
+
+    Args:
+        section: Nombre de la sección, para el mensaje de error.
+        field: Nombre del campo, para el mensaje de error.
+        value: Valor declarado.
+
+    Raises:
+        ConfigurationError: Si el valor no es un número positivo.
+    """
+    if not _is_number(value) or value <= 0:
+        raise ConfigurationError(
+            f"El campo '{field}' de la sección '{section}' del tríptico debe "
+            f"ser un número mayor que cero, pero es {value!r}."
+        )
+
+
+def _require_positive_int(section: str, field: str, value: object) -> None:
+    """Exige que un campo de configuración sea un entero mayor que cero.
+
+    Args:
+        section: Nombre de la sección, para el mensaje de error.
+        field: Nombre del campo, para el mensaje de error.
+        value: Valor declarado.
+
+    Raises:
+        ConfigurationError: Si el valor no es un entero positivo.
+    """
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        raise ConfigurationError(
+            f"El campo '{field}' de la sección '{section}' del tríptico debe "
+            f"ser un entero mayor que cero, pero es {value!r}."
+        )
+
+
+def _validate_triptych_sections(data: dict) -> None:
+    """Valida que estén las secciones obligatorias del tríptico.
+
+    Args:
+        data: Contenido del archivo de configuración.
+
+    Raises:
+        ConfigurationError: Si falta una sección o no es un objeto JSON.
+    """
+    for section in ("page", "typography", "limits", "style", "layout"):
+        if section not in data:
+            raise ConfigurationError(
+                "La configuración del tríptico no tiene la sección "
+                f"obligatoria '{section}'."
+            )
+        if not isinstance(data[section], dict):
+            raise ConfigurationError(
+                f"La sección '{section}' de la configuración del tríptico "
+                f"debe ser un objeto JSON, pero es "
+                f"{type(data[section]).__name__}."
+            )
+
+
+def _validate_triptych_page(page: dict) -> None:
+    """Valida la sección 'page': geometría y pliegue de la hoja.
+
+    Args:
+        page: Sección 'page' de la configuración.
+
+    Raises:
+        ConfigurationError: Si falta una medida, el margen deja la hoja sin
+                            área útil, o el pliegue es desconocido.
+    """
+    for field in ("width_mm", "height_mm", "margin_mm"):
+        if field not in page:
+            raise ConfigurationError(
+                f"La sección 'page' del tríptico requiere el campo '{field}'."
+            )
+        _require_positive_number("page", field, page[field])
+
+    if "columns_per_side" not in page:
+        raise ConfigurationError(
+            "La sección 'page' del tríptico requiere el campo "
+            "'columns_per_side'."
+        )
+    _require_positive_int("page", "columns_per_side", page["columns_per_side"])
+
+    sides = page.get("sides", TRIPTYCH_SIDES)
+    if sides not in (1, 2):
+        raise ConfigurationError(
+            "El campo 'sides' de la sección 'page' del tríptico debe ser 1 o "
+            f"2, pero es {sides!r}."
+        )
+
+    fold = page.get("fold", TRIPTYCH_DEFAULT_FOLD)
+    if fold not in TRIPTYCH_FOLD_TYPES:
+        raise ConfigurationError(
+            "El campo 'fold' de la sección 'page' del tríptico debe ser uno "
+            f"de {', '.join(TRIPTYCH_FOLD_TYPES)}, pero es {fold!r}."
+        )
+
+    # Un margen que se come la hoja haría imposible maquetar texto: se detecta
+    # al cargar en lugar de producir un presupuesto de cero caracteres.
+    usable_width = page["width_mm"] - 2 * page["margin_mm"]
+    if usable_width <= 0:
+        raise ConfigurationError(
+            "El margen de la sección 'page' del tríptico es demasiado "
+            f"grande: deja {usable_width:.1f} mm de ancho útil."
+        )
+
+    usable_height = page["height_mm"] - 2 * page["margin_mm"]
+    if usable_height <= 0:
+        raise ConfigurationError(
+            "El margen de la sección 'page' del tríptico es demasiado "
+            f"grande: deja {usable_height:.1f} mm de alto útil."
+        )
+
+
+def _validate_triptych_typography(typography: dict) -> None:
+    """Valida la sección 'typography': familia y medidas del texto.
+
+    Args:
+        typography: Sección 'typography' de la configuración.
+
+    Raises:
+        ConfigurationError: Si falta un campo o su valor no es utilizable.
+    """
+    family = typography.get("family")
+    if not isinstance(family, str) or not family.strip():
+        raise ConfigurationError(
+            "El campo 'family' de la sección 'typography' del tríptico debe "
+            f"ser un texto no vacío, pero es {family!r}."
+        )
+
+    for field in ("size_pt", "char_width_em", "line_height_ratio"):
+        if field not in typography:
+            raise ConfigurationError(
+                "La sección 'typography' del tríptico requiere el campo "
+                f"'{field}'."
+            )
+        _require_positive_number("typography", field, typography[field])
+
+
+def _validate_triptych_limits(limits: dict) -> None:
+    """Valida la sección 'limits': topes de largo de cada nota.
+
+    Args:
+        limits: Sección 'limits' de la configuración.
+
+    Raises:
+        ConfigurationError: Si falta un campo o su valor no es utilizable.
+    """
+    if "block_max_columns" not in limits:
+        raise ConfigurationError(
+            "La sección 'limits' del tríptico requiere el campo "
+            "'block_max_columns'."
+        )
+    if "body_target_chars" not in limits:
+        raise ConfigurationError(
+            "La sección 'limits' del tríptico requiere el campo "
+            "'body_target_chars'."
+        )
+
+    _require_positive_number(
+        "limits", "block_max_columns", limits["block_max_columns"]
+    )
+    _require_positive_int("limits", "body_target_chars", limits["body_target_chars"])
+
+
+def _validate_triptych_style(style: dict) -> None:
+    """Valida la sección 'style': reglas de lenguaje simple.
+
+    Args:
+        style: Sección 'style' de la configuración.
+
+    Raises:
+        ConfigurationError: Si falta un campo o su valor no es utilizable.
+    """
+    if "max_words_per_sentence" not in style:
+        raise ConfigurationError(
+            "La sección 'style' del tríptico requiere el campo "
+            "'max_words_per_sentence'."
+        )
+    _require_positive_int(
+        "style", "max_words_per_sentence", style["max_words_per_sentence"]
+    )
+
+    for field in ("acronym_allowlist", "forbidden_terms"):
+        value = style.get(field, [])
+        if not isinstance(value, list) or not all(
+            isinstance(item, str) for item in value
+        ):
+            raise ConfigurationError(
+                f"El campo '{field}' de la sección 'style' del tríptico debe "
+                f"ser una lista de textos, pero es {value!r}."
+            )
+
+
+def _validate_triptych_layout(layout: dict) -> None:
+    """Valida la sección 'layout': paneles y bloques de cada nota.
+
+    Args:
+        layout: Sección 'layout' de la configuración.
+
+    Raises:
+        ConfigurationError: Si falta un campo o su valor no es utilizable.
+    """
+    for field in ("notes", "key_data_items"):
+        if field not in layout:
+            raise ConfigurationError(
+                f"La sección 'layout' del tríptico requiere el campo '{field}'."
+            )
+        _require_positive_int("layout", field, layout[field])
+
+
+def load_triptych_config(path: str | Path | None = None) -> dict:
+    """Carga la configuración del tríptico impreso.
+
+    El archivo declara la geometría de la hoja (oficio), la tipografía
+    monospace, los topes de largo y las reglas de lenguaje simple. Mantenerlo
+    en JSON permite ajustar la medida del papel o el tope de columnas sin
+    tocar código, del mismo modo que ``social_config.json`` desacopla la
+    identidad visual del subsistema de RRSS.
+
+    Args:
+        path: Ruta al archivo JSON. Si es None, se usa TRIPTYCH_CONFIG_PATH.
+
+    Returns:
+        dict: Configuración completa con las claves 'page', 'typography',
+              'limits', 'style', 'layout' y, opcionalmente, 'brand'.
+
+    Raises:
+        ConfigurationError: Si el archivo no existe, no es JSON válido, o no
+                            tiene la estructura mínima requerida.
+    """
+    file_path = Path(path) if path else Path(TRIPTYCH_CONFIG_PATH)
+    data = _read_triptych_config_file(file_path)
+
+    _validate_triptych_sections(data)
+    _validate_triptych_page(data["page"])
+    _validate_triptych_typography(data["typography"])
+    _validate_triptych_limits(data["limits"])
+    _validate_triptych_style(data["style"])
+    _validate_triptych_layout(data["layout"])
+
+    brand = data.get("brand")
+    if brand is not None and not isinstance(brand, dict):
+        raise ConfigurationError(
+            "La sección 'brand' de la configuración del tríptico debe ser un "
+            f"objeto JSON, pero es {type(brand).__name__}."
+        )
 
     return data
 

@@ -1,0 +1,46 @@
+{
+  "page": {
+    "preset": "oficio",
+    "width_mm": 215.9,
+    "height_mm": 330.2,
+    "margin_mm": 15.0,
+    "columns_per_side": 3,
+    "sides": 2,
+    "fold": "roll"
+  },
+  "typography": {
+    "family": "monospace",
+    "size_pt": 12.0,
+    "char_width_em": 0.6025,
+    "line_height_ratio": 1.2
+  },
+  "limits": {
+    "block_max_columns": 1.5,
+    "body_target_chars": 700
+  },
+  "style": {
+    "max_words_per_sentence": 15,
+    "acronym_allowlist": [
+      "ONU",
+      "PDI",
+      "INDH",
+      "EE.UU.",
+      "TIAR",
+      "PS",
+      "UDI",
+      "RN",
+      "DF"
+    ],
+    "forbidden_terms": []
+  },
+  "layout": {
+    "notes": 5,
+    "key_data_items": 3
+  },
+  "brand": {
+    "name": "La Chispa Sur",
+    "handle": "@lachispasur",
+    "website": "lachispasur.cl",
+    "logo_path": "assets/logo_lachispasur.png"
+  }
+}
