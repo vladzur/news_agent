@@ -7,7 +7,8 @@ para el uso diario:
     report   Genera la pauta editorial semanal desde los feeds RSS.
     article  Escribe una nota completa desde una propuesta de la pauta.
     social   Genera el bundle de redes sociales de un artículo.
-    all      Encadena los tres pasos anteriores en una sola ejecución.
+    print    Genera el tríptico impreso desde la pauta semanal.
+    all      Encadena los cuatro pasos anteriores en una sola ejecución.
     clean    Elimina los artefactos generados con más de N días.
 
 Cuando un paso necesita una entrada y no se indica una ruta explícita, el CLI
@@ -18,6 +19,7 @@ Uso:
     python -m news_agent report --feeds rss_feeds.json
     python -m news_agent article --number 2
     python -m news_agent social --platforms x,instagram
+    python -m news_agent print
     python -m news_agent all --number 1
     python -m news_agent clean --days 30 --dry-run
 """
@@ -39,12 +41,14 @@ from .cleanup import (
 from .config import (
     DEFAULT_ARTICLES_DIR,
     DEFAULT_CLEAN_MAX_AGE_DAYS,
+    DEFAULT_PRINT_OUTPUT_DIR,
     DEFAULT_REPORTS_DIR,
     DEFAULT_SOCIAL_OUTPUT_DIR,
     NUM_PROPOSALS,
 )
 from .orchestrator import run_pipeline
 from .social.platform_specs import ALL_PLATFORMS, parse_platforms
+from .triptych.orchestrator import TriptychError, run_print
 
 # Nombre del programa tal como lo invoca el usuario.
 PROGRAM_NAME = "python -m news_agent"
@@ -53,14 +57,22 @@ PROGRAM_NAME = "python -m news_agent"
 CANCELLED_MESSAGE = "\nEjecución cancelada por el usuario."
 
 # Comandos disponibles, en el orden en que se muestran en la ayuda.
-COMMANDS: tuple[str, ...] = ("report", "article", "social", "all", "clean")
+COMMANDS: tuple[str, ...] = (
+    "report",
+    "article",
+    "social",
+    "print",
+    "all",
+    "clean",
+)
 
 # Descripción de una línea de cada comando, usada en la ayuda general.
 COMMAND_DESCRIPTIONS: dict[str, str] = {
     "report": "Genera la pauta editorial semanal desde los feeds RSS.",
     "article": "Escribe una nota completa desde una propuesta de la pauta.",
     "social": "Genera el bundle de redes sociales de un artículo publicado.",
-    "all": "Ejecuta la secuencia completa: pauta, nota y redes sociales.",
+    "print": "Genera el tríptico impreso desde la pauta semanal.",
+    "all": "Ejecuta la secuencia completa: pauta, nota, RRSS y tríptico.",
     "clean": "Elimina los artefactos generados con más de N días.",
 }
 
@@ -100,6 +112,7 @@ def _build_epilog() -> str:
             f"  {PROGRAM_NAME} report --feeds rss_feeds.json",
             f"  {PROGRAM_NAME} article --number 2",
             f"  {PROGRAM_NAME} social --platforms x,instagram",
+            f"  {PROGRAM_NAME} print --pauta reportes/pauta_semanal_2026_09_24.md",
             f"  {PROGRAM_NAME} all --number 1",
             f"  {PROGRAM_NAME} clean --days 30 --dry-run",
         ]
@@ -256,6 +269,48 @@ def _add_social_parser(
     parser.set_defaults(handler=_handle_social)
 
 
+def _add_print_parser(
+    subparsers: argparse._SubParsersAction,
+) -> None:
+    """Registra el subcomando ``print`` (tríptico impreso)."""
+    parser = subparsers.add_parser(
+        "print",
+        help=COMMAND_DESCRIPTIONS["print"],
+        description=(
+            "Genera el tríptico impreso de la semana: una hoja oficio doble "
+            "faz con cinco mini-notas en lenguaje simple, una por propuesta "
+            "de la pauta."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "--pauta",
+        type=str,
+        default=None,
+        metavar="RUTA",
+        help="Ruta a la pauta semanal. Por defecto, la más reciente de "
+        f"{DEFAULT_REPORTS_DIR}/.",
+    )
+    parser.add_argument(
+        "--output",
+        type=str,
+        default=DEFAULT_PRINT_OUTPUT_DIR,
+        metavar="DIR",
+        help=f"Directorio base de los bundles "
+        f"(por defecto: {DEFAULT_PRINT_OUTPUT_DIR}/).",
+    )
+    parser.add_argument(
+        "--triptych-config",
+        type=str,
+        default=None,
+        metavar="RUTA",
+        help="Ruta al JSON de configuración del tríptico "
+        "(por defecto: triptych_config.json).",
+    )
+    parser.add_argument("--verbose", action="store_true", help=VERBOSE_HELP)
+    parser.set_defaults(handler=_handle_print)
+
+
 def _add_all_parser(
     subparsers: argparse._SubParsersAction,
 ) -> None:
@@ -265,7 +320,8 @@ def _add_all_parser(
         help=COMMAND_DESCRIPTIONS["all"],
         description=(
             "Ejecuta la secuencia completa: genera la pauta, escribe la nota "
-            "elegida y produce el bundle de redes sociales, todo de una vez."
+            "elegida, produce el bundle de redes sociales y arma el tríptico "
+            "impreso, todo de una vez."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -283,8 +339,9 @@ def _add_all_parser(
         default=".",
         metavar="DIR",
         help="Directorio base del proyecto: las salidas van a "
-        f"<DIR>/{DEFAULT_REPORTS_DIR}, <DIR>/{DEFAULT_ARTICLES_DIR} y "
-        f"<DIR>/{DEFAULT_SOCIAL_OUTPUT_DIR} (por defecto: .).",
+        f"<DIR>/{DEFAULT_REPORTS_DIR}, <DIR>/{DEFAULT_ARTICLES_DIR}, "
+        f"<DIR>/{DEFAULT_SOCIAL_OUTPUT_DIR} y "
+        f"<DIR>/{DEFAULT_PRINT_OUTPUT_DIR} (por defecto: .).",
     )
     parser.add_argument(
         "-n",
@@ -302,6 +359,14 @@ def _add_all_parser(
         help="Guarda además un JSON intermedio con los artículos procesados.",
     )
     _add_social_platform_options(parser)
+    parser.add_argument(
+        "--triptych-config",
+        type=str,
+        default=None,
+        metavar="RUTA",
+        help="Ruta al JSON de configuración del tríptico "
+        "(por defecto: triptych_config.json).",
+    )
     parser.add_argument("--verbose", action="store_true", help=VERBOSE_HELP)
     parser.set_defaults(handler=_handle_all)
 
@@ -364,7 +429,7 @@ def build_cli_parser() -> argparse.ArgumentParser:
 
     Returns:
         argparse.ArgumentParser: Parser con los comandos report, article,
-        social, all y clean.
+        social, print, all y clean.
     """
     parser = argparse.ArgumentParser(
         prog=PROGRAM_NAME,
@@ -382,6 +447,7 @@ def build_cli_parser() -> argparse.ArgumentParser:
     _add_report_parser(subparsers)
     _add_article_parser(subparsers)
     _add_social_parser(subparsers)
+    _add_print_parser(subparsers)
     _add_all_parser(subparsers)
     _add_clean_parser(subparsers)
 
@@ -698,6 +764,31 @@ def print_social_summary(result: dict[str, Any]) -> None:
     print(f"   🧾 Manifiesto: {result['manifest_path']}")
 
 
+def print_triptych_summary(result: dict[str, Any]) -> None:
+    """Muestra el resumen del bundle del tríptico impreso.
+
+    Args:
+        result: Resumen devuelto por ``run_print``.
+    """
+    print("\n✅ Tríptico impreso generado exitosamente:")
+    print(f"   📁 {result['bundle_dir']}")
+    print(f"   📝 \"{result['title']}\"")
+    print(
+        f"   📄 Paneles: {result['panels']} · "
+        f"Notas: {result['notes']} · Pliegue: {result['fold']}"
+    )
+    if result["overflowing"]:
+        print(
+            f"   ⚠️  {result['overflowing']} nota(s) superan el tope de "
+            "columnas: revisa el manifiesto."
+        )
+    if result["warnings"]:
+        print(f"   ⚠️  Advertencias de estilo: {result['warnings']}")
+    print(f"   📝 Tríptico: {result['triptych_path']}")
+    print(f"   📖 Markdown: {result['markdown_path']}")
+    print(f"   🧾 Manifiesto: {result['manifest_path']}")
+
+
 def _write_article_step(
     pauta_path: Path,
     number: int,
@@ -794,6 +885,39 @@ def run_socialize_step(
         sys.exit(2)
 
 
+def run_print_step(
+    pauta_path: str | Path,
+    output_dir: str | Path,
+    config_path: str | None,
+    verbose: bool,
+) -> dict[str, Any]:
+    """Ejecuta el orquestador del tríptico impreso.
+
+    Args:
+        pauta_path: Ruta a la pauta semanal.
+        output_dir: Directorio base de los bundles.
+        config_path: Ruta a la configuración del tríptico, o None para la
+            default.
+        verbose: Si es True, activa logging DEBUG.
+
+    Returns:
+        dict[str, Any]: Resumen devuelto por ``run_print``.
+
+    Raises:
+        SystemExit: Si el tríptico no se puede generar.
+    """
+    try:
+        return run_print(
+            pauta_path=pauta_path,
+            output_dir=output_dir,
+            config_path=config_path,
+            verbose=verbose,
+        )
+    except TriptychError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+
 # ---------------------------------------------------------------------------
 # Handlers de los subcomandos
 # ---------------------------------------------------------------------------
@@ -850,15 +974,33 @@ def _handle_social(args: argparse.Namespace) -> None:
     print_social_summary(result)
 
 
+def _handle_print(args: argparse.Namespace) -> None:
+    """Ejecuta el subcomando ``print``.
+
+    Args:
+        args: Argumentos ya parseados.
+    """
+    pauta_path = resolve_pauta(args.pauta)
+    output_dir = resolve_output_dir(args.output, DEFAULT_PRINT_OUTPUT_DIR)
+
+    result = run_print_step(
+        pauta_path=pauta_path,
+        output_dir=output_dir,
+        config_path=args.triptych_config,
+        verbose=args.verbose,
+    )
+    print_triptych_summary(result)
+
+
 def _handle_all(args: argparse.Namespace) -> None:
-    """Ejecuta el subcomando ``all`` (pauta, nota y redes sociales).
+    """Ejecuta el subcomando ``all`` (pauta, nota, RRSS y tríptico).
 
     Args:
         args: Argumentos ya parseados.
     """
     base = Path(args.base)
 
-    print("\n▶️  Paso 1/3: generando la pauta editorial...")
+    print("\n▶️  Paso 1/4: generando la pauta editorial...")
     reports_dir = resolve_output_dir(base / DEFAULT_REPORTS_DIR)
     pipeline_result = run_pipeline(
         feeds_path=args.feeds,
@@ -871,14 +1013,14 @@ def _handle_all(args: argparse.Namespace) -> None:
     pauta_path = Path(pipeline_result["report_path"])
     number = resolve_article_number(args.number, pauta_path)
 
-    print("\n▶️  Paso 2/3: escribiendo la nota...")
+    print("\n▶️  Paso 2/4: escribiendo la nota...")
     articles_dir = resolve_output_dir(base / DEFAULT_ARTICLES_DIR)
     article_result = _write_article_step(
         pauta_path, number, articles_dir, args.verbose
     )
     print_article_summary(article_result)
 
-    print("\n▶️  Paso 3/3: generando las piezas para redes sociales...")
+    print("\n▶️  Paso 3/4: generando las piezas para redes sociales...")
     social_dir = resolve_output_dir(base / DEFAULT_SOCIAL_OUTPUT_DIR)
     social_result = run_socialize_step(
         article_path=article_result["article_path"],
@@ -890,6 +1032,16 @@ def _handle_all(args: argparse.Namespace) -> None:
         skip_prompts=args.skip_prompts,
     )
     print_social_summary(social_result)
+
+    print("\n▶️  Paso 4/4: armando el tríptico impreso...")
+    print_dir = resolve_output_dir(base / DEFAULT_PRINT_OUTPUT_DIR)
+    print_result = run_print_step(
+        pauta_path=pauta_path,
+        output_dir=print_dir,
+        config_path=args.triptych_config,
+        verbose=args.verbose,
+    )
+    print_triptych_summary(print_result)
 
     print("\n✅ Secuencia completa finalizada.")
 

@@ -230,26 +230,29 @@ El motor se opera desde un CLI por subcomandos que reduce la ejecución de cada 
 | `report` | Genera la pauta editorial semanal | `--feeds`, `--output`, `--debug` | `reportes/pauta_semanal_AAAA_MM_DD.md` y su companion JSON |
 | `article` | Escribe una nota desde una propuesta | `--pauta`, `-n/--number`, `--output` | `articulos/articulo_N_slug.md` |
 | `social` | Repurposing para redes sociales | `--article`, `--output`, `--platforms`, `--social-config`, `--skip-banners`, `--skip-prompts` | `social/AAAA_MM_DD_slug/` con copys, prompts, Markdown y banners |
-| `all` | Secuencia completa | `--feeds`, `--base`, `-n/--number`, opciones sociales y `--debug` | Los tres anteriores |
+| `print` | Tríptico impreso de la semana | `--pauta`, `--output`, `--triptych-config` | `impresos/AAAA_MM_DD_pauta-semanal/` con el tríptico en JSON, el Markdown panel por panel y el manifiesto |
+| `all` | Secuencia completa | `--feeds`, `--base`, `-n/--number`, opciones sociales, `--triptych-config` y `--debug` | Los cuatro anteriores |
 | `clean` | Limpieza de artefactos antiguos | `--base`, `--target`, `--days`, `--dry-run`, `--yes` | Elimina archivos y bundles |
 
 Todos los comandos aceptan `--verbose`.
 
 ### 7.3. Comando secuencial `all`
 
-Ejecuta, en orden y dentro de una misma invocación: la generación de la pauta, la escritura de la nota elegida y el bundle de redes sociales. La pauta y el artículo recién generados se pasan como entrada al paso siguiente, sin intervención manual. Si un paso falla, la ejecución se detiene con su código de error y no se ejecutan los pasos posteriores.
+Ejecuta, en orden y dentro de una misma invocación: la generación de la pauta, la escritura de la nota elegida, el bundle de redes sociales y el tríptico impreso. La pauta y el artículo recién generados se pasan como entrada al paso siguiente, sin intervención manual. El tríptico se arma desde la pauta del primer paso, así que no depende de la nota elegida. Si un paso falla, la ejecución se detiene con su código de error y no se ejecutan los pasos posteriores.
 
 ### 7.4. Entradas implícitas y directorio de salida
 
 - **Pauta:** si `article` no recibe `--pauta`, toma la más reciente de `reportes/`. El orden lo da el nombre, que incluye la fecha (`AAAA_MM_DD`).
 - **Artículo:** si `social` no recibe `--article`, toma el de fecha de modificación más reciente de `articulos/`, porque las notas no llevan fecha en el nombre.
 - **Propuesta:** si `article` o `all` no reciben `-n/--number`, muestran los cinco titulares y preguntan cuál desarrollar. Sin terminal interactiva (por ejemplo en un cron) la ejecución falla con código 2 y un mensaje que pide `--number`, en lugar de quedar esperando una respuesta que nunca llegará.
-- **Directorio de salida:** si no se indica `--output`, cada flujo usa su carpeta por defecto (`reportes/`, `articulos/` o `social/`) y la crea si no existe. Una ruta que apunte al directorio actual se rechaza con error de uso, en los subcomandos y también en los modos clásicos.
+- **Pauta del tríptico:** si `print` no recibe `--pauta`, toma la más reciente de `reportes/`. El tríptico no pide número de propuesta: cubre las cinco, así que `-n` no aplica.
+- **Directorio de salida:** si no se indica `--output`, cada flujo usa su carpeta por defecto (`reportes/`, `articulos/`, `social/` o `impresos/`) y la crea si no existe. Una ruta que apunte al directorio actual se rechaza con error de uso, en los subcomandos y también en los modos clásicos.
 - **Sin argumentos:** `python -m news_agent` no ejecuta ningún flujo. Muestra la ayuda y sale con código 2, porque el modo clásico por defecto consumiría tokens de la API y escribiría en el directorio actual sin que el usuario lo haya pedido. Los cron deben indicar el flujo y la salida explícitamente.
 
 ### 7.5. Limpieza de artefactos (`clean`)
 
 - **Alcance:** solo los artefactos propios de la herramienta, declarados como patrones en `news_agent/cleanup.py`: pautas y companion JSON de `reportes/`, notas de `articulos/` y bundles de `social/`.
+- **Fuera de alcance:** los bundles de `impresos/` todavía no son un objetivo de `clean`. Se limpian a mano hasta que se agregue su patrón.
 - **Nunca se elimina** la caché de contenido (`cache/`) ni los recursos de la marca (`assets/`): ninguna entrada fuera de los patrones declarados se considera, aunque sea antigua.
 - **Fecha de referencia:** la fecha codificada en el nombre cuando existe (pautas y bundles) y, cuando no (las notas), la fecha de modificación. La fecha del nombre es la fuente fiable: al clonar o copiar el repositorio, todos los archivos quedan con la fecha de la copia.
 - **Umbral:** `--days N` (por defecto `DEFAULT_CLEAN_MAX_AGE_DAYS`, 30). Se elimina lo que supere ese corte; un valor menor que 1 es un error de uso.
@@ -263,7 +266,7 @@ Ejecuta, en orden y dentro de una misma invocación: la generación de la pauta,
 | `__main__.py` | Punto de entrada: distingue los subcomandos de los modos clásicos por banderas |
 | `cli.py` | Parser de subcomandos, localización de entradas recientes, selección interactiva y handlers |
 | `cleanup.py` | Detección y borrado de artefactos antiguos |
-| `config.py` | Directorios de salida por defecto (`reportes/`, `articulos/`, `social/`) y umbral de limpieza |
+| `config.py` | Directorios de salida por defecto (`reportes/`, `articulos/`, `social/`, `impresos/`) y umbral de limpieza |
 
 > **¿Por qué el subcomando se reconoce solo en la primera posición?** Los modos clásicos siempre empiezan con una bandera, así que exigir que el nombre del comando vaya primero evita que un valor que coincida con un comando (por ejemplo `--output social`) se interprete como una invocación del subcomando `social`.
 
@@ -275,3 +278,128 @@ Ejecuta, en orden y dentro de una misma invocación: la generación de la pauta,
 | `1` | Error de ejecución: configuración, API, pauta imposible de parsear, artefacto de entrada inexistente |
 | `2` | Error de uso: comando desconocido, opción inválida, plataforma desconocida, falta `--number` sin terminal o `--days` no positivo |
 | `130` | Interrupción con Ctrl+C |
+
+## 8. Subsistema de Tríptico Impreso
+
+### 8.1. Objetivo
+
+Transformar la pauta semanal completa en una **hoja oficio doblada en tres** —seis paneles, doble faz— con cinco mini-notas en lenguaje simple, una por propuesta, más un panel de portada. A diferencia del subsistema de RRSS, que parte de un artículo ya publicado, el tríptico parte de la **pauta**: es la pieza que se reparte en la calle y la lee alguien que no sigue el noticiero ni lee el diario.
+
+```
+python -m news_agent print
+python -m news_agent print --pauta reportes/pauta_semanal_2026_09_24.md
+```
+
+El subsistema entrega **texto**: el tríptico en JSON, el mismo contenido en Markdown —panel por panel— y un manifiesto con las mediciones y lo que quedó pendiente. No maqueta ni genera PDF ni ilustraciones: el armado final lo hace el equipo de diseño.
+
+### 8.2. Restricción de largo
+
+El cuerpo del tríptico tiene un tope físico: **una columna y media** de una hoja oficio en tipografía monospace de 12 pt. Ese tope se traduce a caracteres, porque el tríptico se mide, no se estima a ojo:
+
+| Medida | Valor |
+|--------|-------|
+| Hoja | oficio, 215,9 × 330,2 mm, con margen de 15 mm |
+| Ancho útil por columna | 61,97 mm |
+| Avance de un carácter monospace de 12 pt | 2,5506 mm |
+| Caracteres por línea | **24** en una columna · **36** en columna y media |
+| Líneas por columna | **59** |
+| Techo de una columna | 1.416 caracteres |
+| Techo del bloque de una nota | **2.124 caracteres** |
+| Objetivo de redacción del cuerpo | 700 caracteres |
+
+Todos esos números se derivan de la configuración en `news_agent/triptych/specs.py`, y el prompt que recibe el modelo usa los mismos valores: lo que se le pide y lo que después se mide no pueden separarse.
+
+El bloque de una nota es el título más el cuerpo, los datos clave, el «por qué te importa» y las fuentes. El tope aplica a ese bloque completo, no solo al cuerpo.
+
+### 8.3. Entrada
+
+El único origen es una **pauta semanal** (`reportes/pauta_semanal_AAAA_MM_DD.md`) y su companion JSON:
+
+- De cada propuesta se toman el título, el enfoque editorial, los puntos clave y las fuentes sugeridas, reutilizando `article_writer.parse_pauta_file`.
+- Del companion se toma el contenido de las noticias que respaldan cada propuesta, reutilizando `source_references.load_companion_data`, con el contenido recortado a `SOURCE_ARTICLE_MAX_CHARS`.
+- **Companion ausente o corrupto:** el flujo continúa con el enfoque y los puntos de la pauta, y lo registra en el log. No es un error.
+- **Pauta ilegible o sin material usable:** error explícito y salida con código 1, antes de invocar a la API.
+
+### 8.4. Contrato de la respuesta
+
+Como el subsistema de RRSS, pide al modelo un **objeto JSON** en lugar de Markdown, con la extracción defensiva de `social/json_utils.py` y reintentos con nota de corrección hasta agotar `TRIPTYCH_JSON_MAX_RETRIES`. El contrato es:
+
+| Campo | Contenido |
+|-------|-----------|
+| `cover.hook` | Gancho de portada, en una línea |
+| `cover.title` | Título de la edición semanal |
+| `notes[]` | Exactamente una nota por propuesta, en orden |
+| `notes[].proposal_number` | Número de la propuesta de la pauta |
+| `notes[].title` | Título en lenguaje llano |
+| `notes[].body` | Qué pasó, en dos o tres párrafos cortos |
+| `notes[].key_data` | Los datos que lo prueban: tres elementos |
+| `notes[].why_it_matters` | Por qué le importa a quien lee |
+
+El panel 1 queda reservado para la portada; las cinco notas ocupan los paneles 2 a 6. Las fuentes de cada nota no las escribe el modelo: se toman de las fuentes sugeridas de su propia propuesta.
+
+### 8.5. Reglas de lenguaje simple
+
+Las cuatro reglas duras del tono se declaran en el system prompt y se verifican después en código:
+
+| Regla | Verificación |
+|-------|--------------|
+| Frases de 15 palabras o menos | Se cuenta cada oración y se advierte las que se pasan |
+| Ninguna sigla sin explicar | Se detectan las mayúsculas sostenidas y se contrastan con `style.acronym_allowlist` |
+| Trato directo al lector | Directriz de redacción |
+| Estructura fija: qué pasó → por qué te importa → los datos que lo prueban | Se verifica que los tres bloques existan y que `key_data` tenga tres elementos |
+
+### 8.6. Política de errores: fatal contra advertencia
+
+| Situación | Respuesta |
+|-----------|-----------|
+| JSON imposible de extraer | Reintento con nota de corrección; agotados los intentos, error |
+| Cantidad de notas distinta de la cantidad de propuestas | Error: no se escribe nada |
+| Nota sin título o sin cuerpo | Error: no se escribe nada |
+| Cuerpo por debajo de `TRIPTYCH_NOTE_MIN_CHARS` | Error: la respuesta no es una nota publicable |
+| Bloque que supera una columna y media | **Advertencia.** Nunca se recorta: el texto se escribe completo y el aviso viaja al Markdown y al manifiesto |
+| Oración larga, sigla sin explicar o término a evitar | **Advertencia**, con el texto culpable citado |
+| Cantidad de datos clave distinta de tres | **Advertencia** |
+
+La distinción es deliberada: un recorte automático mutila la redacción, y el ajuste final de una pieza impresa lo hace una persona. Por eso el desborde se mide, se informa y se deja intacto.
+
+### 8.7. Formato de salida (bundle)
+
+Cada ejecución escribe una carpeta autocontenida `impresos/AAAA_MM_DD_pauta-semanal/`, cuya fecha es la de la **pauta**, no la de ejecución: así la carpeta corresponde a la edición que se imprime aunque el tríptico se genere días después.
+
+| Archivo | Contenido |
+|---------|-----------|
+| `triptych.json` | Portada y las cinco notas con su medición y sus advertencias |
+| `triptych.md` | El tríptico panel por panel, listo para leer o pegar en la plantilla de diseño |
+| `manifest.json` | Pauta de origen, formato derivado, presupuesto de caracteres, medición por nota y totales de advertencias |
+
+El Markdown encabeza con la edición, el formato, el pliegue y el tope por nota; sigue con la portada, un panel por nota, y cierra con el bloque de advertencias pendientes, que solo aparece si hay algo que ajustar. Incluye una nota de armado con el orden lógico de los paneles y la advertencia de que la imposición definitiva en la hoja se confirma con la imprenta según el tipo de pliegue.
+
+### 8.8. Configuración externa
+
+La geometría, la tipografía y las reglas de estilo viven en `triptych_config.json`, versionado en la raíz del proyecto y validado al cargarse con `load_triptych_config`, siguiendo el mismo criterio que `social_config.json`:
+
+| Sección | Contenido | Obligatoria |
+|---------|-----------|:-----------:|
+| `page` | Medidas de la hoja, margen, columnas por cara, caras y tipo de pliegue | ✅ |
+| `typography` | Familia, cuerpo en puntos, avance de carácter e interlínea | ✅ |
+| `limits` | Tope en columnas del bloque y objetivo de caracteres del cuerpo | ✅ |
+| `style` | Máximo de palabras por oración, siglas permitidas y términos a evitar | ✅ |
+| `layout` | Cantidad de notas y de datos clave por nota | ✅ |
+| `brand` | Nombre, handle, sitio y logo | ❌ |
+
+Una medida negativa, un margen que se coma la hoja, un pliegue desconocido o una lista de siglas declarada como texto se detectan al cargar, con un mensaje que nombra el campo culpable. Cambiar la medida del papel o el cuerpo de la tipografía no requiere tocar código: el presupuesto de caracteres se recalcula solo.
+
+### 8.9. Estructura del subsistema
+
+| Módulo (`news_agent/triptych/`) | Responsabilidad |
+|---------------------------------|-----------------|
+| `orchestrator.py` | Coordina el flujo completo y devuelve el resumen del bundle |
+| `pauta_source.py` | Carga las propuestas de la pauta y su companion como material de origen |
+| `specs.py` | Deriva el presupuesto de caracteres de la geometría y la tipografía |
+| `text_utils.py` | Verifica las reglas de lenguaje simple (oraciones, siglas, términos) |
+| `prompt_builder.py` | Construye los prompts con el presupuesto y el esquema derivados de la configuración |
+| `generator.py` | Genera, valida y mide el tríptico; separa lo fatal de lo advertible |
+| `models.py` | Dataclasses de los artefactos del subsistema |
+| `writer.py` | Escribe el bundle y su manifiesto, y redacta el Markdown por panel |
+
+Reutiliza `article_writer.parse_pauta_file`, `source_references.load_companion_data`, `social.json_utils.extract_json_object` y `config.load_triptych_config`. No depende de Pillow: el tríptico se entrega como texto.

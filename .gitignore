@@ -23,6 +23,7 @@ pauta_semanal_*.md
 pauta_semanal_*.json
 articulo_*.md
 /social/
+/impresos/
 debug/
 cache/
 

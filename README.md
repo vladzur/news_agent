@@ -65,7 +65,21 @@ Toma un artículo ya publicado (`articulos/articulo_N_slug.md`) y produce un **b
 
 > **¿Por qué se valida todo en código y no se confía en el LLM?** Las reglas duras de cada plataforma se aplican de forma determinista: recorte al límite de caracteres, largo del hilo, topes de hashtags, normalización de hashtags (`#La Araucania` → `#LaAraucania`) y retiro de los que el modelo haya dejado dentro del cuerpo del texto para no duplicarlos en el tweet de cierre, verificación de que cada cifra exista en el artículo y de que la cita sea **literal**. Si el modelo entrega una cita inventada, el sistema la reemplaza por una oración verificada del propio artículo. El guardarraíl es también editorial: los prompts visuales **no pueden** describir texto en la imagen —regla que se verifica en código, no solo en el prompt— y deben nombrar una paleta de color. Las personas reales solo aparecen como **caricaturas estilizadas de las figuras públicas nombradas en el artículo**; las víctimas, menores y personas privadas se representan de forma anónima y nunca como retratos fotorrealistas.
 
-### 4. CLI por subcomandos
+### 4. Tríptico impreso en lenguaje simple
+
+Toma la pauta semanal completa y la convierte en una **hoja oficio doblada en tres** —seis paneles, doble faz— con cinco mini-notas en lenguaje simple, una por propuesta, más un panel de portada:
+
+1. **Material de origen** — De cada propuesta toma el título, el enfoque editorial, los puntos clave y las fuentes sugeridas; y del companion JSON, el contenido de las noticias que la respaldan. Si el companion falta o está corrupto, la nota se redacta solo con la pauta y el flujo continúa.
+2. **Redacción en lenguaje llano (LLM)** — Una sola llamada devuelve un objeto JSON con la portada y las cinco notas. Cada nota trae título, cuerpo, tres datos clave y un bloque «por qué te importa».
+3. **Tope físico verificado** — El cuerpo de cada nota no puede pasar de **una columna y media**, y eso se traduce a caracteres: 24 caracteres por línea en una columna, 36 en columna y media, 59 líneas por columna y **2.124 caracteres** de techo para el bloque completo. La medición se deriva de la geometría configurada, no de una estimación a ojo.
+4. **Reglas de lenguaje simple** — Frases de 15 palabras o menos, ninguna sigla sin explicar, nada de jerga, trato directo al lector y una estructura fija: qué pasó, por qué te importa, los datos que lo prueban.
+5. **Bundle de salida** — `impresos/AAAA_MM_DD_pauta-semanal/` con el tríptico en JSON, el mismo contenido en Markdown panel por panel y un manifiesto con la medición de cada nota.
+
+> **¿Por qué se advierte y no se recorta?** Las reglas duras se aplican de forma determinista, pero el desborde **nunca** se recorta: una oración larga, una sigla sin explicar o un bloque que se pasa de columna y media quedan intactos y viajan como advertencia al Markdown y al manifiesto. Un recorte automático mutila la redacción, y el ajuste final de una pieza que se imprime lo hace una persona. Lo que sí aborta la escritura es un fallo estructural —que no lleguen cinco notas o que un cuerpo venga vacío—, para no dejar en disco una pieza impublicable.
+
+La geometría del papel, el cuerpo de la tipografía y las reglas de estilo viven en `triptych_config.json`, validado al cargarse: cambiar la medida de la hoja o el tope de columnas no requiere tocar código, porque el presupuesto de caracteres se recalcula solo.
+
+### 5. CLI por subcomandos
 
 El punto de entrada `python -m news_agent` ofrece un CLI de subcomandos pensado para el uso diario. Cada paso del flujo es un comando propio y `all` los encadena en una sola ejecución:
 
@@ -74,17 +88,19 @@ El punto de entrada `python -m news_agent` ofrece un CLI de subcomandos pensado 
 | `report` | Genera la pauta editorial semanal desde los feeds RSS. |
 | `article` | Escribe una nota completa desde una propuesta de la pauta. |
 | `social` | Genera el bundle de redes sociales de un artículo publicado. |
-| `all` | Ejecuta la secuencia completa: pauta → nota → redes sociales. |
+| `print` | Genera el tríptico impreso desde la pauta semanal. |
+| `all` | Ejecuta la secuencia completa: pauta → nota → redes sociales → tríptico. |
 | `clean` | Elimina los artefactos generados con más de N días. |
 
 ```bash
-# Secuencia completa: pauta, nota y redes sociales de una sola vez
+# Secuencia completa: pauta, nota, redes sociales y tríptico de una sola vez
 python -m news_agent all --number 1
 
 # O cada paso por separado
 python -m news_agent report
 python -m news_agent article --number 2
 python -m news_agent social --platforms x,instagram
+python -m news_agent print
 
 # Limpieza de los artefactos con más de 90 días (pide confirmación)
 python -m news_agent clean --days 90
@@ -94,7 +110,7 @@ python -m news_agent clean --days 90
 
 **Sin argumentos no se ejecuta nada:** `python -m news_agent` a secas muestra la ayuda y sale con código 2. Antes arrancaba la generación de pauta completa —consumiendo tokens de la API— y escribía el resultado en el directorio actual.
 
-**Nunca escribe en el directorio actual:** cuando se omite `--output`, cada flujo usa su carpeta por defecto (`reportes/`, `articulos/` o `social/`) y la crea si no existe; una ruta que apunte al directorio actual se rechaza con un error de uso. Así la raíz del proyecto no se llena de pautas ni de bundles sueltos.
+**Nunca escribe en el directorio actual:** cuando se omite `--output`, cada flujo usa su carpeta por defecto (`reportes/`, `articulos/`, `social/` o `impresos/`) y la crea si no existe; una ruta que apunte al directorio actual se rechaza con un error de uso. Así la raíz del proyecto no se llena de pautas ni de bundles sueltos.
 
 **Limpieza:** `clean` solo considera los artefactos propios de la herramienta (pautas, companion JSON, notas y bundles `AAAA_MM_DD_slug`). La caché de contenido (`cache/`) y los assets de la marca (`assets/`) quedan **siempre** fuera de su alcance. La antigüedad se ajusta con `--days`, el alcance con `--target` (incluye `--yes` para automatizar y `--dry-run` para revisar qué se borraría sin eliminar nada).
 
@@ -103,13 +119,14 @@ python -m news_agent clean --days 90
 | Opción | Comandos | Descripción |
 |--------|----------|-------------|
 | `--feeds RUTA` | `report`, `all` | JSON de configuración de feeds RSS (por defecto `rss_feeds.json`). |
-| `--output DIR` | `report`, `article`, `social` | Directorio de salida (por defecto `reportes/`, `articulos/` o `social/`). |
-| `--base DIR` | `all`, `clean` | Directorio base del proyecto, del que se derivan `reportes/`, `articulos/` y `social/` (por defecto `.`). |
-| `--pauta RUTA` | `article` | Pauta a desarrollar (por defecto, la más reciente de `reportes/`). |
+| `--output DIR` | `report`, `article`, `social`, `print` | Directorio de salida (por defecto `reportes/`, `articulos/`, `social/` o `impresos/`). |
+| `--base DIR` | `all`, `clean` | Directorio base del proyecto, del que se derivan `reportes/`, `articulos/`, `social/` e `impresos/` (por defecto `.`). |
+| `--pauta RUTA` | `article`, `print` | Pauta a usar (por defecto, la más reciente de `reportes/`). |
 | `--article RUTA` | `social` | Artículo de origen (por defecto, el más reciente de `articulos/`). |
 | `-n`, `--number N` | `article`, `all` | Propuesta a desarrollar (1 a 5). Si se omite, se pregunta por la terminal. |
 | `--platforms LISTA` | `social`, `all` | Plataformas separadas por comas (`x,facebook,instagram`). Por defecto, todas. |
 | `--social-config RUTA` | `social`, `all` | JSON de marca y plantillas (por defecto `social_config.json`). |
+| `--triptych-config RUTA` | `print`, `all` | JSON de geometría, tipografía y estilo del tríptico (por defecto `triptych_config.json`). |
 | `--skip-banners` / `--skip-prompts` | `social`, `all` | Omite los banners o los prompts visuales, y con ellos la llamada al modelo que los genera. |
 | `--days N` / `--target` / `--dry-run` / `-y` | `clean` | Antigüedad mínima, alcance, simulación y omisión de la confirmación. |
 | `--debug` | `report`, `all` | Guarda el JSON intermedio de artículos procesados para ajustar el prompt. |
@@ -129,7 +146,7 @@ Se mantienen por compatibilidad con los scripts y los cron ya desplegados:
 Flags de los modos clásicos:
 
 - `--verbose`: Activa logging nivel DEBUG para diagnóstico detallado.
-- `--output`: Directorio donde guardar los archivos generados. Si se omite se usa `reportes/`, `articulos/` o `social/` según el modo, y una ruta que apunte al directorio actual se rechaza: los modos clásicos tampoco escriben en el directorio actual.
+- `--output`: Directorio donde guardar los archivos generados. Si se omite se usa `reportes/`, `articulos/` o `social/` según el modo, y una ruta que apunte al directorio actual se rechaza: los modos clásicos tampoco escriben en el directorio actual. El tríptico impreso solo se genera desde el subcomando `print` (usa `impresos/` por defecto).
 - `--debug`: Guarda un archivo JSON intermedio en `debug/articulos_procesados_YYYY_MM_DD.json` con los datos completos de cada artículo (resumen RSS, contenido extraído y resumen final enviado al LLM) para depuración y ajuste de prompts.
 - `--socialize RUTA_ARTICULO`: Activa el modo de repurposing para redes sociales. No se puede combinar con `--feeds`, `--debug`, `--write-article` ni `--article`.
 - `--platforms LISTA`: Plataformas a preparar, separadas por comas (`x,facebook,instagram`). Por defecto, todas. Filtra los Markdown y los banners generados.
@@ -145,7 +162,7 @@ Flags de los modos clásicos:
 assets/                     # Recursos gráficos de la marca (logo de los banners)
 news_agent/
 ├── __main__.py            # Punto de entrada CLI (subcomandos + modos clásicos)
-├── cli.py                 # CLI por subcomandos: report, article, social, all, clean
+├── cli.py                 # CLI por subcomandos: report, article, social, print, all, clean
 ├── cleanup.py             # Detección y borrado de artefactos antiguos del comando clean
 ├── orchestrator.py        # Orquestador del pipeline completo
 ├── config.py              # Carga de .env, validación de API key, feeds JSON
@@ -171,6 +188,15 @@ news_agent/
     ├── json_utils.py      # Extracción defensiva de JSON de las respuestas del LLM
     ├── models.py          # Dataclasses de los artefactos del subsistema
     └── writer.py          # Escritura del bundle de salida
+└── triptych/              # Subsistema de tríptico impreso
+    ├── orchestrator.py    # Flujo: pauta → material de origen → tríptico → bundle
+    ├── pauta_source.py    # Propuestas de la pauta y su material de respaldo
+    ├── specs.py           # Presupuesto de caracteres derivado de la geometría
+    ├── text_utils.py      # Reglas de lenguaje simple (oraciones, siglas, jerga)
+    ├── prompt_builder.py  # Prompts con el presupuesto y el esquema de salida
+    ├── generator.py       # Generación, validación y medición del tríptico
+    ├── models.py          # Dataclasses de los artefactos del subsistema
+    └── writer.py          # Escritura del bundle y del Markdown por panel
 ```
 
 ### Stack técnico
@@ -183,7 +209,7 @@ news_agent/
 | Cliente LLM | `openai` (SDK) | Conexión con DeepSeek API en modo compatible |
 | Renderizado de assets | `Pillow` | Generación local de banners promocionales, sin servicios externos |
 | Lenguaje | Python ≥ 3.10 | stdlib + 6 dependencias |
-| Configuración | `.env` + `rss_feeds.json` + `social_config.json` | Separación de credenciales, fuentes y marca |
+| Configuración | `.env` + `rss_feeds.json` + `social_config.json` + `triptych_config.json` | Separación de credenciales, fuentes, marca y geometría de imprenta |
 | Testing | `pytest`, `pytest-mock`, `freezegun` | Tests unitarios para todos los módulos |
 
 ### Parámetros del modelo
@@ -561,6 +587,21 @@ social/2026_09_14_criminalizacion-de-la-disidencia/
 ```
 
 El campo `quote_card.verbatim` de `social_copy.json` indica si la cita se verificó palabra por palabra contra el artículo de origen; el manifiesto lo repite en `verified_quote`. El directorio `social/` está en `.gitignore`, mientras que el subsistema de código vive en `news_agent/social/`.
+
+### Bundle del tríptico impreso (`impresos/AAAA_MM_DD_pauta-semanal/`)
+
+Cada ejecución de `print` produce una carpeta autocontenida con el tríptico listo para maquetar. La fecha de la carpeta es la de la pauta, no la de la ejecución:
+
+```
+impresos/2026_09_24_pauta-semanal/
+├── triptych.json               # Portada y las cinco notas, con la medición de cada una
+├── triptych.md                 # El tríptico panel por panel, con el reporte de largo y las advertencias
+└── manifest.json               # Pauta de origen, formato, presupuesto de caracteres y totales
+```
+
+El Markdown encabeza con la edición, el formato (oficio, seis paneles, monospace 12 pt), el pliegue y el tope por nota; después viene la portada, un panel por nota y, si hay algo que ajustar, el bloque de advertencias pendientes. Incluye una nota de armado que recuerda que la imposición definitiva en la hoja se confirma con la imprenta.
+
+Las notas que superan el tope de columna y media **no se recortan**: se miden, se reportan en el Markdown y el manifiesto, y el texto queda intacto para el ajuste manual. El directorio `impresos/` está en `.gitignore`, mientras que el subsistema de código vive en `news_agent/triptych/`.
 
 ---
 

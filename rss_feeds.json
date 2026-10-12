@@ -1,5 +1,9 @@
 [    
     {
+        "name": "Radio Nuevo Mundo",
+        "url": "https://radionuevomundo.cl/feed/"
+    },
+    {
         "name": "BBC News Mundo",
         "url": "https://feeds.bbci.co.uk/mundo/rss.xml"
     },

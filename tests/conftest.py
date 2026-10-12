@@ -258,3 +258,165 @@ def config_file(social_config: dict, tmp_path: Path) -> Path:
         json.dumps(social_config, ensure_ascii=False), encoding="utf-8"
     )
     return path
+
+
+# ---------------------------------------------------------------------------
+# Fixtures del subsistema de tríptico impreso
+# ---------------------------------------------------------------------------
+
+# Ruta al archivo de configuración del tríptico versionado en el repositorio.
+TRIPTYCH_CONFIG_PATH = (
+    Path(__file__).resolve().parent.parent / "triptych_config.json"
+)
+
+
+@pytest.fixture(scope="session")
+def triptych_config() -> dict:
+    """Carga la configuración real del tríptico del repositorio.
+
+    Se usa el archivo versionado a propósito: así los tests fallan si alguien
+    rompe la estructura de ``triptych_config.json``.
+
+    Returns:
+        dict: Configuración del tríptico.
+    """
+    from news_agent.config import load_triptych_config
+
+    return load_triptych_config(TRIPTYCH_CONFIG_PATH)
+
+
+@pytest.fixture
+def triptych_pauta_markdown() -> str:
+    """Pauta de ejemplo con las cinco propuestas que exige el parser.
+
+    Returns:
+        str: Contenido Markdown de la pauta.
+    """
+    lines = [
+        "# ⚡ Pauta Editorial Sugerida - La Chispa Sur",
+        "**Fecha de Generación:** 2026-09-24  ",
+        "**Notas Procesadas:** 12",
+        "",
+        "---",
+        "",
+    ]
+    for number in range(1, 6):
+        lines.extend(
+            [
+                f"## {number}. Titular de la propuesta {number}",
+                (
+                    "*   **Enfoque Editorial:** El acuerdo oculta "
+                    "compromisos económicos que nadie votó en el Congreso."
+                ),
+                "*   **Puntos Clave a Desarrollar:**",
+                f"    1. Arista uno de la propuesta {number}",
+                f"    2. Arista dos de la propuesta {number}",
+                "*   **Fuentes Sugeridas para Ampliar:**",
+                f"    *   Medio Uno [art. {number}]: cobertura del caso.",
+                f"    *   Medio Dos [art. {number + 100}]: contexto adicional.",
+                "",
+            ]
+        )
+    return "\n".join(lines)
+
+
+@pytest.fixture
+def triptych_pauta_file(
+    tmp_path: Path,
+    triptych_pauta_markdown: str,
+) -> Path:
+    """Escribe la pauta y su companion en un directorio temporal.
+
+    El companion replica la estructura real de ``build_companion_data``: una
+    clave ``proposal_N`` por propuesta con su lista de noticias de respaldo.
+
+    Returns:
+        Path: Ruta al archivo Markdown de la pauta escrito.
+    """
+    reports = tmp_path / "reportes"
+    reports.mkdir(parents=True, exist_ok=True)
+
+    pauta = reports / "pauta_semanal_2026_09_24.md"
+    pauta.write_text(triptych_pauta_markdown, encoding="utf-8")
+
+    companion = {
+        f"proposal_{number}": {
+            "articles": [
+                {
+                    "title": f"Noticia de respaldo {number}",
+                    "source": "Medio Uno",
+                    "link": f"https://example.com/{number}",
+                    "summary": "Resumen de la noticia de respaldo.",
+                    "content": "Contenido de la noticia de respaldo. " * 60,
+                }
+            ]
+        }
+        for number in range(1, 6)
+    }
+    (reports / "pauta_semanal_2026_09_24_companion.json").write_text(
+        json.dumps(companion, ensure_ascii=False), encoding="utf-8"
+    )
+
+    return pauta
+
+
+@pytest.fixture
+def triptych_source(triptych_pauta_file: Path):
+    """Material de origen del tríptico ya cargado.
+
+    Returns:
+        TriptychSource: Propuestas de la pauta con su companion.
+    """
+    from news_agent.triptych.pauta_source import load_triptych_source
+
+    return load_triptych_source(triptych_pauta_file)
+
+
+@pytest.fixture
+def triptych_payload() -> dict:
+    """Respuesta JSON de ejemplo del modelo para el tríptico.
+
+    Está construida para cumplir el contrato completo: portada, cinco notas en
+    lenguaje simple, tres datos clave por nota y fuentes del material. Las
+    oraciones quedan por debajo del tope de palabras para no ensuciar las
+    pruebas de advertencias.
+
+    Returns:
+        dict: Payload equivalente al que devolvería el modelo.
+    """
+    body = (
+        "Chile firmó un acuerdo con Estados Unidos. El texto no habla solo de "
+        "delincuencia. También trata de inversiones y de litio. Nadie lo votó "
+        "en el Congreso. Eso preocupa a los abogados. "
+    ) * 3
+
+    return {
+        "cover": {
+            "hook": "Lo que no te contaron del acuerdo",
+            "title": "La letra chica de la semana",
+        },
+        "notes": [
+            {
+                "proposal_number": number,
+                "title": f"Nota {number}",
+                "body": body,
+                "key_data": ["Dato uno", "Dato dos", "Dato tres"],
+                "why_it_matters": "Te afecta porque el litio es de todos.",
+            }
+            for number in range(1, 6)
+        ],
+    }
+
+
+@pytest.fixture
+def triptych_config_file(triptych_config: dict, tmp_path: Path) -> Path:
+    """Escribe la configuración del tríptico en un archivo temporal.
+
+    Returns:
+        Path: Ruta al archivo JSON escrito.
+    """
+    path = tmp_path / "triptych_config.json"
+    path.write_text(
+        json.dumps(triptych_config, ensure_ascii=False), encoding="utf-8"
+    )
+    return path

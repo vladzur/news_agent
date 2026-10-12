@@ -139,6 +139,23 @@ def _social_result(tmp_path: Path) -> dict[str, Any]:
     }
 
 
+def _print_result(tmp_path: Path) -> dict[str, Any]:
+    """Resultado simulado de ``run_print``."""
+    bundle = tmp_path / "impresos" / "2026_09_23_pauta-semanal"
+    return {
+        "bundle_dir": bundle,
+        "triptych_path": bundle / "triptych.json",
+        "markdown_path": bundle / "triptych.md",
+        "manifest_path": bundle / "manifest.json",
+        "title": "Titular",
+        "notes": 5,
+        "panels": 6,
+        "fold": "roll",
+        "overflowing": 0,
+        "warnings": 0,
+    }
+
+
 class _FakeStdin:
     """Entrada estándar simulada para forzar el camino interactivo."""
 
@@ -177,8 +194,15 @@ def _must_not_be_called(**kwargs: Any) -> dict[str, Any]:
 class TestParser:
     """Estructura de los subcomandos."""
 
-    def test_exposes_five_commands(self):
-        assert cli.COMMANDS == ("report", "article", "social", "all", "clean")
+    def test_exposes_six_commands(self):
+        assert cli.COMMANDS == (
+            "report",
+            "article",
+            "social",
+            "print",
+            "all",
+            "clean",
+        )
 
     def test_describes_every_command(self):
         assert set(cli.COMMAND_DESCRIPTIONS) == set(cli.COMMANDS)
@@ -664,7 +688,7 @@ class TestAllCommand:
 
     @pytest.fixture
     def steps(self, tmp_path, monkeypatch) -> dict[str, Any]:
-        """Registra el orden y los argumentos de los tres pasos.
+        """Registra el orden y los argumentos de los cuatro pasos.
 
         Returns:
             dict[str, Any]: Registro de llamadas y resultados simulados.
@@ -688,23 +712,29 @@ class TestAllCommand:
             calls["social"] = kwargs
             return _social_result(tmp_path)
 
+        def _fake_print(**kwargs: Any) -> dict[str, Any]:
+            calls["order"].append("print")
+            calls["print"] = kwargs
+            return _print_result(tmp_path)
+
         monkeypatch.setattr(cli, "run_pipeline", _fake_pipeline)
         monkeypatch.setattr(cli, "write_article", _fake_write)
         monkeypatch.setattr(
             "news_agent.social.orchestrator.run_socialize", _fake_socialize
         )
+        monkeypatch.setattr(cli, "run_print", _fake_print)
 
         calls["report_result"] = report
         calls["article_result"] = article
         return calls
 
-    def test_runs_the_three_steps_in_order(self, tmp_path, steps, capsys):
+    def test_runs_the_four_steps_in_order(self, tmp_path, steps, capsys):
         main(["all", "--base", str(tmp_path), "--number", "1"])
 
-        assert steps["order"] == ["report", "article", "social"]
+        assert steps["order"] == ["report", "article", "social", "print"]
         output = capsys.readouterr().out
-        assert "Paso 1/3" in output
-        assert "Paso 3/3" in output
+        assert "Paso 1/4" in output
+        assert "Paso 4/4" in output
         assert "Secuencia completa finalizada" in output
 
     def test_chains_the_generated_artifacts(self, tmp_path, steps):

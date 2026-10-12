@@ -24,7 +24,7 @@ dev = [
 ]
 
 [tool.setuptools]
-packages = ["news_agent"]
+packages = ["news_agent", "news_agent.social", "news_agent.triptych"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
