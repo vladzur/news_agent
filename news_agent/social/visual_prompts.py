@@ -4,13 +4,13 @@ Los prompts alimentan Flux.1, SDXL o Midjourney. El subsistema no genera
 imágenes: entrega al diseñador un prompt positivo en inglés, el prompt
 negativo de marca y una variante lista para Midjourney.
 
-La restricción central es que la imagen no contenga texto. Esa regla se
-verifica en código, no solo en el prompt, porque los modelos de difusión
-tienden a inventar tipografía. El retrato de personas reales queda acotado a
-caricaturas estilizadas de figuras públicas nombradas en el artículo, nunca a
-retratos fotorrealistas. Del mismo modo, se exige que cada prompt nombre una
-paleta de color: los prompts sin señales cromáticas devuelven ilustraciones
-planas y sin contraste, que es justo el resultado que se busca evitar.
+La ilustración puede incluir gráficos y rótulos breves en español —cifras,
+etiquetas, flechas, sellos— porque refuerzan la idea del artículo y los
+lectores reconocen la pieza de un vistazo. Lo que se verifica en código es que
+el prompt esté en inglés, que nombre una paleta de color y que no reproduzca
+párrafos de texto: los modelos de difusión convierten la tipografía extensa en
+ruido. El retrato de personas reales queda acotado a personajes ilustrados de
+figuras públicas nombradas en el artículo, nunca a retratos fotorrealistas.
 """
 
 import logging
@@ -36,24 +36,31 @@ class VisualPromptGenerationError(Exception):
     """Excepción para prompts visuales inválidos o ausentes."""
 
 
-# Términos que delatan la presencia de texto en la imagen. La revisión usa
-# límites de palabra para no marcar palabras legítimas como "texture".
-_TEXT_ARTIFACT_RE = re.compile(
-    r"\b(?:text|texts|letters?|words?|typography|typographic|captions?|"
-    r"subtitles?|logos?|watermarks?|numbers?|numerals|writing|written|"
-    r"readable|legible|headlines?|signage)\b",
+# Términos que delatan un bloque de texto real dentro de la imagen: párrafos,
+# titulares largos, documentos con letra pequeña. Los modelos de difusión
+# convierten la tipografía extensa en ruido, así que se rechazan; los rótulos
+# breves y las cifras sí están permitidos.
+_TEXT_BLOCK_RE = re.compile(
+    r"\b(?:blocks?\s+of\s+text|columns?\s+of\s+text|paragraphs?\s+of\s+text|"
+    r"pages?\s+of\s+text|body\s+copy|fine\s+print|dense\s+text|"
+    r"paragraphs?|headlines?)\b",
     re.IGNORECASE,
 )
 
 # Frases en las que el término aparece negado y, por lo tanto, es legítimo:
-# "no text", "without letters", "free of typography".
+# "no paragraphs of text", "without headlines".
 _NEGATED_TERM_RE = re.compile(
     r"\b(?:no|without|free\s+of|devoid\s+of|zero)\s+(?:any\s+)?"
-    r"(?:text|texts|letters?|words?|typography|typographic|captions?|"
-    r"subtitles?|logos?|watermarks?|numbers?|numerals|writing|written|"
-    r"readable|legible|headlines?|signage)\b",
+    r"(?:blocks?\s+of\s+text|columns?\s+of\s+text|paragraphs?\s+of\s+text|"
+    r"pages?\s+of\s+text|body\s+copy|fine\s+print|dense\s+text|"
+    r"paragraphs?|headlines?)\b",
     re.IGNORECASE,
 )
+
+# Rótulos entre comillas, que están permitidos y no deben contar como señal de
+# español: el prompt está en inglés y solo cita la etiqueta que irá en la
+# imagen.
+_QUOTED_LABEL_RE = re.compile(r"\"[^\"]*\"|“[^”]*”")
 
 # Largo admisible de un prompt positivo
 _MIN_PROMPT_WORDS = 25
@@ -130,8 +137,12 @@ def _collapse_whitespace(text: str) -> str:
     return " ".join((text or "").split())
 
 
-def _find_text_artifacts(prompt: str) -> list[str]:
-    """Detecta menciones a texto en un prompt positivo.
+def _find_text_blocks(prompt: str) -> list[str]:
+    """Detecta menciones a bloques de texto dentro de un prompt positivo.
+
+    Los rótulos breves y las cifras están permitidos; lo que se descarta son
+    párrafos, titulares largos y documentos con letra pequeña, que los modelos
+    de difusión renderizan como ruido.
 
     Args:
         prompt: Prompt positivo en inglés.
@@ -140,7 +151,7 @@ def _find_text_artifacts(prompt: str) -> list[str]:
         list[str]: Términos detectados fuera de un contexto de negación.
     """
     without_negations = _NEGATED_TERM_RE.sub(" ", prompt)
-    return sorted({match.group(0).lower() for match in _TEXT_ARTIFACT_RE.finditer(without_negations)})
+    return sorted({match.group(0).lower() for match in _TEXT_BLOCK_RE.finditer(without_negations)})
 
 
 def spanish_signal_count(text: str) -> int:
@@ -160,7 +171,8 @@ def looks_like_spanish(text: str) -> bool:
 
     Los prompts deben estar en inglés porque los generadores de imágenes
     rinden mejor con descripciones en ese idioma. Se exige más de una palabra
-    funcional española distinta para evitar falsos positivos.
+    funcional española distinta para evitar falsos positivos, y se ignoran los
+    rótulos entre comillas, que sí deben ir en español.
 
     Args:
         text: Prompt a evaluar.
@@ -168,7 +180,8 @@ def looks_like_spanish(text: str) -> bool:
     Returns:
         bool: True si el texto parece estar en español.
     """
-    return spanish_signal_count(text) >= _SPANISH_SIGNAL_THRESHOLD
+    without_labels = _QUOTED_LABEL_RE.sub(" ", text or "")
+    return spanish_signal_count(without_labels) >= _SPANISH_SIGNAL_THRESHOLD
 
 
 def has_colour_signal(prompt: str) -> bool:
@@ -197,8 +210,8 @@ def validate_visual_prompt(prompt: str) -> None:
     Raises:
         VisualPromptGenerationError: Si el prompt está vacío, tiene un largo
                                      fuera de rango, no está en inglés, no
-                                     nombra una paleta de color o describe
-                                     texto.
+                                     nombra una paleta de color o pide bloques
+                                     de texto dentro de la imagen.
     """
     words = prompt.split()
     if not words:
@@ -221,12 +234,12 @@ def validate_visual_prompt(prompt: str) -> None:
             "porque produce ilustraciones planas y sin contraste."
         )
 
-    artifacts = _find_text_artifacts(prompt)
-    if artifacts:
+    text_blocks = _find_text_blocks(prompt)
+    if text_blocks:
         raise VisualPromptGenerationError(
-            "El prompt visual describe texto en la imagen "
-            f"({', '.join(artifacts)}), lo que produce artefactos de "
-            "tipografía en los modelos de difusión."
+            "El prompt visual pide bloques de texto en la imagen "
+            f"({', '.join(text_blocks)}); solo se permiten rótulos breves y "
+            "cifras, porque la tipografía extensa se renderiza como ruido."
         )
 
 
