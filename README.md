@@ -2,7 +2,7 @@
 
 **Curador automatizado de pauta periodística para La Chispa Sur**, medio digital independiente de izquierda, crítico del modelo neoliberal.
 
-El agente recolecta noticias desde canales RSS y scraping web, las filtra por una ventana temporal de 7 días (168 horas), enriquece los resúmenes cortos extrayendo el contenido completo de los artículos con trafilatura, y utiliza el modelo **DeepSeek-Flash** (vía API compatible con OpenAI SDK) para sintetizar **cinco propuestas de pauta editorial semanal (tres de foco nacional y dos de foco internacional)** con profundidad analítica, tono incisivo y narrativa ágil. Las propuestas internacionales priorizan hechos que conmocionan al mundo, pueblos oprimidos y políticas imperialistas que afectan la estabilidad mundial, con mirada antiimperialista desde el sur global. También permite **escribir artículos completos (~1000 palabras)** a partir de cualquiera de las propuestas generadas, con un sistema de **referencias deterministas a fuentes** que asegura que el redactor reciba el contenido completo de los artículos fuente correctos para cada propuesta.
+El agente recolecta noticias desde canales RSS y scraping web, las filtra por una ventana temporal de 4 días (96 horas), enriquece los resúmenes cortos extrayendo el contenido completo de los artículos con trafilatura, y utiliza el modelo **DeepSeek-Flash** (vía API compatible con OpenAI SDK) para sintetizar **cinco propuestas de pauta editorial semanal (tres de foco nacional y dos de foco internacional)** con profundidad analítica, tono incisivo y narrativa ágil. Las propuestas internacionales priorizan hechos que conmocionan al mundo, pueblos oprimidos y políticas imperialistas que afectan la estabilidad mundial, con mirada antiimperialista desde el sur global. También permite **escribir artículos completos (~1000 palabras)** a partir de cualquiera de las propuestas generadas, con un sistema de **referencias deterministas a fuentes** que asegura que el redactor reciba el contenido completo de los artículos fuente correctos para cada propuesta.
 
 ---
 
@@ -17,9 +17,9 @@ Flujo automatizado que:
    - **Scraping web**: Usa `requests` + `BeautifulSoup` con selectores CSS configurables por sitio, para medios sin feed RSS.
    - Tolerancia a fallos individuales: si un feed o scraping falla, continúa con el siguiente.
 2. **Enriquecimiento de contenido** — Cuando el resumen RSS de un artículo es demasiado corto para un análisis de calidad (< 150 caracteres), el agente extrae el texto completo del artículo desde su URL usando `trafilatura`. Procesamiento paralelo con rate limiting por dominio y caché en archivo JSON para no re-descargar URLs ya visitadas. El enriquecimiento es best-effort: si falla, se conserva el resumen RSS original sin interrumpir el pipeline.
-3. **Filtrado temporal** — Descarta noticias con más de 7 días (168 horas) de antigüedad, cubriendo la ventana semanal de lunes a domingo. Configurable.
+3. **Filtrado temporal** — Descarta noticias con más de 4 días (96 horas) de antigüedad: una noticia anterior ya tiene desarrollos posteriores dentro de la ventana. Configurable.
 4. **Limpieza HTML** — Elimina etiquetas, comentarios, scripts y decodifica entidades HTML de los resúmenes.
-5. **Truncado inteligente** — Recorta resúmenes a 700 caracteres sin cortar palabras a la mitad.
+5. **Truncado inteligente** — Recorta resúmenes a 500 caracteres sin cortar palabras a la mitad.
 6. **Guardado intermedio de depuración (opcional)** — Con el flag `--debug`, guarda un archivo JSON con los artículos procesados (resumen RSS original, contenido extraído y resumen final) para comparar y ajustar el prompt.
 7. **Análisis con IA** — Envía los artículos filtrados a DeepSeek-Flash con un system prompt que define la identidad editorial de La Chispa Sur (izquierda independiente, rigor periodístico, distribución 3 propuestas nacionales + 2 internacionales, foco territorial en Villarrica y La Araucanía).
 8. **Reporte Markdown** — Genera un archivo `pauta_semanal_AAAA_MM_DD.md` con cinco propuestas estructuradas (tres nacionales y dos internacionales): título gancho, enfoque editorial, puntos clave a desarrollar y fuentes sugeridas para ampliar. La cabecera (fecha y cantidad de notas) se genera automáticamente desde el código para garantizar precisión.
@@ -53,7 +53,7 @@ Toma un artículo ya publicado (`articulos/articulo_N_slug.md`) y produce un **b
    - **Post de Facebook** con gancho en la primera línea (lo único visible antes del "ver más") y cierre con pregunta.
    - **Caption de Instagram** con gancho de apertura, cuerpo breve y CTA.
    - **Tarjeta de cita**, **cifras clave**, **llamado a la acción** y **textos alternativos** por plataforma.
-3. **Prompts visuales (LLM)** — Genera prompts **en inglés** para Flux.1 / SDXL / Midjourney, uno por relación de aspecto: 16:9 (X y Facebook), 1:1 (feed de Instagram) y 9:16 (stories). Cada uno incluye prompt positivo, prompt negativo de marca, parámetros sugeridos y una variante lista para Midjourney con sus flags.
+3. **Prompts visuales (LLM)** — Genera prompts **en inglés** para Flux.1 / SDXL / Midjourney, uno por relación de aspecto: 16:9 (X y Facebook), 1:1 (feed de Instagram) y 9:16 (stories). El estilo por defecto es **ilustración editorial**: pintura digital combinada con elementos de infografía, pensada para comunicar la idea central del artículo de un vistazo. A diferencia de la generación de imágenes tradicional, aquí los gráficos están permitidos y recomendados: cifras grandes (tomadas de las cifras clave del artículo), rótulos breves en español de tres o cuatro palabras citados entre comillas en el prompt (`"PENSIONES"`, `"-10,39%"`), sellos, flechas y banners. Lo que se rechaza en código son los **bloques de texto** (párrafos, letra pequeña, titulares largos), porque los modelos de difusión los renderizan como ruido. Cada prompt incluye prompt positivo, prompt negativo de marca, parámetros sugeridos y una variante lista para Midjourney con sus flags.
 4. **Banners locales (Pillow)** — Renderiza dos plantillas en cuatro formatos, sin depender de servicios externos:
 
    | Plantilla | Contenido | Formatos por defecto |
@@ -63,7 +63,7 @@ Toma un artículo ya publicado (`articulos/articulo_N_slug.md`) y produce un **b
 
    El diseño se parametriza por un factor de escala respecto de un ancho de referencia, así que una sola implementación sirve para los cuatro tamaños. En el formato vertical respeta las **zonas seguras** superior e inferior (la interfaz de la plataforma las tapa). Si la marca define un logo, se recorta su padding transparente, se escala según `logo_height_ratio` y se pega en la esquina superior derecha; el titular se desplaza hacia abajo si el logo es más alto que la etiqueta de marca.
 
-> **¿Por qué se valida todo en código y no se confía en el LLM?** Las reglas duras de cada plataforma se aplican de forma determinista: recorte al límite de caracteres, largo del hilo, topes de hashtags, normalización de hashtags (`#La Araucania` → `#LaAraucania`) y retiro de los que el modelo haya dejado dentro del cuerpo del texto para no duplicarlos en el tweet de cierre, verificación de que cada cifra exista en el artículo y de que la cita sea **literal**. Si el modelo entrega una cita inventada, el sistema la reemplaza por una oración verificada del propio artículo. El guardarraíl es también editorial: los prompts visuales **no pueden** describir texto en la imagen —regla que se verifica en código, no solo en el prompt— y deben nombrar una paleta de color. Las personas reales solo aparecen como **caricaturas estilizadas de las figuras públicas nombradas en el artículo**; las víctimas, menores y personas privadas se representan de forma anónima y nunca como retratos fotorrealistas.
+> **¿Por qué se valida todo en código y no se confía en el LLM?** Las reglas duras de cada plataforma se aplican de forma determinista: recorte al límite de caracteres, largo del hilo, topes de hashtags, normalización de hashtags (`#La Araucania` → `#LaAraucania`) y retiro de los que el modelo haya dejado dentro del cuerpo del texto para no duplicarlos en el tweet de cierre, verificación de que cada cifra exista en el artículo y de que la cita sea **literal**. Si el modelo entrega una cita inventada, el sistema la reemplaza por una oración verificada del propio artículo. El guardarraíl es también editorial: los prompts visuales deben nombrar una paleta de color y quedan acotados a **rótulos breves y cifras** —los párrafos de texto se rechazan en código, porque los modelos de difusión los convierten en ruido—, mientras que los gráficos, las etiquetas y los números grandes están permitidos y recomendados para reforzar la idea del artículo. La imagen es una **ilustración editorial**, no una caricatura por defecto: las figuras públicas nombradas pueden aparecer como personajes estilizados, y las víctimas, menores y personas privadas se representan de forma anónima y nunca como retratos fotorrealistas.
 
 ### 4. Tríptico impreso en lenguaje simple
 
@@ -169,9 +169,9 @@ news_agent/
 ├── rss_fetcher.py         # Ingesta RSS + despacho a scraping según método
 ├── scraper.py             # Scraping web con requests + BeautifulSoup (selectores CSS)
 ├── content_enricher.py    # Extracción de texto completo con trafilatura + caché
-├── news_filter.py         # Ventana temporal (168h / 7 días), limpieza HTML, truncado
+├── news_filter.py         # Ventana temporal (96h / 4 días), limpieza HTML, truncado
 ├── intermediate_writer.py # Escritura de archivo JSON intermedio para depuración
-├── prompt_builder.py      # Construcción de system/user prompts editoriales (~545 líneas)
+├── prompt_builder.py      # Construcción de system/user prompts editoriales (~740 líneas)
 ├── llm_client.py          # Cliente DeepSeek vía SDK OpenAI (modo compatible)
 ├── report_writer.py       # Escritura de reportes .md y artículos
 ├── article_writer.py      # Parseo de pauta + escritura de artículo completo
@@ -422,8 +422,8 @@ Las constantes principales se encuentran en [news_agent/config.py](news_agent/co
 | `ARTICLE_MAX_TOKENS` | `16384` | Presupuesto de escritura de artículo (~1000 palabras + razonamiento) |
 | `PAUTA_REASONING_EFFORT` | `"high"` | Esfuerzo de razonamiento para la pauta (`"high"`, `"medium"`, `"max"`, o `None` para deshabilitar) |
 | `ARTICLE_REASONING_EFFORT` | `"high"` | Esfuerzo de razonamiento independiente para redacción de artículos |
-| `TIME_WINDOW_HOURS` | `168` | Ventana de análisis en horas (7 días, lunes a domingo) |
-| `SUMMARY_MAX_CHARS` | `700` | Caracteres máximos por resumen. Amplio para preservar leads, cifras y atribuciones necesarias para la verificación factual |
+| `TIME_WINDOW_HOURS` | `96` | Ventana de análisis en horas (4 días; una noticia anterior ya tiene desarrollos posteriores dentro de la ventana) |
+| `SUMMARY_MAX_CHARS` | `500` | Caracteres máximos por resumen. Suficiente para lead, cifras y atribuciones (reglas de precisión factual) |
 | `NUM_PROPOSALS` | `5` | Propuestas que genera el LLM por pauta (3 nacionales + 2 internacionales) |
 | `FULL_CONTENT_FETCH_ENABLED` | `True` | Control global de enriquecimiento de contenido |
 | `MIN_SUMMARY_LENGTH` | `150` | Si el resumen RSS tiene menos de esto, se intenta extraer el texto completo |
@@ -444,6 +444,16 @@ Las constantes principales se encuentran en [news_agent/config.py](news_agent/co
 | `SOCIAL_IG_MAX_HASHTAGS` | `25` | Tope de hashtags de Instagram |
 | `SOCIAL_MIN_ARTICLE_WORDS` | `150` | Por debajo de esto el artículo no da material suficiente: aborta antes de llamar a la API |
 | `SOCIAL_BANNER_BASE_WIDTH` | `1080` | Ancho de referencia del diseño de banners |
+| `TRIPTYCH_MAX_TOKENS` | `8192` | Presupuesto de la generación del tríptico (portada + cinco notas en un solo JSON) |
+| `TRIPTYCH_TEMPERATURE` | `0.3` | Temperatura del tríptico: sobrio y fiel a la pauta, menos creativo que el copy de RRSS |
+| `TRIPTYCH_REASONING_EFFORT` | `"high"` | Razonamiento para la redacción en lenguaje simple |
+| `TRIPTYCH_JSON_MAX_RETRIES` | `2` | Reintentos cuando la respuesta del tríptico no trae un JSON válido |
+| `TRIPTYCH_NOTE_MIN_CHARS` | `250` | Largo mínimo de una nota; por debajo es un fallo estructural que aborta la escritura |
+| `TRIPTYCH_BLOCK_MAX_COLUMNS` | `1.5` | Tope físico de cada nota, en columnas de la hoja oficio (se advierte, nunca se recorta) |
+| `TRIPTYCH_BODY_TARGET_CHARS` | `700` | Largo objetivo del cuerpo de cada nota |
+| `TRIPTYCH_MAX_WORDS_PER_SENTENCE` | `15` | Máximo de palabras por oración (lenguaje simple); el exceso viaja como advertencia |
+| `DEFAULT_PRINT_OUTPUT_DIR` | `"impresos"` | Directorio base de los bundles del tríptico |
+| `TRIPTYCH_CONFIG_PATH` | `"triptych_config.json"` | Archivo de geometría, tipografía y estilo del tríptico |
 | `DEFAULT_REPORTS_DIR` | `"reportes"` | Directorio de salida por defecto de la pauta |
 | `DEFAULT_ARTICLES_DIR` | `"articulos"` | Directorio de salida por defecto de las notas |
 | `DEFAULT_CLEAN_MAX_AGE_DAYS` | `30` | Antigüedad mínima, en días, que elimina `clean` cuando no se pasa `--days` |
