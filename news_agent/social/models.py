@@ -250,7 +250,7 @@ class VisualPrompt:
         aspect: Identificador del aspecto ("landscape", "square", "portrait").
         aspect_ratio: Proporción legible (ej: "16:9").
         platforms: Plataformas destinatarias de este aspecto.
-        prompt: Prompt positivo, en inglés y sin referencias a texto.
+        prompt: Prompt positivo en inglés, con paleta y rótulos breves.
         negative_prompt: Prompt negativo con los artefactos a evitar.
         midjourney_prompt: Prompt listo para Midjourney, con sus flags.
         settings: Parámetros sugeridos (pasos, guidance, sampler).

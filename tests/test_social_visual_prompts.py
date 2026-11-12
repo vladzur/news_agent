@@ -8,7 +8,7 @@ from news_agent.config import SOCIAL_JSON_MAX_RETRIES
 from news_agent.llm_client import LLMClientError
 from news_agent.social.visual_prompts import (
     VisualPromptGenerationError,
-    _find_text_artifacts,
+    _find_text_blocks,
     build_visual_prompts,
     enabled_aspects,
     generate_visual_prompts,
@@ -19,15 +19,15 @@ from news_agent.social.visual_prompts import (
 )
 from tests.test_social_copy_generator import FakeClient
 
-# Prompt válido, en inglés y sin referencias a texto
+# Prompt válido: ilustración editorial en inglés con rótulos breves y cifras
 VALID_PROMPT = (
-    "A stylised editorial caricature of a nameless bureaucrat in an oversized "
-    "suit sinking into a flooded city street at dusk, a towering concrete wall "
-    "looming behind him with a defiant grin painted across it, vibrant digital "
-    "painting with a bold saturated teal and warm amber palette, glowing "
-    "crimson-red horizon, expressive brush strokes and cel shading, wide "
-    "composition with generous negative space, dramatic coloured rim light, "
-    "witty and critical mood, high detail, magazine cover quality"
+    "Bold editorial illustration of a colossal piggy bank cracking open over a "
+    "tiny flooded city street at dusk, a giant red arrow piercing it from "
+    "above, the number \"-10,39%\" and the label \"PENSIONES\" rendered in "
+    "thick vintage lettering on a floating stamp, flat vector infographics "
+    "mixed with textured digital painting, saturated teal and warm amber "
+    "palette against crimson red, dramatic rim light, wide composition, "
+    "critical and urgent mood, high detail, magazine cover quality"
 )
 
 
@@ -117,8 +117,16 @@ class TestValidateVisualPrompt:
         with pytest.raises(VisualPromptGenerationError, match="palabras"):
             validate_visual_prompt(" ".join(["shadow"] * 250))
 
-    def test_rejects_a_prompt_that_describes_text(self):
-        prompt = VALID_PROMPT + ", a poster with the word FREEDOM painted on it"
+    def test_accepts_a_prompt_with_labels_and_figures(self):
+        prompt = (
+            VALID_PROMPT + ", a red banner reading \"NO ALCANZA\" and a chart "
+            "with arrows showing -10,39%"
+        )
+
+        validate_visual_prompt(prompt)
+
+    def test_rejects_a_prompt_that_asks_for_paragraphs_of_text(self):
+        prompt = VALID_PROMPT + ", a newspaper filled with paragraphs of text"
 
         with pytest.raises(VisualPromptGenerationError, match="texto"):
             validate_visual_prompt(prompt)
@@ -134,17 +142,22 @@ class TestValidateVisualPrompt:
             validate_visual_prompt(prompt)
 
 
-class TestTextArtifactDetection:
-    """Detección de menciones a texto en un prompt positivo."""
+class TestTextBlockDetection:
+    """Detección de bloques de texto: los rótulos breves están permitidos."""
 
-    def test_detects_the_word_text(self):
-        assert _find_text_artifacts("a wall with text painted on it") == ["text"]
+    def test_detects_paragraphs_of_text(self):
+        assert _find_text_blocks("a wall covered with paragraphs of text") == [
+            "paragraphs of text"
+        ]
+
+    def test_detects_fine_print(self):
+        assert _find_text_blocks("a contract with fine print") == ["fine print"]
+
+    def test_allows_short_labels_and_numbers(self):
+        assert _find_text_blocks('a sign reading "PENSIONES" and "-10,39%"') == []
 
     def test_allows_negated_mentions(self):
-        assert _find_text_artifacts("a wall without text, no letters anywhere") == []
-
-    def test_does_not_flag_texture(self):
-        assert _find_text_artifacts("rich paper texture and film grain") == []
+        assert _find_text_blocks("a wall without paragraphs of text") == []
 
 
 class TestSpanishHeuristic:
@@ -158,6 +171,14 @@ class TestSpanishHeuristic:
 
     def test_flags_a_spanish_prompt(self):
         assert looks_like_spanish("los muros del sur para la gente") is True
+
+    def test_ignores_quoted_labels_written_in_spanish(self):
+        prompt = (
+            "editorial illustration of a cracked piggy bank with the labels "
+            "\"LA DEUDA\" and \"EL PUEBLO\" painted in bold letters"
+        )
+
+        assert looks_like_spanish(prompt) is False
 
 
 class TestColourSignal:
@@ -266,7 +287,9 @@ class TestBuildVisualPrompts:
 
     def test_skips_prompts_that_violate_the_rules(self, visual_payload, social_config):
         payload = copy_module.deepcopy(visual_payload)
-        payload["prompts"][0]["prompt"] = VALID_PROMPT + ", a sign with text"
+        payload["prompts"][0]["prompt"] = (
+            VALID_PROMPT + ", a newspaper filled with paragraphs of text"
+        )
         aspects = enabled_aspects(social_config, ["x", "facebook", "instagram"])
 
         prompts = build_visual_prompts(payload, social_config, aspects)

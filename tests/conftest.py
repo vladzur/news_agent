@@ -208,14 +208,14 @@ def visual_payload() -> dict:
         dict: Payload con un prompt por aspecto declarado.
     """
     base = (
-        "A stylised editorial caricature of a nameless official in an "
-        "oversized suit standing on a flooded city street at dusk, a towering "
-        "concrete wall looming behind him with a defiant grin painted across "
-        "it, vibrant digital painting with a bold saturated teal and warm "
-        "amber palette, glowing crimson-red horizon, expressive brush strokes "
-        "and cel shading, wide composition with generous negative space, "
-        "dramatic coloured rim light, witty and critical mood, high detail, "
-        "magazine cover quality"
+        "Bold editorial illustration of a nameless official in an oversized "
+        "suit standing on a flooded city street at dusk, a towering concrete "
+        "wall looming behind him, a giant red stamp reading \"DESPIDOS\" "
+        "pressed across the scene, flat vector infographics mixed with "
+        "textured digital painting, saturated teal and warm amber palette, "
+        "glowing crimson-red horizon, wide composition with generous negative "
+        "space, dramatic coloured rim light, critical and urgent mood, high "
+        "detail, magazine cover quality"
     )
     return {
         "prompts": [
