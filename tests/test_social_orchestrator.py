@@ -35,7 +35,7 @@ class FakeLLMClient:
 
     def generate_report(self, system_prompt: str, user_prompt: str) -> str:
         self.system_prompts.append(system_prompt)
-        if "prompt engineer" in system_prompt.lower():
+        if "editorial illustrator" in system_prompt.lower():
             return self.visual_response
         return self.copy_response
 

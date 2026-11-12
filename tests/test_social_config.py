@@ -262,18 +262,22 @@ class TestRepositoryConfigCoherence:
         ):
             assert key in visual
 
-    def test_negative_prompt_excludes_text(self, social_config):
+    def test_negative_prompt_rejects_blocks_of_text_but_allows_labels(
+        self, social_config
+    ):
         negative = social_config["visual_prompts"]["negative_prompt"].lower()
 
-        assert "text" in negative
-        assert "letters" in negative
+        assert "paragraphs of text" in negative
         assert "watermark" in negative
+        assert not any(
+            term in negative for term in ("typography", "numbers", "captions")
+        )
 
-    def test_visual_style_prefers_colourful_digital_art(self, social_config):
+    def test_visual_style_prefers_editorial_illustration(self, social_config):
         style = social_config["visual_prompts"]["style"].lower()
 
-        assert "digital" in style
-        assert "caricature" in style
+        assert "illustration" in style
+        assert "infographic" in style
         assert "saturated" in style
 
     def test_negative_prompt_excludes_dull_results(self, social_config):

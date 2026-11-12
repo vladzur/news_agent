@@ -147,16 +147,28 @@ class TestVisualSystemPrompt:
 
         assert "English only" in prompt
 
-    def test_forbids_text_in_the_image(self, social_config):
+    def test_allows_short_labels_and_graphics(self, social_config):
         prompt = build_visual_prompt_system_prompt(social_config)
 
-        assert "NO text" in prompt
+        assert "graphic and typographic elements" in prompt
+        assert "stamps or dotted lines" in prompt
+
+    def test_asks_for_short_labels_in_spanish(self, social_config):
+        prompt = build_visual_prompt_system_prompt(social_config)
+
+        assert "three or four words at most" in prompt
+        assert "written in Spanish" in prompt
+
+    def test_forbids_paragraphs_of_text(self, social_config):
+        prompt = build_visual_prompt_system_prompt(social_config).lower()
+
+        assert "never ask for paragraphs" in prompt
 
     def test_allows_caricaturing_named_public_figures(self, social_config):
         prompt = build_visual_prompt_system_prompt(social_config)
 
         assert "caricature" in prompt.lower()
-        assert "public figures" in prompt
+        assert "People named in the article" in prompt
 
     def test_requires_named_within_the_article(self, social_config):
         prompt = build_visual_prompt_system_prompt(social_config)
@@ -180,22 +192,16 @@ class TestVisualSystemPrompt:
 
         assert "No explicit violence" in prompt
 
-    def test_prefers_colourful_digital_art(self, social_config):
+    def test_prefers_editorial_illustration_over_cartoons(self, social_config):
         prompt = build_visual_prompt_system_prompt(social_config).lower()
 
-        assert "digital art" in prompt
-        assert "caricature" in prompt
+        assert "editorial illustration" in prompt
+        assert "illustrations beat cartoons" in prompt
 
     def test_requires_a_named_colour_palette(self, social_config):
         prompt = build_visual_prompt_system_prompt(social_config)
 
-        assert "Colour is mandatory" in prompt
-
-    def test_forbids_colourless_palettes(self, social_config):
-        prompt = build_visual_prompt_system_prompt(social_config).lower()
-
-        assert "monochrome" in prompt
-        assert "desaturated" in prompt
+        assert "Always name a saturated colour palette" in prompt
 
 
 class TestVisualUserPrompt:
@@ -209,6 +215,15 @@ class TestVisualUserPrompt:
         assert article.title in prompt
         assert social_copy.hook in prompt
         assert social_copy.quote_card.quote in prompt
+
+    def test_offers_the_key_figures_as_big_numbers(
+        self, article, social_copy, social_config
+    ):
+        prompt = build_visual_prompt_user_prompt(article, social_copy, social_config)
+
+        assert "Key figures usable as big numbers in the artwork" in prompt
+        assert article.key_figures
+        assert article.key_figures[0] in prompt
 
     def test_includes_the_style_directive(self, article, social_copy, social_config):
         prompt = build_visual_prompt_user_prompt(article, social_copy, social_config)
@@ -254,25 +269,33 @@ class TestVisualUserPrompt:
 
         assert "Markdown code fences" in prompt
 
-    def test_states_the_style_requirements(self, article, social_copy, social_config):
-        prompt = build_visual_prompt_user_prompt(article, social_copy, social_config)
-
-        assert "Style requirements" in prompt
-        assert "Name a concrete, saturated colour palette" in prompt
-
-    def test_rejects_prompts_without_a_named_palette(
+    def test_states_what_the_illustration_must_do(
         self, article, social_copy, social_config
     ):
         prompt = build_visual_prompt_user_prompt(article, social_copy, social_config)
 
-        assert "without a named palette is rejected" in prompt
+        assert "What the illustration must do" in prompt
+        assert "Always name a saturated colour palette" in prompt
 
-    def test_requests_caricatures_of_named_public_figures(
+    def test_allows_labels_and_graphics(self, article, social_copy, social_config):
+        prompt = build_visual_prompt_user_prompt(article, social_copy, social_config)
+
+        assert "short Spanish labels in double quotes" in prompt
+        assert "Keep every label under five words" in prompt
+
+    def test_uses_illustration_over_caricature(
         self, article, social_copy, social_config
     ):
         prompt = build_visual_prompt_user_prompt(article, social_copy, social_config)
 
-        assert "Caricature the public figures named in the article" in prompt
+        assert "Illustrate, never photograph" in prompt
+
+    def test_requests_stylised_characters_for_named_public_figures(
+        self, article, social_copy, social_config
+    ):
+        prompt = build_visual_prompt_user_prompt(article, social_copy, social_config)
+
+        assert "Named public figures may appear as stylised characters" in prompt
 
     def test_forbids_recognisable_private_individuals(
         self, article, social_copy, social_config
