@@ -6,7 +6,7 @@ para el uso diario:
 
     report   Genera la pauta editorial semanal desde los feeds RSS.
     article  Escribe una nota completa desde una propuesta de la pauta.
-    social   Genera el bundle de redes sociales de un artículo.
+    social   Genera los bundles de redes sociales de uno o varios artículos.
     print    Genera el tríptico impreso desde la pauta semanal.
     all      Encadena los cuatro pasos anteriores en una sola ejecución.
     clean    Elimina los artefactos generados con más de N días.
@@ -19,12 +19,15 @@ Uso:
     python -m news_agent report --feeds rss_feeds.json
     python -m news_agent article --number 2
     python -m news_agent social --platforms x,instagram
+    python -m news_agent social --all
+    python -m news_agent social --select
     python -m news_agent print
     python -m news_agent all --number 1
     python -m news_agent clean --days 30 --dry-run
 """
 
 import argparse
+import re
 import sys
 from collections.abc import Callable, Sequence
 from pathlib import Path
@@ -70,7 +73,7 @@ COMMANDS: tuple[str, ...] = (
 COMMAND_DESCRIPTIONS: dict[str, str] = {
     "report": "Genera la pauta editorial semanal desde los feeds RSS.",
     "article": "Escribe una nota completa desde una propuesta de la pauta.",
-    "social": "Genera el bundle de redes sociales de un artículo publicado.",
+    "social": "Genera los bundles de RRSS de los artículos publicados.",
     "print": "Genera el tríptico impreso desde la pauta semanal.",
     "all": "Ejecuta la secuencia completa: pauta, nota, RRSS y tríptico.",
     "clean": "Elimina los artefactos generados con más de N días.",
@@ -79,6 +82,9 @@ COMMAND_DESCRIPTIONS: dict[str, str] = {
 # Patrones con que se localizan la pauta y el artículo más recientes.
 REPORT_FILE_PATTERN = "pauta_semanal_*.md"
 ARTICLE_FILE_PATTERN = "articulo_*.md"
+
+# Número editorial que abre el nombre de los artículos (articulo_3_slug.md).
+ARTICLE_ORDER_RE = re.compile(r"articulo_(\d+)")
 
 # Ayuda reutilizada por todos los subcomandos.
 VERBOSE_HELP = "Activa logging en modo DEBUG para diagnóstico detallado."
@@ -244,17 +250,37 @@ def _add_social_parser(
         help=COMMAND_DESCRIPTIONS["social"],
         description=(
             "Genera copys, prompts visuales y banners para X, Facebook e "
-            "Instagram a partir de un artículo publicado."
+            "Instagram a partir de uno o varios artículos publicados."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
+        "--articles-dir",
+        type=str,
+        default=DEFAULT_ARTICLES_DIR,
+        metavar="DIR",
+        help=f"Directorio donde buscar los artículos de origen que usan "
+        f"--all y --select (por defecto: {DEFAULT_ARTICLES_DIR}/).",
+    )
+    source = parser.add_mutually_exclusive_group()
+    source.add_argument(
         "--article",
         type=str,
         default=None,
         metavar="RUTA",
         help="Ruta al artículo Markdown. Por defecto, el más reciente de "
         f"{DEFAULT_ARTICLES_DIR}/.",
+    )
+    source.add_argument(
+        "--all",
+        action="store_true",
+        dest="all_articles",
+        help="Genera un bundle por cada artículo del directorio de origen.",
+    )
+    source.add_argument(
+        "--select",
+        action="store_true",
+        help="Pregunta por la terminal cuál de los artículos procesar.",
     )
     parser.add_argument(
         "--output",
@@ -541,6 +567,156 @@ def resolve_pauta(pauta: str | None) -> Path:
     return latest
 
 
+def find_articles(
+    directory: str | Path = DEFAULT_ARTICLES_DIR,
+) -> list[Path]:
+    """Lista los artículos de un directorio en orden editorial.
+
+    El orden se toma del número que abre el nombre del archivo
+    (``articulo_2_...`` antes que ``articulo_10_...``), no del orden
+    alfabético ni de la fecha de modificación.
+
+    Args:
+        directory: Directorio donde buscar.
+
+    Returns:
+        list[Path]: Artículos encontrados, ordenados por número editorial.
+    """
+    base = Path(directory)
+    if not base.is_dir():
+        return []
+
+    candidates = [
+        path for path in base.glob(ARTICLE_FILE_PATTERN) if path.is_file()
+    ]
+    return sorted(candidates, key=_article_order_key)
+
+
+def _article_order_key(path: Path) -> tuple[int, str]:
+    """Clave de orden para un artículo según el número de su nombre.
+
+    Args:
+        path: Ruta del artículo.
+
+    Returns:
+        tuple[int, str]: Número editorial (al final si no existe) y nombre,
+        para desempatar de forma estable.
+    """
+    match = ARTICLE_ORDER_RE.match(path.name)
+    return (int(match.group(1)) if match else sys.maxsize, path.name)
+
+
+def prompt_for_article(
+    articles: Sequence[Path],
+    ask: Callable[[str], str] | None = None,
+) -> Path:
+    """Pregunta por la terminal sobre qué artículo generar las piezas de RRSS.
+
+    Args:
+        articles: Artículos disponibles, en el orden en que se muestran.
+        ask: Función de lectura de una línea, inyectable en los tests. Si es
+            None, se usa la entrada estándar.
+
+    Returns:
+        Path: Artículo elegido.
+
+    Raises:
+        KeyboardInterrupt: Si el usuario cancela con 'q' o con Ctrl+C.
+        EOFError: Si la entrada estándar se agota antes de una respuesta válida.
+    """
+    reader = ask if ask is not None else input
+
+    print("\n¿Sobre qué artículo quieres generar las piezas de RRSS?")
+    for index, path in enumerate(articles, start=1):
+        print(f"  {index}. {path.name}")
+
+    while True:
+        answer = reader(
+            f"Elige un número del 1 al {len(articles)} "
+            "o 'q' para cancelar: "
+        ).strip()
+
+        if answer.lower() in {"q", "quit", "salir"}:
+            raise KeyboardInterrupt
+
+        if answer.isdigit() and 1 <= int(answer) <= len(articles):
+            return articles[int(answer) - 1]
+
+        print("Opción inválida. Intenta nuevamente.")
+
+
+def resolve_articles(
+    article: str | None,
+    articles_dir: str | Path = DEFAULT_ARTICLES_DIR,
+    all_articles: bool = False,
+    select: bool = False,
+) -> list[Path]:
+    """Resuelve qué artículos se usarán para los bundles de RRSS.
+
+    Prioridad: ruta explícita, todos los artículos del directorio, selección
+    interactiva y, si no se indicó nada, el más reciente.
+
+    Args:
+        article: Ruta explícita al artículo, o None.
+        articles_dir: Directorio donde buscar los artículos.
+        all_articles: Si es True, devuelve todos los artículos encontrados.
+        select: Si es True, pregunta por la terminal cuál procesar.
+
+    Returns:
+        list[Path]: Artículos a procesar, en orden editorial.
+
+    Raises:
+        SystemExit: Si no hay artículos, falta una terminal para la selección
+        interactiva o la entrada se agota sin respuesta.
+    """
+    if article:
+        return [Path(article)]
+
+    if all_articles or select:
+        articles = find_articles(articles_dir)
+        if not articles:
+            print(
+                f"Error: no se encontró ningún artículo en "
+                f"'{articles_dir}/'. Escribe uno con 'article' o indica "
+                "la ruta con --article.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+        if all_articles:
+            return articles
+
+        if not sys.stdin.isatty():
+            print(
+                "Error: la selección interactiva necesita una terminal. "
+                "Indica el artículo con --article RUTA o usa --all.",
+                file=sys.stderr,
+            )
+            sys.exit(2)
+
+        try:
+            return [prompt_for_article(articles)]
+        except EOFError:
+            print(
+                "Error: no se recibió ninguna selección de artículo.",
+                file=sys.stderr,
+            )
+            sys.exit(2)
+
+    latest = find_latest_article(articles_dir)
+    if latest is None:
+        print(
+            f"Error: no se encontró ningún artículo en "
+            f"'{articles_dir}/'. Escribe uno con 'article' o indica "
+            "la ruta con --article.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    print(f"📄 Usando el artículo más reciente: {latest}")
+    return [latest]
+
+
 def resolve_article(article: str | None) -> Path:
     """Resuelve el artículo a usar, tomando el más reciente si no se indicó uno.
 
@@ -553,21 +729,7 @@ def resolve_article(article: str | None) -> Path:
     Raises:
         SystemExit: Si no se indicó una ruta y no hay artículos en el directorio.
     """
-    if article:
-        return Path(article)
-
-    latest = find_latest_article()
-    if latest is None:
-        print(
-            f"Error: no se encontró ningún artículo en "
-            f"'{DEFAULT_ARTICLES_DIR}/'. Escribe uno con 'article' o indica "
-            "la ruta con --article.",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-    print(f"📄 Usando el artículo más reciente: {latest}")
-    return latest
+    return resolve_articles(article)[0]
 
 
 # ---------------------------------------------------------------------------
@@ -959,19 +1121,66 @@ def _handle_social(args: argparse.Namespace) -> None:
     Args:
         args: Argumentos ya parseados.
     """
-    article_path = resolve_article(args.article)
+    articles = resolve_articles(
+        args.article,
+        articles_dir=args.articles_dir,
+        all_articles=args.all_articles,
+        select=args.select,
+    )
     output_dir = resolve_output_dir(args.output, DEFAULT_SOCIAL_OUTPUT_DIR)
 
-    result = run_socialize_step(
-        article_path=article_path,
-        output_dir=output_dir,
-        platforms=args.platforms,
-        config_path=args.social_config,
-        verbose=args.verbose,
-        skip_banners=args.skip_banners,
-        skip_prompts=args.skip_prompts,
-    )
-    print_social_summary(result)
+    if len(articles) > 1:
+        # Un error de uso (por ejemplo, plataforma desconocida) afectaría a
+        # todos los artículos: se valida una vez para no repetir el mensaje.
+        try:
+            parse_platforms(args.platforms)
+        except ValueError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            sys.exit(2)
+
+        print(
+            f"📚 Se procesarán {len(articles)} artículo(s) de "
+            f"'{args.articles_dir}/'."
+        )
+
+    failures: list[Path] = []
+    for index, article_path in enumerate(articles, start=1):
+        if len(articles) > 1:
+            print(
+                f"\n▶️  Artículo {index}/{len(articles)}: {article_path.name}"
+            )
+
+        try:
+            result = run_socialize_step(
+                article_path=article_path,
+                output_dir=output_dir,
+                platforms=args.platforms,
+                config_path=args.social_config,
+                verbose=args.verbose,
+                skip_banners=args.skip_banners,
+                skip_prompts=args.skip_prompts,
+            )
+        except SystemExit as exc:
+            # En lote, un artículo inválido no debe abortar los demás.
+            if len(articles) == 1 or exc.code in (None, 0):
+                raise
+            failures.append(article_path)
+            print(
+                f"⚠️  Se omitió {article_path.name} por un error "
+                f"(código {exc.code}).",
+                file=sys.stderr,
+            )
+            continue
+
+        print_social_summary(result)
+
+    if failures:
+        print(
+            f"\n❌ {len(failures)} de {len(articles)} artículo(s) no se "
+            "pudieron procesar.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
 
 def _handle_print(args: argparse.Namespace) -> None:
