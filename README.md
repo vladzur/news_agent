@@ -87,7 +87,7 @@ El punto de entrada `python -m news_agent` ofrece un CLI de subcomandos pensado 
 |---------|----------|
 | `report` | Genera la pauta editorial semanal desde los feeds RSS. |
 | `article` | Escribe una nota completa desde una propuesta de la pauta. |
-| `social` | Genera el bundle de redes sociales de un artículo publicado. |
+| `social` | Genera los bundles de redes sociales de uno o varios artículos publicados. |
 | `print` | Genera el tríptico impreso desde la pauta semanal. |
 | `all` | Ejecuta la secuencia completa: pauta → nota → redes sociales → tríptico. |
 | `clean` | Elimina los artefactos generados con más de N días. |
@@ -102,11 +102,17 @@ python -m news_agent article --number 2
 python -m news_agent social --platforms x,instagram
 python -m news_agent print
 
+# RRSS de varios artículos: uno elegido por la terminal, uno concreto por ruta
+# o todos los que haya en articulos/
+python -m news_agent social --select
+python -m news_agent social --article articulos/articulo_3_slug.md
+python -m news_agent social --all
+
 # Limpieza de los artefactos con más de 90 días (pide confirmación)
 python -m news_agent clean --days 90
 ```
 
-**Entradas implícitas:** si no se indica la pauta o el artículo, el CLI toma el más reciente del directorio correspondiente (`reportes/` o `articulos/`). Cuando `article` o `all` no reciben `--number`, preguntan por la terminal qué propuesta desarrollar, mostrando los cinco titulares; en un cron hay que pasar el número siempre, porque no hay terminal.
+**Entradas implícitas:** si no se indica la pauta o el artículo, el CLI toma el más reciente del directorio correspondiente (`reportes/` o `articulos/`). Cuando `article` o `all` no reciben `--number`, preguntan por la terminal qué propuesta desarrollar, mostrando los cinco titulares; en un cron hay que pasar el número siempre, porque no hay terminal. `social` sigue la misma regla solo con `--select`: sin esa bandera toma el artículo más reciente y funciona igual en un cron.
 
 **Sin argumentos no se ejecuta nada:** `python -m news_agent` a secas muestra la ayuda y sale con código 2. Antes arrancaba la generación de pauta completa —consumiendo tokens de la API— y escribía el resultado en el directorio actual.
 
@@ -122,7 +128,10 @@ python -m news_agent clean --days 90
 | `--output DIR` | `report`, `article`, `social`, `print` | Directorio de salida (por defecto `reportes/`, `articulos/`, `social/` o `impresos/`). |
 | `--base DIR` | `all`, `clean` | Directorio base del proyecto, del que se derivan `reportes/`, `articulos/`, `social/` e `impresos/` (por defecto `.`). |
 | `--pauta RUTA` | `article`, `print` | Pauta a usar (por defecto, la más reciente de `reportes/`). |
-| `--article RUTA` | `social` | Artículo de origen (por defecto, el más reciente de `articulos/`). |
+| `--article RUTA` | `social` | Artículo de origen (por defecto, el más reciente de `articulos/`). Excluyente con `--all` y `--select`. |
+| `--all` | `social` | Genera un bundle por cada artículo del directorio de origen. Si uno falla, continúa con los demás y termina con código 1. |
+| `--select` | `social` | Pregunta por la terminal cuál artículo procesar (requiere TTY). |
+| `--articles-dir DIR` | `social` | Directorio de artículos de origen para `--all` y `--select` (por defecto `articulos/`). |
 | `-n`, `--number N` | `article`, `all` | Propuesta a desarrollar (1 a 5). Si se omite, se pregunta por la terminal. |
 | `--platforms LISTA` | `social`, `all` | Plataformas separadas por comas (`x,facebook,instagram`). Por defecto, todas. |
 | `--social-config RUTA` | `social`, `all` | JSON de marca y plantillas (por defecto `social_config.json`). |

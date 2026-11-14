@@ -168,6 +168,18 @@ class _FakeStdin:
         return True
 
 
+class _NonTtyStdin:
+    """Entrada estándar simulada sin terminal (por ejemplo, en un cron)."""
+
+    def isatty(self) -> bool:
+        """Indica que la entrada no es una terminal.
+
+        Returns:
+            bool: Siempre False.
+        """
+        return False
+
+
 def _raise_pauta_error(**kwargs: Any) -> dict[str, Any]:
     """Simula una pauta que no se puede parsear.
 
@@ -227,11 +239,35 @@ class TestParser:
         args = build_cli_parser().parse_args(["social"])
 
         assert args.article is None
+        assert args.articles_dir == "articulos"
+        assert args.all_articles is False
+        assert args.select is False
         assert args.output == "social"
         assert args.platforms is None
         assert args.social_config is None
         assert args.skip_banners is False
         assert args.skip_prompts is False
+
+    def test_social_parses_the_source_selection_flags(self):
+        args = build_cli_parser().parse_args(["social", "--all"])
+
+        assert args.all_articles is True
+        assert args.select is False
+
+        args = build_cli_parser().parse_args(
+            ["social", "--select", "--articles-dir", "otras"]
+        )
+
+        assert args.select is True
+        assert args.articles_dir == "otras"
+
+    def test_social_source_options_are_mutually_exclusive(self):
+        with pytest.raises(SystemExit) as excinfo:
+            build_cli_parser().parse_args(
+                ["social", "--article", "articulos/a.md", "--all"]
+            )
+
+        assert excinfo.value.code == 2
 
     def test_all_defaults(self):
         args = build_cli_parser().parse_args(["all"])
@@ -331,6 +367,74 @@ class TestFindLatest:
         (tmp_path / "articulos").mkdir()
 
         assert cli.find_latest_article(tmp_path / "articulos") is None
+
+
+class TestFindArticles:
+    """Listado de todos los artículos de un directorio."""
+
+    def test_orders_articles_by_editorial_number(self, tmp_path):
+        articles = tmp_path / "articulos"
+        _create_file(articles / "articulo_10_diez.md")
+        _create_file(articles / "articulo_2_dos.md")
+        _create_file(articles / "articulo_1_uno.md")
+
+        names = [path.name for path in cli.find_articles(articles)]
+
+        assert names == [
+            "articulo_1_uno.md",
+            "articulo_2_dos.md",
+            "articulo_10_diez.md",
+        ]
+
+    def test_returns_an_empty_list_without_a_directory(self, tmp_path):
+        assert cli.find_articles(tmp_path / "no-existe") == []
+
+
+class TestPromptForArticle:
+    """Pregunta por consola qué artículo procesar."""
+
+    def test_returns_the_chosen_article(self):
+        articles = [
+            Path("articulos/articulo_1_uno.md"),
+            Path("articulos/articulo_2_dos.md"),
+        ]
+
+        assert (
+            cli.prompt_for_article(articles, ask=lambda _: "2") == articles[1]
+        )
+
+    def test_prints_each_article(self, capsys):
+        articles = [
+            Path("articulos/articulo_1_uno.md"),
+            Path("articulos/articulo_2_dos.md"),
+        ]
+
+        cli.prompt_for_article(articles, ask=lambda _: "1")
+
+        output = capsys.readouterr().out
+        assert "¿Sobre qué artículo quieres generar" in output
+        assert "1. articulo_1_uno.md" in output
+        assert "2. articulo_2_dos.md" in output
+
+    def test_retries_after_an_invalid_answer(self, capsys):
+        articles = [
+            Path("articulos/articulo_1_uno.md"),
+            Path("articulos/articulo_2_dos.md"),
+        ]
+        answers = iter(["abc", "9", "1"])
+
+        chosen = cli.prompt_for_article(
+            articles, ask=lambda _: next(answers)
+        )
+
+        assert chosen == articles[0]
+        assert "Opción inválida" in capsys.readouterr().out
+
+    def test_cancels_with_q(self):
+        with pytest.raises(KeyboardInterrupt):
+            cli.prompt_for_article(
+                [Path("articulos/articulo_1_uno.md")], ask=lambda _: "q"
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -676,6 +780,105 @@ class TestSocialCommand:
         assert calls["skip_banners"] is True
         assert calls["skip_prompts"] is True
         assert calls["config_path"] == "marca.json"
+
+    def test_all_processes_every_article_in_editorial_order(
+        self, tmp_path, monkeypatch
+    ):
+        _create_file(tmp_path / "articulos" / "articulo_2_dos.md")
+        _create_file(tmp_path / "articulos" / "articulo_1_uno.md")
+        monkeypatch.chdir(tmp_path)
+        processed: list[str] = []
+
+        def _fake_socialize(**kwargs: Any) -> dict[str, Any]:
+            processed.append(Path(kwargs["article_path"]).name)
+            return _social_result(tmp_path)
+
+        monkeypatch.setattr(
+            "news_agent.social.orchestrator.run_socialize", _fake_socialize
+        )
+
+        main(["social", "--all"])
+
+        assert processed == ["articulo_1_uno.md", "articulo_2_dos.md"]
+
+    def test_all_reads_the_articles_dir_option(self, tmp_path, monkeypatch):
+        _create_file(tmp_path / "borradores" / "articulo_1_uno.md")
+        monkeypatch.chdir(tmp_path)
+        calls: dict[str, Any] = {}
+        monkeypatch.setattr(
+            "news_agent.social.orchestrator.run_socialize",
+            _capturing(calls, _social_result(tmp_path)),
+        )
+
+        main(["social", "--all", "--articles-dir", "borradores"])
+
+        assert Path(calls["article_path"]).name == "articulo_1_uno.md"
+
+    def test_all_continues_after_a_failed_article(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        _create_file(tmp_path / "articulos" / "articulo_1_uno.md")
+        _create_file(tmp_path / "articulos" / "articulo_2_dos.md")
+        monkeypatch.chdir(tmp_path)
+        processed: list[str] = []
+
+        def _fake_socialize(**kwargs: Any) -> dict[str, Any]:
+            name = Path(kwargs["article_path"]).name
+            processed.append(name)
+            if name.startswith("articulo_1"):
+                raise ValueError("artículo inválido")
+            return _social_result(tmp_path)
+
+        monkeypatch.setattr(
+            "news_agent.social.orchestrator.run_socialize", _fake_socialize
+        )
+
+        with pytest.raises(SystemExit) as excinfo:
+            main(["social", "--all"])
+
+        assert excinfo.value.code == 1
+        assert processed == ["articulo_1_uno.md", "articulo_2_dos.md"]
+        assert "articulo_1_uno.md" in capsys.readouterr().err
+
+    def test_all_fails_without_articles(self, tmp_path, monkeypatch, capsys):
+        monkeypatch.chdir(tmp_path)
+
+        with pytest.raises(SystemExit) as excinfo:
+            main(["social", "--all"])
+
+        assert excinfo.value.code == 1
+        assert "no se encontró ningún artículo" in capsys.readouterr().err
+
+    def test_select_uses_the_article_chosen_in_the_terminal(
+        self, tmp_path, monkeypatch
+    ):
+        _create_file(tmp_path / "articulos" / "articulo_1_uno.md")
+        second = _create_file(tmp_path / "articulos" / "articulo_2_dos.md")
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr("sys.stdin", _FakeStdin())
+        monkeypatch.setattr(cli, "prompt_for_article", lambda articles: second)
+        calls: dict[str, Any] = {}
+        monkeypatch.setattr(
+            "news_agent.social.orchestrator.run_socialize",
+            _capturing(calls, _social_result(tmp_path)),
+        )
+
+        main(["social", "--select"])
+
+        assert Path(calls["article_path"]).resolve() == second.resolve()
+
+    def test_select_requires_a_terminal(self, tmp_path, monkeypatch, capsys):
+        _create_file(tmp_path / "articulos" / "articulo_1_uno.md")
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr("sys.stdin", _NonTtyStdin())
+
+        with pytest.raises(SystemExit) as excinfo:
+            main(["social", "--select"])
+
+        assert excinfo.value.code == 2
+        error = capsys.readouterr().err
+        assert "terminal" in error
+        assert "--article" in error
 
 
 # ---------------------------------------------------------------------------
