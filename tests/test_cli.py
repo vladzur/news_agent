@@ -668,6 +668,34 @@ class TestArticleCommand:
         assert excinfo.value.code == 1
         assert "Error al leer la pauta" in capsys.readouterr().err
 
+    def test_prints_the_applied_headline_and_the_proposal_count(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        result = {
+            **_article_result(tmp_path),
+            "headline": "Titular de portada aplicado",
+            "deck": "Bajada de portada aplicada.",
+            "headline_proposals": [{"enfoque": "x"} for _ in range(3)],
+        }
+        monkeypatch.setattr(cli, "write_article", lambda **kwargs: result)
+
+        main(
+            [
+                "article",
+                "--pauta",
+                "reportes/pauta.md",
+                "--number",
+                "1",
+                "--output",
+                str(tmp_path / "articulos"),
+            ]
+        )
+
+        output = capsys.readouterr().out
+        assert "Titular aplicado" in output
+        assert "Titular de portada aplicado" in output
+        assert "Propuestas de portada: 3" in output
+
 
 # ---------------------------------------------------------------------------
 # Comando social

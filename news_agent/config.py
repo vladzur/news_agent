@@ -42,6 +42,24 @@ PAUTA_REASONING_EFFORT = "high"
 ARTICLE_REASONING_EFFORT = "high"  # Razonamiento para redacción de artículos individuales
 
 # ---------------------------------------------------------------------------
+# Constantes del editor de portada (titulares y bajadas)
+# ---------------------------------------------------------------------------
+# Segunda llamada por artículo: devuelve tres pares titular+bajada (~250
+# palabras), pero el razonamiento editorial consume la mayor parte del cupo.
+PORTADA_MAX_TOKENS = 8192
+PORTADA_REASONING_EFFORT = "high"
+# Más alta que la pauta: la titulación es creativa, aunque debe ceñirse a los
+# hechos del artículo ya escrito.
+PORTADA_TEMPERATURE = 0.6
+# Un reintento cuando la respuesta no es JSON válido o no respeta los largos.
+PORTADA_JSON_MAX_RETRIES = 1
+# Largos obligatorios de cada pieza, en palabras.
+HEADLINE_MIN_WORDS = 12
+HEADLINE_MAX_WORDS = 16
+DECK_MIN_WORDS = 25
+DECK_MAX_WORDS = 45
+
+# ---------------------------------------------------------------------------
 # Constantes de la ventana de análisis y formato
 # ---------------------------------------------------------------------------
 TIME_WINDOW_HOURS = 96  # 4 días: noticias anteriores ya tienen desarrollos posteriores en la ventana

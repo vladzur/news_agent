@@ -329,11 +329,16 @@ de pauta que se te entrega a continuación. Debes:
 Usa el siguiente formato Markdown:
 
 ```
-# [TÍTULO DEL ARTÍCULO]
+# [TÍTULO DEL ARTÍCULO — 12 a 16 palabras, con el conflicto en el centro]
 
 **Por La Chispa Sur**
 
 ---
+
+*[Bajada o copete — 25 a 45 palabras. Amplía el titular con los datos duros \
+esenciales (quién, qué, dónde, cifras y fuentes) y cierra dejando clara la \
+relevancia de por qué el tema importa ahora. No repitas las palabras ni la \
+idea exacta del titular.]*
 
 [Lead o entrada — 2 a 3 párrafos que enganchen al lector, presenten el tema \
 y adelanten el ángulo crítico.]
@@ -377,8 +382,19 @@ Las fuentes utilizadas se listan a continuación.*
     llamado claro a la lectura**: plantea el conflicto, la contradicción o la \
     pregunta incómoda central. **No lo conviertas en un micro resumen** de lo \
     que el artículo va a contar, ni uses un titular neutro o meramente \
-    descriptivo. No uses clickbait ni afirmaciones que los hechos no permitan.
-7. **NUNCA incluyas referencias internas [art. N] en el artículo final**: \
+    descriptivo. No uses clickbait ni afirmaciones que los hechos no permitan. \
+    El titular debe tener **entre 12 y 16 palabras**: identifica el núcleo del \
+    conflicto (la causa estructural o la contradicción política, no la \
+    superficie del evento), usa verbos activos y no ocultes al sujeto \
+    responsable cuando el artículo lo identifica.
+7. La **bajada** (la línea en cursiva después del separador) debe tener \
+    **entre 25 y 45 palabras** y funcionar como puente entre el titular y el \
+    núcleo del artículo: aporta los datos duros que el titular no da, amplía \
+    sin repetir y cierra con la relevancia política, social o humana de por \
+    qué el tema importa ahora. Un editor de portada propondrá después tres \
+    alternativas de titular y bajada; esta versión debe cumplir las reglas \
+    por sí sola, porque es la que se publica si esa etapa falla.
+8. **NUNCA incluyas referencias internas [art. N] en el artículo final**: \
    las marcas como "[art. 71]" o "[art. 153]" son metadatos del sistema \
    para rastrear fuentes durante la redacción, pero NO deben aparecer en \
    el texto publicado. El lector no debe ver estos identificadores. Cita \
@@ -434,6 +450,89 @@ Las fuentes utilizadas se listan a continuación.*
     artículo, pregúntate: ¿esto lo dijo alguna fuente concreta o lo deduje yo? \
     Si es deducción, ¿está presentada como tal?
 """  # noqa: E501
+
+# ---------------------------------------------------------------------------
+# System Prompt — Editor de Portada (titulares y bajadas)
+# ---------------------------------------------------------------------------
+
+PORTADA_SYSTEM_PROMPT = """\
+Eres el editor de portada y redactor jefe de **La Chispa Sur**, un medio \
+digital independiente de izquierda, crítico del modelo neoliberal y con mirada \
+marxista desde el sur de Chile.
+
+## Rol y línea editorial
+
+Tu tarea es redactar titulares y bajadas (subtítulos) que combinen rigor \
+informativo, mirada crítica y alto impacto periodístico. Evita los titulares \
+planos, meramente descriptivos o neutros en exceso; busca siempre la tensión \
+política, material o humana detrás del hecho noticioso, sin caer en el \
+sensacionalismo vacío ni inventar datos.
+
+Recibes un artículo ya redactado. Todo lo que afirmes en el titular y en la \
+bajada debe poder rastrearse al texto del artículo o a las fuentes que ese \
+texto cita: no introduzcas hechos, cifras, nombres ni acusaciones nuevos.
+
+## Reglas para titulares (12 a 16 palabras)
+
+1. **Identifica el núcleo del conflicto:** No te quedes en la superficie del \
+evento ("Llueve en Gaza"). Apunta a la causa estructural o a la contradicción \
+política ("No es el clima, es el bloqueo: muere un bebé por frío mientras \
+miles de carpas siguen retenidas").
+2. **Usa estructuras de alto impacto:** Alterna entre estas fórmulas según la \
+naturaleza del texto:
+   - **Tesis + Hecho duro:** [Afirmación editorial contundente]: [Dato o \
+suceso concreto].
+   - **Contraste o paradoja:** Expón dos hechos simultáneos que revelen una \
+injusticia o contradicción ("Mientras X ocurre, Y queda en silencio").
+   - **Pregunta retórica + Enfoque:** Una pregunta incómoda seguida de los \
+ejes del análisis.
+   - **Anclaje humano:** Parte desde una historia o cifra concreta para \
+ilustrar un problema sistémico.
+3. **Verbos activos y lenguaje concreto:** Prioriza verbos con fuerza (expone, \
+desarma, bloquea, condena, revela) y sustantivos precisos. Elimina adjetivos \
+innecesarios o clichés periodísticos ("impactante", "terrible", "increíble").
+4. **Prohibiciones:** Nunca uses clickbait engañoso ("No creerás lo que pasó") \
+ni ocultes al sujeto responsable cuando el artículo lo identifica claramente.
+
+## Reglas para la bajada / copete (25 a 45 palabras)
+
+La bajada debe funcionar como un puente inmediato entre el gancho del titular \
+y el núcleo del artículo, direccionando al lector al centro de la tesis.
+
+1. **Anclaje factual:** Si el titular es más conceptual o analítico, la bajada \
+debe entregar los datos duros esenciales (quién, qué, dónde, cifras clave y \
+fuentes principales).
+2. **Complementariedad:** Nunca repitas las mismas palabras ni la misma idea \
+exacta del titular; amplíala o aporta el contexto inmediato.
+3. **Tensión narrativa:** Cierra la bajada dejando clara la relevancia \
+política, social o humana de por qué este tema importa ahora.
+
+## Formato de salida obligatorio
+
+Entrega siempre **3 propuestas diferenciadas**, en este orden:
+
+1. **Enfoque de denuncia / tesis política:** nombra el conflicto y al \
+responsable que el artículo identifica.
+2. **Enfoque narrativo / humano:** ancla el problema sistémico en una historia, \
+una escena o una cifra concreta.
+3. **Enfoque analítico / geopolítico:** sitúa el hecho en su contexto \
+estructural, regional o internacional.
+
+Responde únicamente con un objeto JSON con esta forma, sin texto adicional ni \
+bloques de código Markdown:
+
+{
+  "propuestas": [
+    {"titular": "...", "bajada": "..."},
+    {"titular": "...", "bajada": "..."},
+    {"titular": "...", "bajada": "..."}
+  ]
+}
+
+Requisitos que se verifican en código: exactamente tres propuestas, entre \
+12 y 16 palabras por titular y entre 25 y 45 palabras por bajada. Un titular \
+o una bajada fuera de rango se rechaza y obliga a repetir la respuesta.
+"""
 
 
 def _build_main_topics_section(main_topics: list[str]) -> str:
@@ -622,6 +721,70 @@ def build_article_system_prompt() -> str:
     return ARTICLE_SYSTEM_PROMPT
 
 
+def build_portada_system_prompt() -> str:
+    """Devuelve el system prompt del editor de portada.
+
+    Returns:
+        str: Prompt con el rol de editor de portada y las reglas de titular,
+        bajada y formato JSON de las tres propuestas.
+    """
+    return PORTADA_SYSTEM_PROMPT
+
+
+def build_portada_user_prompt(
+    article_content: str,
+    proposal: dict[str, Any] | None = None,
+) -> str:
+    """Construye el user prompt del editor de portada a partir del artículo.
+
+    Args:
+        article_content: Markdown del artículo ya redactado.
+        proposal: Propuesta de pauta de origen, si se conoce. Solo aporta el
+            título sugerido y el enfoque aprobado como referencia del ángulo.
+
+    Returns:
+        str: Prompt de usuario con el artículo y el contrato de salida.
+    """
+    parts: list[str] = []
+
+    proposal = proposal or {}
+    title = str(proposal.get("title", "")).strip()
+    enfoque = str(proposal.get("enfoque", "")).strip()
+
+    if title or enfoque:
+        parts.append("## Ángulo aprobado por la pauta")
+        parts.append("")
+        if title:
+            parts.append(f"**Título sugerido:** {title}")
+        if enfoque:
+            parts.append(f"**Enfoque editorial:** {enfoque}")
+        parts.append("")
+        parts.append(
+            "Este es el ángulo que el artículo debía desarrollar. Úsalo para "
+            "entender la intención editorial, pero extrae los hechos del "
+            "artículo, no del título sugerido."
+        )
+        parts.append("")
+
+    parts.extend(
+        [
+            "## Artículo a titular",
+            "",
+            article_content.strip(),
+            "",
+            "---",
+            "",
+            (
+                "Redacta las tres propuestas siguiendo las reglas del system "
+                "prompt. Recuerda: el titular de cada propuesta debe tener "
+                "entre 12 y 16 palabras, y la bajada entre 25 y 45. Responde "
+                "solo con el objeto JSON, sin explicaciones."
+            ),
+        ]
+    )
+    return "\n".join(parts)
+
+
 def build_article_user_prompt(
     proposal: dict[str, Any],
     source_articles: list[dict[str, Any]] | None = None,
@@ -684,8 +847,10 @@ def build_article_user_prompt(
         "Extensión objetivo: ~1000 palabras. El titular debe ser agresivo, "
         "provocador y despertar curiosidad mediante el conflicto central; no "
         "lo redactes como un micro resumen ni como una descripción neutral. "
-        "Sostén una crítica editorial firme cuando los hechos la permitan, "
-        "sin inventar datos ni acusaciones."
+        "El titular debe tener entre 12 y 16 palabras y la bajada (la línea "
+        "en cursiva después del separador) entre 25 y 45. Sostén una crítica "
+        "editorial firme cuando los hechos la permitan, sin inventar datos ni "
+        "acusaciones."
     )
     parts.append("")
     parts.append(

@@ -4,9 +4,12 @@ import pytest
 
 from news_agent.prompt_builder import (
     ARTICLE_SYSTEM_PROMPT,
+    PORTADA_SYSTEM_PROMPT,
     SYSTEM_PROMPT,
     build_article_system_prompt,
     build_article_user_prompt,
+    build_portada_system_prompt,
+    build_portada_user_prompt,
     build_system_prompt,
     build_user_prompt,
 )
@@ -233,6 +236,27 @@ class TestBuildArticleSystemPrompt:
         prompt = build_article_system_prompt()
         assert "[art. N]" in prompt or "NUNCA incluyas referencias internas" in prompt
 
+    def test_requires_a_headline_of_12_to_16_words(self):
+        """Debe fijar el rango de 12 a 16 palabras para el titular."""
+        prompt = " ".join(build_article_system_prompt().lower().split())
+
+        assert "entre 12 y 16 palabras" in prompt
+        assert "núcleo del conflicto" in prompt
+
+    def test_requires_a_deck_of_25_to_45_words(self):
+        """Debe exigir la bajada con su rango y sus reglas."""
+        prompt = " ".join(build_article_system_prompt().lower().split())
+
+        assert "entre 25 y 45 palabras" in prompt
+        assert "bajada" in prompt
+        assert "puente entre el titular" in prompt
+
+    def test_mandates_the_deck_in_the_structure(self):
+        """La plantilla del artículo debe incluir la línea de bajada."""
+        prompt = build_article_system_prompt()
+
+        assert "*[Bajada o copete" in prompt
+
 
 class TestBuildArticleUserPrompt:
     """Pruebas para build_article_user_prompt."""
@@ -290,6 +314,13 @@ class TestBuildArticleUserPrompt:
         assert "titular debe ser agresivo, provocador" in result
         assert "no lo redactes como un micro resumen" in result
         assert "crítica editorial firme" in result
+
+    def test_states_the_headline_and_deck_lengths(self, sample_proposal):
+        """Debe recordar los rangos de 12-16 y 25-45 palabras."""
+        result = build_article_user_prompt(sample_proposal).lower()
+
+        assert "entre 12 y 16 palabras" in result
+        assert "entre 25 y 45" in result
 
     def test_handles_missing_fuentes(self):
         """Debe funcionar sin fuentes (lista vacía)."""
@@ -581,3 +612,79 @@ class TestBuildUserPrompt:
         result = build_user_prompt(items)
 
         assert "MAIN_TOPICS" not in result
+
+
+class TestPortadaPrompts:
+    """Pruebas del prompt del editor de portada."""
+
+    def test_returns_the_constant(self):
+        """Debe devolver exactamente PORTADA_SYSTEM_PROMPT."""
+        assert build_portada_system_prompt() == PORTADA_SYSTEM_PROMPT
+
+    def test_contains_the_portada_role(self):
+        """Debe presentarse como editor de portada de La Chispa Sur."""
+        prompt = build_portada_system_prompt()
+
+        assert "editor de portada" in prompt
+        assert "La Chispa Sur" in prompt
+
+    def test_contains_the_headline_rules(self):
+        """Debe fijar el rango de 12-16 palabras y el núcleo del conflicto."""
+        prompt = build_portada_system_prompt().lower()
+
+        assert "12 a 16 palabras" in prompt
+        assert "núcleo del conflicto" in prompt
+        assert "tesis + hecho duro" in prompt
+        assert "contraste o paradoja" in prompt
+        assert "pregunta retórica + enfoque" in prompt
+
+    def test_contains_the_deck_rules(self):
+        """Debe fijar el rango de 25-45 palabras y sus tres reglas."""
+        prompt = build_portada_system_prompt().lower()
+
+        assert "25 a 45 palabras" in prompt
+        assert "anclaje factual" in prompt
+        assert "complementariedad" in prompt
+        assert "tensión narrativa" in prompt
+
+    def test_prohibits_clickbait_and_invented_data(self):
+        """Debe prohibir el clickbait y la invención de datos."""
+        prompt = build_portada_system_prompt().lower()
+
+        assert "clickbait" in prompt
+        assert "inventar datos" in prompt
+        assert "no introduzcas hechos" in prompt
+
+    def test_requires_three_differentiated_proposals(self):
+        """Debe exigir tres propuestas con los enfoques pedidos."""
+        prompt = build_portada_system_prompt().lower()
+
+        assert "3 propuestas diferenciadas" in prompt
+        assert "denuncia / tesis política" in prompt
+        assert "narrativo / humano" in prompt
+        assert "analítico / geopolítico" in prompt
+        assert "json" in prompt
+
+    def test_user_prompt_includes_the_article(self):
+        """Debe incluir el markdown del artículo a titular."""
+        result = build_portada_user_prompt("# Titular\n\nCuerpo del artículo.")
+
+        assert "# Titular" in result
+        assert "Cuerpo del artículo." in result
+
+    def test_user_prompt_includes_the_pauta_angle(self):
+        """Debe incluir el título y el enfoque aprobados como referencia."""
+        result = build_portada_user_prompt(
+            "cuerpo",
+            {"title": "Título de pauta", "enfoque": "Enfoque aprobado"},
+        )
+
+        assert "Título de pauta" in result
+        assert "Enfoque aprobado" in result
+
+    def test_user_prompt_works_without_a_proposal(self):
+        """Debe funcionar sin propuesta de pauta."""
+        result = build_portada_user_prompt("cuerpo")
+
+        assert "cuerpo" in result
+        assert "Ángulo aprobado" not in result

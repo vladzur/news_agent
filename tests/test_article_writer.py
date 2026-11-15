@@ -14,6 +14,12 @@ from news_agent.article_writer import (
     parse_pauta_file,
     write_article,
 )
+from news_agent.headline_editor import (
+    APPENDIX_HEADING,
+    ENFOQUES,
+    HeadlineProposal,
+    HeadlineValidationError,
+)
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -255,6 +261,18 @@ class TestLooksLikeArticle:
         assert looks_like_article(None) is False
 
 
+TITULAR_PORTADA = (
+    "No es el clima, es el bloqueo: muere un bebé por frío mientras "
+    "miles de carpas"
+)
+
+BAJADA_PORTADA = (
+    "El Ministerio de Salud gazatí confirmó la muerte de Kinan Ahmed Raqiq "
+    "por hipotermia en Jan Yunis, mientras casi dos millones de personas "
+    "viven en carpas y la ayuda permanece frenada en la frontera."
+)
+
+
 class TestWriteArticle:
     """Pruebas de integración para write_article."""
 
@@ -262,6 +280,20 @@ class TestWriteArticle:
     def mock_api_key(self, monkeypatch):
         """Establece una API key de prueba."""
         monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test-article-key")
+
+    @pytest.fixture
+    def headline_proposals(self):
+        """Propuestas de portada simuladas para no llamar al modelo dos veces."""
+        proposals = [
+            HeadlineProposal(ENFOQUES[0], TITULAR_PORTADA, BAJADA_PORTADA),
+            HeadlineProposal(ENFOQUES[1], TITULAR_PORTADA, BAJADA_PORTADA),
+            HeadlineProposal(ENFOQUES[2], TITULAR_PORTADA, BAJADA_PORTADA),
+        ]
+        with patch(
+            "news_agent.article_writer.generate_headline_proposals",
+            return_value=proposals,
+        ):
+            yield proposals
 
     @pytest.fixture
     def mock_article_response(self):
@@ -284,7 +316,12 @@ class TestWriteArticle:
         )
 
     def test_write_article_success(
-        self, mock_api_key, sample_pauta_file, tmp_path, mock_article_response
+        self,
+        mock_api_key,
+        sample_pauta_file,
+        tmp_path,
+        mock_article_response,
+        headline_proposals,
     ):
         """Debe escribir un artículo exitosamente desde una pauta."""
         with patch("news_agent.article_writer.LLMClient") as mock_client_class:
@@ -302,6 +339,69 @@ class TestWriteArticle:
         assert result["title"] == "Título del Primer Artículo"
         assert result["article_path"].exists()
         assert "articulo_1_" in result["article_path"].name
+
+    def test_applies_the_first_headline_and_appends_the_three_proposals(
+        self,
+        mock_api_key,
+        sample_pauta_file,
+        tmp_path,
+        mock_article_response,
+        headline_proposals,
+    ):
+        """Debe usar la propuesta 1 como titular y dejar las tres al final."""
+        with patch("news_agent.article_writer.LLMClient") as mock_client_class:
+            mock_client = Mock()
+            mock_client.generate_report.return_value = mock_article_response
+            mock_client_class.return_value = mock_client
+
+            result = write_article(
+                pauta_path=sample_pauta_file,
+                article_number=1,
+                output_dir=tmp_path,
+            )
+
+        content = result["article_path"].read_text(encoding="utf-8")
+
+        assert content.startswith(f"# {TITULAR_PORTADA}")
+        assert f"*{BAJADA_PORTADA}*" in content
+        assert "Título del Primer Artículo" not in content.splitlines()[0]
+        assert APPENDIX_HEADING in content
+        assert content.count("**Titular:**") == 3
+        assert result["headline"] == TITULAR_PORTADA
+        assert result["deck"] == BAJADA_PORTADA
+        assert len(result["headline_proposals"]) == 3
+
+    def test_saves_the_article_when_the_portada_call_fails(
+        self,
+        mock_api_key,
+        sample_pauta_file,
+        tmp_path,
+        mock_article_response,
+    ):
+        """Si falla el editor de portada, la nota se guarda igual."""
+        with patch(
+            "news_agent.article_writer.generate_headline_proposals",
+            side_effect=HeadlineValidationError("sin JSON"),
+        ):
+            with patch(
+                "news_agent.article_writer.LLMClient"
+            ) as mock_client_class:
+                mock_client = Mock()
+                mock_client.generate_report.return_value = mock_article_response
+                mock_client_class.return_value = mock_client
+
+                result = write_article(
+                    pauta_path=sample_pauta_file,
+                    article_number=1,
+                    output_dir=tmp_path,
+                )
+
+        content = result["article_path"].read_text(encoding="utf-8")
+
+        assert content.startswith("# Título del Primer Artículo")
+        assert APPENDIX_HEADING not in content
+        assert result["headline_proposals"] == []
+        assert "headline" not in result
 
     def test_does_not_save_garbage_from_the_model(
         self, mock_api_key, sample_pauta_file, tmp_path
