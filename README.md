@@ -37,7 +37,8 @@ Toma una propuesta específica de la pauta (1 a 5) y la expande a un artículo d
    - Guarda un archivo **companion JSON** (`pauta_semanal_AAAA_MM_DD_companion.json`) con el contenido completo de cada artículo fuente.
 3. **Prompt enriquecido** — El redactor recibe una sección `## Material de origen disponible` con el contenido completo de los artículos fuente correctos para su propuesta, permitiéndole escribir con datos verificables en lugar de inventar o depender de memoria.
 4. **Redacción del artículo** — Usa un system prompt de redactor periodístico (identidad La Chispa Sur) que exige trazabilidad de cada dato a las fuentes proporcionadas.
-5. **Artículo final** — Lead, desarrollo por secciones con subtítulos, y fuentes citadas al final. Guardado como `articulo_N_slug-del-titulo.md`.
+5. **Editor de portada** — Una segunda llamada, con rol de editor de portada, devuelve **tres propuestas diferenciadas** de titular y bajada: denuncia/tesis política, narrativo/humano y analítico/geopolítico. Los largos se validan en código (12-16 palabras el titular, 25-45 la bajada): si el modelo se desvía se reintenta una vez y, si vuelve a fallar, se recorta por código con aviso. La **propuesta 1 se aplica** como titular y bajada del artículo; las tres quedan en un apéndice `## 📰 Propuestas de portada` al final del archivo para cambiarlas sin repetir la generación. Si esta etapa falla, la nota se guarda igual con el titular del redactor.
+6. **Artículo final** — Titular y bajada de portada, lead, desarrollo por secciones con subtítulos, fuentes citadas y el apéndice de propuestas. Guardado como `articulo_N_slug-del-titulo.md`. El apéndice está marcado como no publicable y el parser de RRSS lo excluye del material de origen.
 
 > **¿Por qué matching determinista y no números de artículo?** En pruebas reales, el LLM que genera la pauta frecuentemente asigna números de artículo incorrectos en el bloque de referencias (ej: mapear una propuesta sobre tala de bosque nativo en Villarrica a artículos sobre salmonicultura o conflictos en Líbano). El matching por nombre de medio + keywords extrae las fuentes directamente del texto de la pauta —que el LLM escribe de forma natural y confiable— y las cruza con los artículos del pipeline sin depender del auto-reporte del modelo.
 
@@ -184,6 +185,7 @@ news_agent/
 ├── llm_client.py          # Cliente DeepSeek vía SDK OpenAI (modo compatible)
 ├── report_writer.py       # Escritura de reportes .md y artículos
 ├── article_writer.py      # Parseo de pauta + escritura de artículo completo
+├── headline_editor.py     # Editor de portada: 3 propuestas de titular y bajada
 ├── source_references.py   # Emparejamiento determinista de fuentes y companion JSON
 └── social/                # Subsistema de repurposing para redes sociales (RRSS)
     ├── orchestrator.py    # Flujo RRSS: copys → prompts visuales → banners → bundle

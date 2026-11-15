@@ -14,7 +14,17 @@ from .config import (
     ARTICLE_MAX_TOKENS,
     ARTICLE_REASONING_EFFORT,
     NUM_PROPOSALS,
+    PORTADA_MAX_TOKENS,
+    PORTADA_REASONING_EFFORT,
+    PORTADA_TEMPERATURE,
     get_api_key,
+)
+from .headline_editor import (
+    HeadlineProposal,
+    HeadlineValidationError,
+    append_headline_appendix,
+    apply_headline,
+    generate_headline_proposals,
 )
 from .llm_client import LLMClient, LLMClientError
 from .prompt_builder import build_article_system_prompt, build_article_user_prompt
@@ -234,8 +244,12 @@ def write_article(
     Returns:
         dict con:
             - article_path (Path): Ruta al archivo generado.
-            - title (str): Título del artículo.
+            - title (str): Título de la propuesta de pauta.
             - proposal_number (int): Número de propuesta.
+            - headline_proposals (list[dict]): Tres propuestas de portada,
+              vacía si el editor de portada falló.
+            - headline (str): Titular aplicado, solo si hubo propuestas.
+            - deck (str): Bajada aplicada, solo si hubo propuestas.
 
     Raises:
         PautaParseError: Si el archivo de pauta no es válido.
@@ -358,6 +372,32 @@ def write_article(
     )
 
     # -------------------------------------------------------------------
+    # Paso 4b: Editor de portada (tres propuestas de titular y bajada)
+    # -------------------------------------------------------------------
+    # Es una etapa tolerante a fallos: si la llamada o la validación fallan,
+    # el artículo se guarda con el titular que escribió el redactor en lugar
+    # de perder la nota completa.
+    headline_proposals = []
+    try:
+        headline_proposals = _write_headline_proposals(
+            article_content, proposal, api_key
+        )
+    except (LLMClientError, HeadlineValidationError) as exc:
+        logger.warning(
+            "No se pudieron generar las propuestas de portada: %s. El "
+            "artículo se guarda con el titular del redactor.",
+            exc,
+        )
+    else:
+        article_content = apply_headline(article_content, headline_proposals)
+        article_content = append_headline_appendix(
+            article_content, headline_proposals
+        )
+        logger.info(
+            "Titular aplicado: %s", headline_proposals[0].titular
+        )
+
+    # -------------------------------------------------------------------
     # Paso 5: Guardar artículo
     # -------------------------------------------------------------------
     try:
@@ -371,8 +411,47 @@ def write_article(
     logger.info("=== Artículo #%d escrito exitosamente ===", article_number)
     logger.info("Archivo: %s", article_path)
 
-    return {
+    result: dict[str, Any] = {
         "article_path": article_path,
         "title": proposal["title"],
         "proposal_number": article_number,
+        "headline_proposals": [p.as_dict() for p in headline_proposals],
     }
+    if headline_proposals:
+        result["headline"] = headline_proposals[0].titular
+        result["deck"] = headline_proposals[0].bajada
+
+    return result
+
+
+def _write_headline_proposals(
+    article_content: str,
+    proposal: dict[str, Any],
+    api_key: str,
+) -> list[HeadlineProposal]:
+    """Pide al editor de portada las tres propuestas del artículo.
+
+    Args:
+        article_content: Markdown del artículo recién redactado.
+        proposal: Propuesta de pauta de origen.
+        api_key: Clave API de DeepSeek.
+
+    Returns:
+        list[HeadlineProposal]: Propuestas de portada validadas.
+
+    Raises:
+        LLMClientError: Si falla la comunicación con la API.
+        HeadlineValidationError: Si la respuesta no es utilizable.
+    """
+    client = LLMClient(
+        api_key=api_key,
+        temperature=PORTADA_TEMPERATURE,
+        max_tokens=PORTADA_MAX_TOKENS,
+        reasoning_effort=PORTADA_REASONING_EFFORT,
+        response_format={"type": "json_object"},
+    )
+    return generate_headline_proposals(
+        article_content=article_content,
+        client=client,
+        proposal=proposal,
+    )

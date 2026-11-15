@@ -52,6 +52,13 @@ _GENERATED_NOTE_RE = re.compile(
     re.MULTILINE | re.IGNORECASE,
 )
 
+# Apéndice del editor de portada con las tres propuestas de titular y bajada.
+# No es parte del artículo publicable, así que el cuerpo termina antes.
+_PORTADA_APPENDIX_RE = re.compile(
+    r"^\s*##\s+📰\s+Propuestas de portada",
+    re.MULTILINE | re.IGNORECASE,
+)
+
 # Items de lista con viñeta
 _BULLET_RE = re.compile(r"^\s*[-*+]\s+(\S.*?)\s*$", re.MULTILINE)
 
@@ -288,12 +295,14 @@ def parse_article_file(filepath: str | Path) -> ArticleSource:
     if byline_match is not None and byline_match.start() >= body_start:
         body_start = byline_match.end()
 
-    # El cuerpo termina donde arranca la nota automática o el bloque de fuentes
+    # El cuerpo termina donde arranca la nota automática, el bloque de fuentes
+    # o el apéndice de propuestas de portada (que no es publicable)
     tail_candidates = [
         match.start()
         for match in (
             _SOURCES_HEADING_RE.search(text, body_start),
             _GENERATED_NOTE_RE.search(text, body_start),
+            _PORTADA_APPENDIX_RE.search(text, body_start),
         )
         if match is not None
     ]

@@ -101,6 +101,8 @@ Markdown
 
 - **Respuesta que no es un artículo:** Antes de escribir el archivo, se verifica que la respuesta traiga titular de nivel 1 y al menos un subtítulo de sección. Si no los trae, se descarta y se aborta sin crear archivo, para no publicar contenido inválido.
 
+- **Editor de portada:** Tras la redacción se hace una segunda llamada con rol de editor de portada. Devuelve, en JSON, **tres propuestas de titular y bajada** con enfoques fijos (denuncia/tesis política, narrativo/humano y analítico/geopolítico). Los largos se validan en código —12 a 16 palabras el titular, 25 a 45 la bajada—; si no se cumplen se reintenta una vez con una nota de corrección y, si el segundo intento tampoco cumple, se recorta por código y se advierte en el log. La primera propuesta se aplica al artículo y las tres se anexan en un apéndice `## 📰 Propuestas de portada`. El apéndice está marcado como no publicable: el parser de RRSS corta el cuerpo antes de esa marca, de modo que no contamina los prompts de redes sociales. Si la segunda llamada falla, el artículo se guarda igual con el titular del redactor y sin apéndice.
+
 ## 6. Subsistema de Repurposing para Redes Sociales (RRSS)
 
 ### 6.1. Objetivo

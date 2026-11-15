@@ -905,6 +905,15 @@ def print_article_summary(result: dict[str, Any]) -> None:
     print("\n✅ Artículo escrito exitosamente:")
     print(f"   📄 {result['article_path']}")
     print(f"   📝 \"{result['title']}\"")
+    headline = result.get("headline")
+    if headline:
+        print(f"   🗞️  Titular aplicado: \"{headline}\"")
+        print(f"   📎 Bajada: \"{result.get('deck', '')}\"")
+        proposals = result.get("headline_proposals") or []
+        print(
+            f"   📰 Propuestas de portada: {len(proposals)} "
+            "(al final del artículo)"
+        )
 
 
 def print_social_summary(result: dict[str, Any]) -> None:
