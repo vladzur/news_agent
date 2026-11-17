@@ -54,7 +54,7 @@ Toma un artículo ya publicado (`articulos/articulo_N_slug.md`) y produce un **b
    - **Post de Facebook** con gancho en la primera línea (lo único visible antes del "ver más") y cierre con pregunta.
    - **Caption de Instagram** con gancho de apertura, cuerpo breve y CTA.
    - **Tarjeta de cita**, **cifras clave**, **llamado a la acción** y **textos alternativos** por plataforma.
-3. **Prompts visuales (LLM)** — Genera prompts **en inglés** para Flux.1 / SDXL / Midjourney, uno por relación de aspecto: 16:9 (X y Facebook), 1:1 (feed de Instagram) y 9:16 (stories). El estilo por defecto es **ilustración editorial**: pintura digital combinada con elementos de infografía, pensada para comunicar la idea central del artículo de un vistazo. A diferencia de la generación de imágenes tradicional, aquí los gráficos están permitidos y recomendados: cifras grandes (tomadas de las cifras clave del artículo), rótulos breves en español de tres o cuatro palabras citados entre comillas en el prompt (`"PENSIONES"`, `"-10,39%"`), sellos, flechas y banners. Lo que se rechaza en código son los **bloques de texto** (párrafos, letra pequeña, titulares largos), porque los modelos de difusión los renderizan como ruido. Cada prompt incluye prompt positivo, prompt negativo de marca, parámetros sugeridos y una variante lista para Midjourney con sus flags.
+3. **Prompt visual (LLM)** — Genera **un** prompt **en inglés** listo para **Midjourney** (proporción y flags de versión incluidos). El tratamiento se decide por columna: **fotorrealista documental** cuando el texto reporta hechos, lugares, objetos o escenas concretas que pueden mostrarse como una fotografía plausible, y **caricatura** editorial (ilustración) solo cuando la columna es abstracta —un argumento, una tendencia o una metáfora— y no hay una escena documentable. Los textos breves en español siguen permitidos cuando pertenecen a la escena (letreros, pancartas, carteles, pantallas y precios), y se escriben en mayúsculas y **sin comillas** (`PENSIONES`, `-10,39%`): el comando se pega tal cual en Midjourney, que no interpreta comillas escapadas ni JSON. Lo que se rechaza en código son los **bloques de texto** (párrafos, letra pequeña, titulares largos), porque los modelos de difusión los renderizan como ruido. La salida incluye el tratamiento elegido, su justificación en español, el prompt positivo, el prompt negativo de marca y el comando completo para Midjourney, además de un `.txt` con solo el comando, listo para pegar.
 4. **Banners locales (Pillow)** — Renderiza dos plantillas en cuatro formatos, sin depender de servicios externos:
 
    | Plantilla | Contenido | Formatos por defecto |
@@ -64,7 +64,7 @@ Toma un artículo ya publicado (`articulos/articulo_N_slug.md`) y produce un **b
 
    El diseño se parametriza por un factor de escala respecto de un ancho de referencia, así que una sola implementación sirve para los cuatro tamaños. En el formato vertical respeta las **zonas seguras** superior e inferior (la interfaz de la plataforma las tapa). Si la marca define un logo, se recorta su padding transparente, se escala según `logo_height_ratio` y se pega en la esquina superior derecha; el titular se desplaza hacia abajo si el logo es más alto que la etiqueta de marca.
 
-> **¿Por qué se valida todo en código y no se confía en el LLM?** Las reglas duras de cada plataforma se aplican de forma determinista: recorte al límite de caracteres, largo del hilo, topes de hashtags, normalización de hashtags (`#La Araucania` → `#LaAraucania`) y retiro de los que el modelo haya dejado dentro del cuerpo del texto para no duplicarlos en el tweet de cierre, verificación de que cada cifra exista en el artículo y de que la cita sea **literal**. Si el modelo entrega una cita inventada, el sistema la reemplaza por una oración verificada del propio artículo. El guardarraíl es también editorial: los prompts visuales deben nombrar una paleta de color y quedan acotados a **rótulos breves y cifras** —los párrafos de texto se rechazan en código, porque los modelos de difusión los convierten en ruido—, mientras que los gráficos, las etiquetas y los números grandes están permitidos y recomendados para reforzar la idea del artículo. La imagen es una **ilustración editorial**, no una caricatura por defecto: las figuras públicas nombradas pueden aparecer como personajes estilizados, y las víctimas, menores y personas privadas se representan de forma anónima y nunca como retratos fotorrealistas.
+> **¿Por qué se valida todo en código y no se confía en el LLM?** Las reglas duras de cada plataforma se aplican de forma determinista: recorte al límite de caracteres, largo del hilo, topes de hashtags, normalización de hashtags (`#La Araucania` → `#LaAraucania`) y retiro de los que el modelo haya dejado dentro del cuerpo del texto para no duplicarlos en el tweet de cierre, verificación de que cada cifra exista en el artículo y de que la cita sea **literal**. Si el modelo entrega una cita inventada, el sistema la reemplaza por una oración verificada del propio artículo. El guardarraíl es también editorial: el prompt visual debe nombrar una paleta de color, usar el tratamiento declarado —fotorrealista con lenguaje fotográfico, caricatura con técnica de ilustración— y queda acotado a **rótulos breves y cifras** —los párrafos de texto se rechazan en código, porque los modelos de difusión los convierten en ruido—. El fotorrealismo es el camino por defecto y las figuras públicas solo aparecen dentro de una escena documental, sin *deepfake* ni gestos o escenarios inventados; las víctimas, menores y personas privadas se representan de forma anónima. La caricatura queda reservada para columnas abstractas.
 
 ### 4. Tríptico impreso en lenguaje simple
 
@@ -137,7 +137,7 @@ python -m news_agent clean --days 90
 | `--platforms LISTA` | `social`, `all` | Plataformas separadas por comas (`x,facebook,instagram`). Por defecto, todas. |
 | `--social-config RUTA` | `social`, `all` | JSON de marca y plantillas (por defecto `social_config.json`). |
 | `--triptych-config RUTA` | `print`, `all` | JSON de geometría, tipografía y estilo del tríptico (por defecto `triptych_config.json`). |
-| `--skip-banners` / `--skip-prompts` | `social`, `all` | Omite los banners o los prompts visuales, y con ellos la llamada al modelo que los genera. |
+| `--skip-banners` / `--skip-prompts` | `social`, `all` | Omite los banners o el prompt visual, y con ellos la llamada al modelo que los genera. |
 | `--days N` / `--target` / `--dry-run` / `-y` | `clean` | Antigüedad mínima, alcance, simulación y omisión de la confirmación. |
 | `--debug` | `report`, `all` | Guarda el JSON intermedio de artículos procesados para ajustar el prompt. |
 | `--verbose` | todos | Activa logging nivel DEBUG para diagnóstico detallado. |
@@ -162,7 +162,7 @@ Flags de los modos clásicos:
 - `--platforms LISTA`: Plataformas a preparar, separadas por comas (`x,facebook,instagram`). Por defecto, todas. Filtra los Markdown y los banners generados.
 - `--social-config RUTA`: Ruta al JSON de marca y plantillas (por defecto `social_config.json`).
 - `--skip-banners`: Omite el renderizado de banners con Pillow.
-- `--skip-prompts`: Omite la generación de prompts visuales en inglés.
+- `--skip-prompts`: Omite la generación del prompt visual en inglés.
 
 ---
 
@@ -188,11 +188,11 @@ news_agent/
 ├── headline_editor.py     # Editor de portada: 3 propuestas de titular y bajada
 ├── source_references.py   # Emparejamiento determinista de fuentes y companion JSON
 └── social/                # Subsistema de repurposing para redes sociales (RRSS)
-    ├── orchestrator.py    # Flujo RRSS: copys → prompts visuales → banners → bundle
+    ├── orchestrator.py    # Flujo RRSS: copys → prompt visual → banners → bundle
     ├── article_source.py  # Parseo del artículo Markdown de origen
-    ├── prompt_builder.py  # Prompts de copys (ES) y de prompts visuales (EN)
+    ├── prompt_builder.py  # Prompts de copys (ES) y del prompt visual (EN)
     ├── copy_generator.py  # Copys validados contra los límites de plataforma
-    ├── visual_prompts.py  # Prompts en inglés para Flux.1 / SDXL / Midjourney
+    ├── visual_prompts.py  # Prompt en inglés para Midjourney, con tratamiento y flags
     ├── banner_renderer.py # Renderizado local de banners con Pillow
     ├── platform_specs.py  # Límites y formatos por plataforma
     ├── text_utils.py      # Recorte por caracteres y normalización de hashtags
@@ -365,7 +365,7 @@ python -m news_agent social --platforms x,instagram
 # Generar pauta con archivo de depuración intermedio
 python -m news_agent report --debug
 
-# Solo copys y Markdown, sin llamar al modelo para prompts visuales ni renderizar banners
+# Solo copys y Markdown, sin llamar al modelo para el prompt visual ni renderizar banners
 python -m news_agent social --skip-prompts --skip-banners
 
 # Preparar únicamente las piezas de Instagram
@@ -408,7 +408,7 @@ Edita `social_config.json` para ajustar la identidad visual sin tocar código:
 | `platforms` | ❌ | Límites por plataforma. Sobrescriben los valores por defecto de `config.py` |
 | `banners.templates`, `banners.sizes` | ✅ | Matriz plantilla → formatos y tamaño de cada formato |
 | `banners.safe_zone` | ❌ | Zonas seguras superior e inferior para los formatos verticales |
-| `visual_prompts.*` | ✅ | Estilo, prompt negativo y sufijo de Midjourney para los prompts de imagen |
+| `visual_prompts.*` | ✅ | Tratamientos, reglas de decisión, prompt negativo, proporción y sufijo de Midjourney |
 
 Los formatos de banner se nombran con el prefijo de su plataforma (`instagram_feed`, `instagram_story`), lo que permite filtrar por `--platforms` sin mantener un mapa adicional. Además, la variable de entorno `SOCIAL_FONT_DIR` permite apuntar a un directorio propio de fuentes.
 
@@ -446,7 +446,7 @@ Las constantes principales se encuentran en [news_agent/config.py](news_agent/co
 | `COMPANION_MAX_ARTICLES_PER_SOURCE` | `3` | Máximo de artículos del mismo medio incluidos en el companion JSON de fuentes |
 | `SOCIAL_MAX_TOKENS` | `8192` | Límite de tokens para la generación de copys de RRSS |
 | `SOCIAL_TEMPERATURE` | `0.4` | Temperatura de los copys: creativa, pero fiel a los hechos del artículo |
-| `SOCIAL_VISUAL_MAX_TOKENS` | `4096` | Límite de tokens para la generación de prompts visuales |
+| `SOCIAL_VISUAL_MAX_TOKENS` | `4096` | Límite de tokens para la generación del prompt visual |
 | `SOCIAL_JSON_MAX_RETRIES` | `2` | Reintentos cuando el LLM no devuelve un JSON válido o completo |
 | `DEFAULT_SOCIAL_OUTPUT_DIR` | `"social"` | Directorio base de los bundles de RRSS |
 | `SOCIAL_CONFIG_PATH` | `"social_config.json"` | Archivo de marca y plantillas del subsistema |
@@ -593,7 +593,8 @@ Cada ejecución de `--socialize` produce una carpeta autocontenida con todo lo n
 ```
 social/2026_09_14_criminalizacion-de-la-disidencia/
 ├── social_copy.json            # Copys estructurados por plataforma, hooks, síntesis, cita y cifras
-├── visual_prompts.json         # Prompts en inglés por aspecto, con negativo y variante de Midjourney
+├── visual_prompt.txt           # Comando de Midjourney en texto plano, listo para pegar
+├── visual_prompts.json         # Metadatos: tratamiento, justificación, prompt y negativo
 ├── x_thread.md                 # Hilo listo para copiar, con conteo de caracteres por tweet
 ├── facebook_post.md            # Post con hashtags, texto alternativo y CTA
 ├── instagram_caption.md        # Caption, hashtags, tarjeta de cita y advertencia si la cita no es literal

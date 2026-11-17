@@ -144,19 +144,25 @@ El único origen admitido es un **artículo Markdown ya publicado** (`articulos/
 | Cifras verificables | Se descartan las cifras que no aparecen en el texto; si ninguna se verifica, se usan las detectadas en el artículo |
 | Textos alternativos | Se completan y se recortan al límite de cada plataforma (X 300, Facebook 200, Instagram 100 caracteres) |
 
-### 6.4. Capa de prompts visuales
+### 6.4. Capa del prompt visual
 
-- **Idioma obligatorio: inglés.** Un prompt por relación de aspecto, filtrado por las plataformas pedidas: `16:9` (X y Facebook), `1:1` (feed de Instagram) y `9:16` (stories).
-- **Estilo por defecto: ilustración editorial vívida**, que combina pintura digital con elementos de infografía vectorial, personajes expresivos y objetos simbólicos de gran escala. La ilustración no es una caricatura por defecto: debe representar la idea central del artículo de un vistazo. La directriz de estilo vive en `social_config.json`.
-- **Gráficos y textos breves están permitidos y recomendados**: cifras grandes, rótulos de tres o cuatro palabras en español, sellos, flechas, banners o gráficos que refuercen el mensaje. El prompt los pide entre comillas (`"PENSIONES"`, `"-10,39%"`) y el material de origen entrega las cifras del artículo como candidatas a número grande.
-- **Restricciones verificadas en código**, no solo sugeridas en el prompt:
+- **Un único prompt por columna, en inglés y listo para Midjourney.** El subsistema no genera imágenes ni entrega prompts por relación de aspecto: produce un comando completo con la proporción declarada en `social_config.json` (por defecto `--ar 16:9`) y los flags de versión.
+- **El tratamiento se decide por columna y queda declarado en la salida:**
+  - `photorealistic` — **tratamiento por defecto**. Se usa cuando la columna reporta hechos, lugares, objetos, personas o escenas concretas que pueden mostrarse como una fotografía documental plausible.
+  - `caricature` — **excepción**. Se usa solo cuando la columna es abstracta: un argumento, una tendencia económica o institucional, una metáfora o una crítica sin una escena documentable. La caricatura no puede ser una forma de eludir un hecho fotografiable.
+  - El modelo explica en `rationale` (en español) qué hechos concretos sostienen la fotografía o qué argumento abstracto obliga la caricatura. Un rationale vacío invalida la respuesta.
+- **Coherencia verificada en código**, no solo sugerida en el prompt: un prompt `photorealistic` debe nombrar un recurso fotográfico (lente, luz natural, reportaje, grano de película) y uno `caricature` debe nombrar una técnica de ilustración. Si el tratamiento declarado y la técnica descrita se contradicen, el prompt se descarta y se reintenta la llamada.
+- **Textos breves dentro de la escena**: rótulos de tres o cuatro palabras en español, integrados como letreros, pancartas, carteles, pantallas o precios, **en mayúsculas y sin comillas** (`PENSIONES`, `-10,39%`). El material de origen entrega las cifras de la columna para que el modelo las use cuando aporten.
+- **Restricciones verificadas en código**:
   - Se rechazan los **bloques de texto**: párrafos, letra pequeña y titulares largos, porque los modelos de difusión los renderizan como ruido. Los rótulos breves y las cifras no se marcan como infracción.
-  - Permitido mostrar a las **figuras públicas nombradas** en el artículo (presidentes, senadores, alcaldes, ministros, líderes de partido) como personajes ilustrados o caricaturizados, siempre dibujados. Prohibido el retrato fotorrealista y el *deepfake*. Prohibido mostrar de forma reconocible a víctimas, menores o personas privadas: se representan como figuras anónimas.
-  - Obligatorio nombrar una **paleta de color** en cada prompt: un prompt sin señales cromáticas se rechaza, porque devuelve ilustraciones planas y sin contraste.
+  - En el tratamiento fotorrealista, las **figuras públicas nombradas** aparecen solo dentro de una escena documental: prohibidos el *deepfake*, el gesto inventado y el escenario inventado. Las víctimas, menores y personas privadas se representan de forma no identificable.
+  - En el tratamiento de caricatura, las figuras públicas nombradas pueden aparecer como personajes estilizados; las víctimas, menores y personas privadas, como figuras anónimas.
+  - Obligatorio nombrar una **paleta de color**: un prompt sin señales cromáticas se rechaza, porque devuelve imágenes planas y sin contraste.
   - Prohibida la **violencia explícita**.
-  - Los rótulos entre comillas quedan excluidos de la heurística que detecta prompts escritos en español, de modo que un prompt en inglés puede citar etiquetas en español.
+  - Los rótulos dentro de la imagen —en mayúsculas o entre comillas— quedan excluidos de la heurística que detecta prompts escritos en español, de modo que un prompt en inglés puede incluir etiquetas en español. Además, el código retira las comillas y las barras invertidas del prompt: Midjourney recibe texto plano, no JSON.
   - Prompt positivo entre 25 y 200 palabras, en inglés.
-- **Salida por aspecto:** prompt positivo, prompt negativo (el de marca más los agregados específicos del artículo, sin duplicar términos), variante lista para Midjourney con sus flags (`--ar`, estilo, `--v`, `--no`) y parámetros sugeridos (pasos, guidance, sampler).
+- **Salida:** tratamiento, su justificación en español, prompt positivo, prompt negativo (el de marca más los agregados específicos de la columna, sin duplicar términos) y comando completo de Midjourney (`--ar`, flag de estilo, `--v` y `--no`).
+- **Dos archivos por bundle:** `visual_prompt.txt` contiene únicamente el comando en texto plano —sin JSON, sin comillas escapadas— para pegarlo en Midjourney; `visual_prompts.json` conserva los metadatos (tratamiento, justificación, prompt, negativo y proporción).
 
 ### 6.5. Capa de assets locales (Pillow)
 
@@ -176,7 +182,7 @@ Dos plantillas declaradas en la configuración, renderizadas en los formatos ped
 
 ### 6.6. Formato de salida (bundle)
 
-Cada ejecución escribe una carpeta autocontenida `social/AAAA_MM_DD_slug-del-titulo/` con los copys en JSON, los prompts visuales en JSON, un Markdown listo para copiar y pegar por plataforma, los PNG de los banners en `assets/` y un `manifest.json` que registra qué se generó, qué falló y con qué artículo se produjo.
+Cada ejecución escribe una carpeta autocontenida `social/AAAA_MM_DD_slug-del-titulo/` con los copys en JSON, el comando de Midjourney en `visual_prompt.txt`, los metadatos del prompt en `visual_prompts.json`, un Markdown listo para copiar y pegar por plataforma, los PNG de los banners en `assets/` y un `manifest.json` que registra qué se generó, qué falló y con qué artículo se produjo.
 
 El campo `quote_card.verbatim` del JSON de copys —repetido como `verified_quote` en el manifiesto— indica si la cita destacada se verificó palabra por palabra contra el artículo de origen.
 
@@ -190,7 +196,7 @@ La identidad visual y los límites viven en `social_config.json`, versionado en 
 | `platforms` | Límite de caracteres, largo del hilo y tope de hashtags por plataforma. Sobrescriben los valores por defecto de `config.py` | ❌ |
 | `banners.templates` / `banners.sizes` | Matriz plantilla → formatos y tamaño de cada formato | ✅ |
 | `banners.safe_zone` | Bandas no utilizables de los formatos verticales | ❌ |
-| `visual_prompts` | Estilo, prompt negativo, sufijo de Midjourney, relaciones de aspecto y parámetros sugeridos | ✅ |
+| `visual_prompts` | Tratamientos, reglas de decisión, prompt negativo, proporción única y sufijo de Midjourney | ✅ |
 
 Un color mal escrito, un tamaño inválido o una plantilla que apunte a un formato inexistente se detectan al cargar el archivo, con un mensaje que indica el campo culpable.
 
@@ -200,9 +206,9 @@ Un color mal escrito, un tamaño inválido o una plantilla que apunte a un forma
 |-------------------------------|-----------------|
 | `orchestrator.py` | Coordina el flujo completo y devuelve el resumen del bundle |
 | `article_source.py` | Parsea el artículo de origen y extrae su material reutilizable |
-| `prompt_builder.py` | Construye los prompts de copys (español) y de imágenes (inglés) |
+| `prompt_builder.py` | Construye los prompts de copys (español) y del prompt visual (inglés) |
 | `copy_generator.py` | Genera y valida los copys contra los límites de cada plataforma |
-| `visual_prompts.py` | Genera y valida los prompts visuales en inglés |
+| `visual_prompts.py` | Genera y valida el prompt visual en inglés con su tratamiento |
 | `banner_renderer.py` | Renderiza los banners con Pillow |
 | `platform_specs.py` | Resuelve los límites por plataforma y filtra por formato |
 | `text_utils.py` | Recorte por caracteres y normalización de hashtags |
@@ -214,7 +220,7 @@ Un color mal escrito, un tamaño inválido o una plantilla que apunte a un forma
 
 - **JSON inválido o incompleto** → reintento con nota de corrección, hasta agotar `SOCIAL_JSON_MAX_RETRIES`.
 - **Copys imposibles de validar** → se aborta sin escribir un bundle a medias.
-- **Prompts visuales fallidos** → el bundle se escribe igualmente con los copys y los banners, y el manifiesto lo refleja.
+- **Prompt visual fallido** → el bundle se escribe igualmente con los copys y los banners, y el manifiesto lo refleja.
 - **Banner fallido** → se registra el error y el resto del lote continúa.
 - **Directorio de salida inexistente** → se crea automáticamente (incluidos los directorios intermedios).
 - **Artículo inexistente, vacío o sin titular** → error explícito de parseo y salida con código distinto de cero.
