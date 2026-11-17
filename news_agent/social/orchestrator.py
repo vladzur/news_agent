@@ -1,11 +1,11 @@
 """Orquestador del subsistema de repurposing para redes sociales.
 
 Coordina el flujo completo a partir de un artículo ya publicado:
-configuración de marca → parseo del artículo → copys con el LLM → prompts
-visuales en inglés → banners con Pillow → bundle en disco.
+configuración de marca → parseo del artículo → copys con el LLM → prompt
+visual en inglés para Midjourney → banners con Pillow → bundle en disco.
 
-Cada etapa posterior a los copys es tolerante a fallos: si los prompts
-visuales o los banners fallan, el bundle se escribe igualmente con lo que sí
+Cada etapa posterior a los copys es tolerante a fallos: si el prompt
+visual o los banners fallan, el bundle se escribe igualmente con lo que sí
 se pudo producir, y el manifiesto deja constancia de lo que quedó pendiente.
 """
 
@@ -33,14 +33,15 @@ from .banner_renderer import render_all_banners
 from .copy_generator import SocialCopyValidationError, generate_social_copy
 from .models import ArticleSource, BannerSpec, SocialCopy, VisualPrompt
 from .platform_specs import ALL_PLATFORMS
-from .visual_prompts import VisualPromptGenerationError, generate_visual_prompts
+from .visual_prompts import VisualPromptGenerationError, generate_visual_prompt
 from .writer import (
     assets_dir,
     build_bundle_dir,
     save_copy_json,
     save_manifest,
     save_platform_markdown,
-    save_visual_prompts_json,
+    save_visual_prompt_json,
+    save_visual_prompt_text,
     slug_for_title,
 )
 
@@ -189,29 +190,27 @@ def _generate_prompt_stage(
     copy: SocialCopy,
     config: dict[str, Any],
     client: LLMClient,
-    platforms: list[str],
-) -> list[VisualPrompt]:
-    """Genera los prompts visuales, sin abortar el bundle si fallan.
+) -> VisualPrompt | None:
+    """Genera el prompt visual, sin abortar el bundle si falla.
 
     Args:
         article: Artículo de origen.
         copy: Copys ya generados.
         config: Configuración de marca.
-        client: Cliente LLM configurado para prompts visuales.
-        platforms: Plataformas habilitadas.
+        client: Cliente LLM configurado para el prompt visual.
 
     Returns:
-        list[VisualPrompt]: Prompts generados, o lista vacía si fallaron.
+        VisualPrompt | None: Prompt generado, o None si falló.
     """
     try:
-        return generate_visual_prompts(article, copy, config, client, platforms)
+        return generate_visual_prompt(article, copy, config, client)
     except (VisualPromptGenerationError, LLMClientError) as exc:
         logger.error(
-            "No se pudieron generar los prompts visuales: %s. "
-            "El bundle se escribirá sin ellos.",
+            "No se pudo generar el prompt visual: %s. "
+            "El bundle se escribirá sin él.",
             exc,
         )
-        return []
+        return None
 
 
 def _render_banner_stage(
@@ -272,19 +271,20 @@ def run_socialize(
         platforms: Plataformas a preparar. Por defecto, todas.
         verbose: Si es True, activa logging DEBUG.
         skip_banners: Si es True, omite el renderizado con Pillow.
-        skip_prompts: Si es True, omite los prompts visuales en inglés.
+        skip_prompts: Si es True, omite el prompt visual en inglés.
 
     Returns:
         dict con las claves:
             - bundle_dir (Path): Carpeta del bundle generado.
             - copy_path (Path): Ruta del JSON de copys.
-            - prompts_path (Path | None): Ruta del JSON de prompts visuales.
+            - prompts_path (Path | None): Ruta del JSON del prompt visual.
+            - prompt_text_path (Path | None): Ruta del comando en texto plano.
             - manifest_path (Path): Ruta del manifiesto.
             - asset_paths (list[Path]): Rutas de los PNG generados.
             - markdown_paths (dict[str, Path]): Markdown por plataforma.
             - platforms (list[str]): Plataformas preparadas.
             - title (str): Titular del artículo.
-            - prompt_count (int): Cantidad de prompts visuales generados.
+            - prompt_count (int): 1 si se generó el prompt visual, 0 si no.
             - banner_count (int): Cantidad de banners renderizados.
             - banner_failed (int): Cantidad de banners que fallaron.
 
@@ -340,15 +340,15 @@ def run_socialize(
     )
 
     # -------------------------------------------------------------------
-    # Bundle y prompts visuales
+    # Bundle y prompt visual
     # -------------------------------------------------------------------
     base_dir = Path(output_dir) if output_dir else Path(DEFAULT_SOCIAL_OUTPUT_DIR)
     bundle_dir = build_bundle_dir(base_dir, slug_for_title(copy.title))
     logger.info("Bundle de salida: %s", bundle_dir)
 
-    prompts: list[VisualPrompt] = []
+    prompt: VisualPrompt | None = None
     if skip_prompts:
-        logger.info("Prompts visuales omitidos por flag de línea de comandos.")
+        logger.info("Prompt visual omitido por flag de línea de comandos.")
     else:
         # Se hereda el formato de respuesta del cliente de copys: si la API ya
         # rechazó el JSON mode, no tiene sentido volver a pedirlo.
@@ -358,10 +358,9 @@ def run_socialize(
             reasoning_effort=SOCIAL_VISUAL_REASONING_EFFORT,
             response_format=copy_client.response_format,
         )
-        prompts = _generate_prompt_stage(
-            article, copy, config, prompt_client, selected_platforms
-        )
-        logger.info("Prompts visuales generados: %d.", len(prompts))
+        prompt = _generate_prompt_stage(article, copy, config, prompt_client)
+        if prompt:
+            logger.info("Prompt visual generado (tratamiento %s).", prompt.treatment)
 
     # -------------------------------------------------------------------
     # Banners
@@ -378,15 +377,17 @@ def run_socialize(
     copy_path = save_copy_json(copy, bundle_dir)
 
     prompts_path: Path | None = None
-    if prompts:
-        prompts_path = save_visual_prompts_json(prompts, bundle_dir)
+    prompt_text_path: Path | None = None
+    if prompt:
+        prompts_path = save_visual_prompt_json(prompt, bundle_dir)
+        prompt_text_path = save_visual_prompt_text(prompt, bundle_dir)
 
     markdown_paths = save_platform_markdown(copy, bundle_dir, selected_platforms)
 
     manifest_path = save_manifest(
         bundle_dir=bundle_dir,
         copy=copy,
-        prompts=prompts,
+        prompt=prompt,
         banners=banners,
         markdown_files=markdown_paths,
         platforms=selected_platforms,
@@ -400,12 +401,13 @@ def run_socialize(
         "bundle_dir": bundle_dir,
         "copy_path": copy_path,
         "prompts_path": prompts_path,
+        "prompt_text_path": prompt_text_path,
         "manifest_path": manifest_path,
         "asset_paths": asset_paths,
         "markdown_paths": markdown_paths,
         "platforms": selected_platforms,
         "title": copy.title,
-        "prompt_count": len(prompts),
+        "prompt_count": 1 if prompt else 0,
         "banner_count": len(asset_paths),
         "banner_failed": len(banners) - len(asset_paths),
     }

@@ -90,7 +90,7 @@ def platform_of_format(format_name: str) -> str:
 
     Los formatos se nombran con el prefijo de su plataforma
     ("instagram_feed", "instagram_story", "x", "facebook"), lo que permite
-    filtrar plantillas y aspectos visuales sin mantener un mapa adicional.
+    filtrar plantillas de banner sin mantener un mapa adicional.
 
     Args:
         format_name: Nombre del formato de plataforma.

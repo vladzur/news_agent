@@ -9,6 +9,7 @@ from news_agent.social.writer import (
     MANIFEST_FILE_NAME,
     MARKDOWN_FILE_NAMES,
     PROMPTS_FILE_NAME,
+    PROMPT_TEXT_FILE_NAME,
     assets_dir,
     build_bundle_dir,
     render_facebook_markdown,
@@ -17,7 +18,8 @@ from news_agent.social.writer import (
     save_copy_json,
     save_manifest,
     save_platform_markdown,
-    save_visual_prompts_json,
+    save_visual_prompt_json,
+    save_visual_prompt_text,
     slug_for_title,
 )
 
@@ -98,22 +100,36 @@ class TestJsonFiles:
         assert payload["title"] == social_copy.title
         assert payload["x"]["thread"] == social_copy.x.thread
 
-    def test_saves_the_visual_prompts_json(self, tmp_path, social_copy, visual_payload, social_config):
-        from news_agent.social.visual_prompts import (
-            build_visual_prompts,
-            enabled_aspects,
-        )
+    def test_saves_the_visual_prompt_json(
+        self, tmp_path, visual_payload, social_config
+    ):
+        from news_agent.social.visual_prompts import build_visual_prompt
 
-        aspects = enabled_aspects(social_config, ["x", "facebook", "instagram"])
-        prompts = build_visual_prompts(visual_payload, social_config, aspects)
+        prompt = build_visual_prompt(visual_payload, social_config)
 
-        path = save_visual_prompts_json(prompts, tmp_path)
+        path = save_visual_prompt_json(prompt, tmp_path)
 
         assert path.name == PROMPTS_FILE_NAME
         payload = json.loads(path.read_text(encoding="utf-8"))
-        assert payload["count"] == 3
-        assert len(payload["prompts"]) == 3
-        assert payload["prompts"][0]["prompt"]
+        assert payload["treatment"] == "photorealistic"
+        assert payload["prompt"] == prompt.prompt
+        assert payload["midjourney_prompt"] == prompt.midjourney_prompt
+
+    def test_saves_the_midjourney_command_as_plain_text(
+        self, tmp_path, visual_payload, social_config
+    ):
+        from news_agent.social.visual_prompts import build_visual_prompt
+
+        prompt = build_visual_prompt(visual_payload, social_config)
+
+        path = save_visual_prompt_text(prompt, tmp_path)
+
+        assert path.name == PROMPT_TEXT_FILE_NAME
+        content = path.read_text(encoding="utf-8")
+        assert content.strip() == prompt.midjourney_prompt
+        assert not content.lstrip().startswith("{")
+        assert "\\" not in content
+        assert '"' not in content
 
 
 # ---------------------------------------------------------------------------
@@ -214,7 +230,7 @@ class TestSaveManifest:
 
     def _manifest(self, tmp_path, social_copy, article, **overrides):
         defaults = {
-            "prompts": [],
+            "prompt": None,
             "banners": [],
             "markdown_files": {},
             "platforms": ["x"],
@@ -232,7 +248,7 @@ class TestSaveManifest:
         path = save_manifest(
             bundle_dir=tmp_path,
             copy=social_copy,
-            prompts=[],
+            prompt=None,
             banners=[],
             markdown_files={},
             platforms=["x"],
@@ -261,7 +277,24 @@ class TestSaveManifest:
         payload = self._manifest(tmp_path, social_copy, article)
 
         assert payload["files"]["visual_prompts"] is None
+        assert payload["files"]["visual_prompt_text"] is None
         assert payload["visual_prompts"]["count"] == 0
+        assert payload["visual_prompts"]["treatment"] is None
+
+    def test_records_the_visual_treatment(
+        self, tmp_path, social_copy, article, visual_payload, social_config
+    ):
+        from news_agent.social.visual_prompts import build_visual_prompt
+
+        prompt = build_visual_prompt(visual_payload, social_config)
+
+        payload = self._manifest(tmp_path, social_copy, article, prompt=prompt)
+
+        assert payload["files"]["visual_prompts"] == PROMPTS_FILE_NAME
+        assert payload["files"]["visual_prompt_text"] == PROMPT_TEXT_FILE_NAME
+        assert payload["visual_prompts"]["count"] == 1
+        assert payload["visual_prompts"]["treatment"] == "photorealistic"
+        assert payload["visual_prompts"]["aspect_ratio"] == prompt.aspect_ratio
 
     def test_counts_rendered_and_failed_banners(self, tmp_path, social_copy, article):
         from news_agent.social.models import BannerSpec
@@ -306,7 +339,7 @@ class TestBundleIntegration:
         manifest = save_manifest(
             bundle_dir=bundle,
             copy=social_copy,
-            prompts=[],
+            prompt=None,
             banners=[],
             markdown_files=markdown,
             platforms=["x", "facebook", "instagram"],

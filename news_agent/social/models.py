@@ -244,25 +244,23 @@ class SocialCopy:
 
 @dataclass
 class VisualPrompt:
-    """Prompt en inglés para generadores de imágenes.
+    """Prompt en inglés para Midjourney, con el tratamiento elegido.
 
     Attributes:
-        aspect: Identificador del aspecto ("landscape", "square", "portrait").
-        aspect_ratio: Proporción legible (ej: "16:9").
-        platforms: Plataformas destinatarias de este aspecto.
+        treatment: Tratamiento visual: "photorealistic" o "caricature".
+        rationale: Motivo editorial de ese tratamiento, en español.
         prompt: Prompt positivo en inglés, con paleta y rótulos breves.
         negative_prompt: Prompt negativo con los artefactos a evitar.
         midjourney_prompt: Prompt listo para Midjourney, con sus flags.
-        settings: Parámetros sugeridos (pasos, guidance, sampler).
+        aspect_ratio: Proporción declarada en la configuración (ej: "16:9").
     """
 
-    aspect: str
-    aspect_ratio: str
-    platforms: list[str]
+    treatment: str
+    rationale: str
     prompt: str
     negative_prompt: str
     midjourney_prompt: str
-    settings: dict[str, Any] = field(default_factory=dict)
+    aspect_ratio: str
 
     def to_dict(self) -> dict[str, Any]:
         """Serializa el prompt visual a un diccionario apto para JSON.

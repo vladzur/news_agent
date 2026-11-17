@@ -8,7 +8,7 @@ from news_agent.social.prompt_builder import (
     build_visual_prompt_system_prompt,
     build_visual_prompt_user_prompt,
 )
-from news_agent.social.visual_prompts import enabled_aspects
+from news_agent.social.visual_prompts import looks_like_spanish
 
 # ---------------------------------------------------------------------------
 # Prompts de copys
@@ -140,96 +140,73 @@ class TestCopyUserPrompt:
 
 
 class TestVisualSystemPrompt:
-    """Contenido del prompt de sistema del ingeniero de prompts visuales."""
+    """Invariantes del prompt de sistema, sin atarse a su redacción.
 
-    def test_demands_english_only(self, social_config):
+    La prosa del prompt de sistema se ajusta a menudo, así que estos tests
+    verifican solo contratos estables: idioma, herramienta destino y que cada
+    tratamiento declarado en la configuración quede nombrado.
+    """
+
+    def test_is_written_in_english(self, social_config):
         prompt = build_visual_prompt_system_prompt(social_config)
 
-        assert "English only" in prompt
+        assert looks_like_spanish(prompt) is False
 
-    def test_allows_short_labels_and_graphics(self, social_config):
+    def test_targets_midjourney(self, social_config):
         prompt = build_visual_prompt_system_prompt(social_config)
 
-        assert "graphic and typographic elements" in prompt
-        assert "stamps or dotted lines" in prompt
+        assert "Midjourney" in prompt
+        assert "Flux" not in prompt
+        assert "SDXL" not in prompt
 
-    def test_asks_for_short_labels_in_spanish(self, social_config):
-        prompt = build_visual_prompt_system_prompt(social_config)
-
-        assert "three or four words at most" in prompt
-        assert "written in Spanish" in prompt
-
-    def test_forbids_paragraphs_of_text(self, social_config):
+    def test_names_every_configured_treatment(self, social_config):
         prompt = build_visual_prompt_system_prompt(social_config).lower()
 
-        assert "never ask for paragraphs" in prompt
-
-    def test_allows_caricaturing_named_public_figures(self, social_config):
-        prompt = build_visual_prompt_system_prompt(social_config)
-
-        assert "caricature" in prompt.lower()
-        assert "People named in the article" in prompt
-
-    def test_requires_named_within_the_article(self, social_config):
-        prompt = build_visual_prompt_system_prompt(social_config)
-
-        assert "named in the article" in prompt
-
-    def test_forbids_photorealistic_portraits(self, social_config):
-        prompt = build_visual_prompt_system_prompt(social_config).lower()
-
-        assert "photorealistic" in prompt
-        assert "deepfake" in prompt
-
-    def test_protects_private_individuals(self, social_config):
-        prompt = build_visual_prompt_system_prompt(social_config).lower()
-
-        assert "private individuals" in prompt
-        assert "victims" in prompt
-
-    def test_forbids_explicit_violence(self, social_config):
-        prompt = build_visual_prompt_system_prompt(social_config)
-
-        assert "No explicit violence" in prompt
-
-    def test_prefers_editorial_illustration_over_cartoons(self, social_config):
-        prompt = build_visual_prompt_system_prompt(social_config).lower()
-
-        assert "editorial illustration" in prompt
-        assert "illustrations beat cartoons" in prompt
-
-    def test_requires_a_named_colour_palette(self, social_config):
-        prompt = build_visual_prompt_system_prompt(social_config)
-
-        assert "Always name a saturated colour palette" in prompt
+        for treatment in social_config["visual_prompts"]["treatments"]:
+            assert treatment in prompt
 
 
 class TestVisualUserPrompt:
-    """Contenido del prompt de usuario para los prompts visuales."""
+    """Contenido del prompt de usuario para el prompt visual."""
 
-    def test_includes_the_article_and_the_approved_hook(
+    def test_includes_the_column_and_the_approved_hook(
         self, article, social_copy, social_config
     ):
         prompt = build_visual_prompt_user_prompt(article, social_copy, social_config)
 
         assert article.title in prompt
+        assert article.byline in prompt
         assert social_copy.hook in prompt
         assert social_copy.quote_card.quote in prompt
 
-    def test_offers_the_key_figures_as_big_numbers(
+    def test_includes_the_column_sections_and_sources(
         self, article, social_copy, social_config
     ):
         prompt = build_visual_prompt_user_prompt(article, social_copy, social_config)
 
-        assert "Key figures usable as big numbers in the artwork" in prompt
+        assert article.sections[0].heading in prompt
+        assert article.sources[0] in prompt
+
+    def test_offers_the_key_figures_of_the_column(
+        self, article, social_copy, social_config
+    ):
+        prompt = build_visual_prompt_user_prompt(article, social_copy, social_config)
+
         assert article.key_figures
         assert article.key_figures[0] in prompt
 
-    def test_includes_the_style_directive(self, article, social_copy, social_config):
+    def test_includes_the_treatment_rules(self, article, social_copy, social_config):
         prompt = build_visual_prompt_user_prompt(article, social_copy, social_config)
 
-        style = social_config["visual_prompts"]["style"]
-        assert style[:40] in prompt
+        rules = social_config["visual_prompts"]["treatment_rules"]
+        assert rules[:40] in prompt
+
+    def test_includes_both_treatment_styles(self, article, social_copy, social_config):
+        prompt = build_visual_prompt_user_prompt(article, social_copy, social_config)
+
+        treatments = social_config["visual_prompts"]["treatments"]
+        assert treatments["photorealistic"][:40] in prompt
+        assert treatments["caricature"][:40] in prompt
 
     def test_includes_the_negative_prompt(self, article, social_copy, social_config):
         prompt = build_visual_prompt_user_prompt(article, social_copy, social_config)
@@ -237,69 +214,31 @@ class TestVisualUserPrompt:
         negative = social_config["visual_prompts"]["negative_prompt"]
         assert negative[:40] in prompt
 
-    def test_lists_every_configured_aspect(self, article, social_copy, social_config):
+    def test_asks_for_a_single_prompt_without_aspect_variants(
+        self, article, social_copy, social_config
+    ):
         prompt = build_visual_prompt_user_prompt(article, social_copy, social_config)
 
-        assert "(16:9)" in prompt
-        assert "(1:1)" in prompt
-        assert "(9:16)" in prompt
+        assert "Aspect ratios" not in prompt
+        assert '"prompts"' not in prompt
 
-    def test_restricts_to_the_passed_aspects(self, article, social_copy, social_config):
-        aspects = enabled_aspects(social_config, ["instagram"])
+    def test_states_that_midjourney_flags_are_appended(
+        self, article, social_copy, social_config
+    ):
+        prompt = build_visual_prompt_user_prompt(article, social_copy, social_config)
 
-        prompt = build_visual_prompt_user_prompt(
-            article, social_copy, social_config, aspects=aspects
-        )
-
-        assert "(1:1)" in prompt
-        assert "(9:16)" in prompt
-        assert "(16:9)" not in prompt
+        ratio = social_config["visual_prompts"]["aspect_ratio"]
+        assert f"--ar {ratio}" in prompt
 
     def test_describes_the_required_json_schema(
         self, article, social_copy, social_config
     ):
         prompt = build_visual_prompt_user_prompt(article, social_copy, social_config)
 
-        assert '"prompts"' in prompt
-        assert '"aspect"' in prompt
-        assert '"extra_negative"' in prompt
+        for key in ("treatment", "rationale", "prompt", "extra_negative"):
+            assert f'"{key}"' in prompt
 
     def test_forbids_markdown_fences(self, article, social_copy, social_config):
         prompt = build_visual_prompt_user_prompt(article, social_copy, social_config)
 
         assert "Markdown code fences" in prompt
-
-    def test_states_what_the_illustration_must_do(
-        self, article, social_copy, social_config
-    ):
-        prompt = build_visual_prompt_user_prompt(article, social_copy, social_config)
-
-        assert "What the illustration must do" in prompt
-        assert "Always name a saturated colour palette" in prompt
-
-    def test_allows_labels_and_graphics(self, article, social_copy, social_config):
-        prompt = build_visual_prompt_user_prompt(article, social_copy, social_config)
-
-        assert "short Spanish labels in double quotes" in prompt
-        assert "Keep every label under five words" in prompt
-
-    def test_uses_illustration_over_caricature(
-        self, article, social_copy, social_config
-    ):
-        prompt = build_visual_prompt_user_prompt(article, social_copy, social_config)
-
-        assert "Illustrate, never photograph" in prompt
-
-    def test_requests_stylised_characters_for_named_public_figures(
-        self, article, social_copy, social_config
-    ):
-        prompt = build_visual_prompt_user_prompt(article, social_copy, social_config)
-
-        assert "Named public figures may appear as stylised characters" in prompt
-
-    def test_forbids_recognisable_private_individuals(
-        self, article, social_copy, social_config
-    ):
-        prompt = build_visual_prompt_user_prompt(article, social_copy, social_config)
-
-        assert "private individuals" in prompt
