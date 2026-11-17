@@ -1,16 +1,18 @@
-"""Generación de prompts visuales en inglés para generadores de imágenes.
+"""Generación del prompt visual en inglés para ilustrar una columna.
 
-Los prompts alimentan Flux.1, SDXL o Midjourney. El subsistema no genera
-imágenes: entrega al diseñador un prompt positivo en inglés, el prompt
-negativo de marca y una variante lista para Midjourney.
+El subsistema no genera imágenes: entrega al diseñador un único prompt listo
+para Midjourney, con el prompt negativo de marca y los flags de versión y
+proporción. El tratamiento se decide por columna: **fotorrealista documental**
+cuando el texto describe hechos, lugares, objetos o escenas concretas, y
+**caricatura** editorial solo cuando la columna es abstracta o no tiene una
+escena documentable.
 
-La ilustración puede incluir gráficos y rótulos breves en español —cifras,
-etiquetas, flechas, sellos— porque refuerzan la idea del artículo y los
-lectores reconocen la pieza de un vistazo. Lo que se verifica en código es que
-el prompt esté en inglés, que nombre una paleta de color y que no reproduzca
-párrafos de texto: los modelos de difusión convierten la tipografía extensa en
-ruido. El retrato de personas reales queda acotado a personajes ilustrados de
-figuras públicas nombradas en el artículo, nunca a retratos fotorrealistas.
+La ilustración puede incluir rótulos breves en español —cifras, etiquetas,
+sellos— integrados en la escena, porque refuerzan la idea del artículo. Lo que
+se verifica en código es que el prompt esté en inglés, que nombre una paleta de
+color, que el tratamiento declarado coincida con la técnica descrita y que no
+reproduzca párrafos de texto: los modelos de difusión convierten la tipografía
+extensa en ruido.
 """
 
 import logging
@@ -20,7 +22,6 @@ from typing import Any
 from ..config import SOCIAL_JSON_MAX_RETRIES
 from .json_utils import JsonExtractionError, extract_json_object
 from .models import ArticleSource, SocialCopy, VisualPrompt
-from .platform_specs import platform_of_format
 from .prompt_builder import (
     build_visual_prompt_system_prompt,
     build_visual_prompt_user_prompt,
@@ -34,6 +35,10 @@ logger = logging.getLogger(__name__)
 
 class VisualPromptGenerationError(Exception):
     """Excepción para prompts visuales inválidos o ausentes."""
+
+
+# Tratamientos admitidos, en orden de preferencia editorial
+VISUAL_TREATMENTS = ("photorealistic", "caricature")
 
 
 # Términos que delatan un bloque de texto real dentro de la imagen: párrafos,
@@ -57,11 +62,15 @@ _NEGATED_TERM_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Rótulos entre comillas, que están permitidos y no deben contar como señal de
-# español: el prompt está en inglés y solo cita la etiqueta que irá en la
-# imagen.
+# Rótulos dentro de la imagen. Midjourney no interpreta comillas escapadas y
+# el prompt debe poder pegarse tal cual, así que el texto va sin comillas y se
+# escribe en mayúsculas para distinguirlo de la descripción en inglés.
 _QUOTED_LABEL_RE = re.compile(r"\"[^\"]*\"|“[^”]*”")
+_UPPERCASE_LABEL_RE = re.compile(r"\b[A-ZÁÉÍÓÚÑÜ][A-ZÁÉÍÓÚÑÜ0-9$%.,:+\-]*\b")
 
+# Comillas que se retiran del prompt final: el comando de Midjourney es texto
+# plano y los caracteres de escape del JSON lo ensucian al copiarlo.
+_QUOTE_CHARS_RE = re.compile(r"[\\\"“”]")
 # Largo admisible de un prompt positivo
 _MIN_PROMPT_WORDS = 25
 _MAX_PROMPT_WORDS = 200
@@ -112,6 +121,26 @@ _COLOUR_SIGNAL_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Señales del tratamiento fotorrealista. Un prompt declarado como
+# "photorealistic" debe describir una fotografía documental; si solo describe
+# una ilustración, el tratamiento y el texto se contradicen.
+_PHOTO_SIGNAL_RE = re.compile(
+    r"\b(?:photograph|photographic|photography|photojournalism|"
+    r"photojournalistic|reportage|documentary|35mm|50mm|lens|"
+    r"depth\s+of\s+field|film\s+grain|natural\s+light|available\s+light|"
+    r"shot\s+on|camera|telephoto|wide[- ]angle|photorealistic)\b",
+    re.IGNORECASE,
+)
+
+# Señales del tratamiento de caricatura. Un prompt declarado como "caricature"
+# debe nombrar una técnica ilustrada, no una fotografía.
+_ILLUSTRATION_SIGNAL_RE = re.compile(
+    r"\b(?:illustration|illustrated|digital\s+painting|vector|"
+    r"screen\s+print|collage|ink|drawing|hand[- ]drawn|caricature|"
+    r"cartoon|gouache|watercolou?r|comic|graphic[- ]novel|poster\s+art)\b",
+    re.IGNORECASE,
+)
+
 # Nota que se agrega al prompt cuando la respuesta anterior no fue utilizable
 _RETRY_NOTE = (
     "\n\n## Correction\n\nYour previous answer was not usable ({reason}). "
@@ -135,6 +164,22 @@ def _collapse_whitespace(text: str) -> str:
         str: Texto sin saltos de línea ni espacios repetidos.
     """
     return " ".join((text or "").split())
+
+
+def _strip_quotes(text: str) -> str:
+    """Retira comillas y escapes de un prompt para que sea texto plano.
+
+    Midjourney recibe el comando pegado a mano: las comillas y los caracteres
+    de escape que añade el JSON no se interpretan y ensucian el prompt, así que
+    el texto dentro de la imagen se escribe sin comillas.
+
+    Args:
+        text: Prompt positivo o negativo.
+
+    Returns:
+        str: Texto sin comillas ni barras invertidas, con espacios colapsados.
+    """
+    return _collapse_whitespace(_QUOTE_CHARS_RE.sub("", text or ""))
 
 
 def _find_text_blocks(prompt: str) -> list[str]:
@@ -172,7 +217,8 @@ def looks_like_spanish(text: str) -> bool:
     Los prompts deben estar en inglés porque los generadores de imágenes
     rinden mejor con descripciones en ese idioma. Se exige más de una palabra
     funcional española distinta para evitar falsos positivos, y se ignoran los
-    rótulos entre comillas, que sí deben ir en español.
+    rótulos que irán dentro de la imagen —entre comillas o en mayúsculas—,
+    porque sí deben ir en español.
 
     Args:
         text: Prompt a evaluar.
@@ -181,6 +227,7 @@ def looks_like_spanish(text: str) -> bool:
         bool: True si el texto parece estar en español.
     """
     without_labels = _QUOTED_LABEL_RE.sub(" ", text or "")
+    without_labels = _UPPERCASE_LABEL_RE.sub(" ", without_labels)
     return spanish_signal_count(without_labels) >= _SPANISH_SIGNAL_THRESHOLD
 
 
@@ -201,18 +248,51 @@ def has_colour_signal(prompt: str) -> bool:
     return _COLOUR_SIGNAL_RE.search(prompt or "") is not None
 
 
-def validate_visual_prompt(prompt: str) -> None:
-    """Valida un prompt positivo contra las restricciones de marca.
+def has_photo_signal(prompt: str) -> bool:
+    """Indica si un prompt describe una fotografía.
 
     Args:
         prompt: Prompt positivo en inglés.
 
-    Raises:
-        VisualPromptGenerationError: Si el prompt está vacío, tiene un largo
-                                     fuera de rango, no está en inglés, no
-                                     nombra una paleta de color o pide bloques
-                                     de texto dentro de la imagen.
+    Returns:
+        bool: True si el prompt nombra un recurso fotográfico.
     """
+    return _PHOTO_SIGNAL_RE.search(prompt or "") is not None
+
+
+def has_illustration_signal(prompt: str) -> bool:
+    """Indica si un prompt describe una técnica ilustrada.
+
+    Args:
+        prompt: Prompt positivo en inglés.
+
+    Returns:
+        bool: True si el prompt nombra una técnica de ilustración.
+    """
+    return _ILLUSTRATION_SIGNAL_RE.search(prompt or "") is not None
+
+
+def validate_visual_prompt(prompt: str, treatment: str) -> None:
+    """Valida un prompt positivo contra las restricciones de marca.
+
+    Args:
+        prompt: Prompt positivo en inglés.
+        treatment: Tratamiento declarado: "photorealistic" o "caricature".
+
+    Raises:
+        VisualPromptGenerationError: Si el tratamiento es desconocido, si el
+                                     prompt está vacío, tiene un largo fuera de
+                                     rango, no está en inglés, no nombra una
+                                     paleta de color, pide bloques de texto en
+                                     la imagen o no coincide con la técnica del
+                                     tratamiento declarado.
+    """
+    if treatment not in VISUAL_TREATMENTS:
+        raise VisualPromptGenerationError(
+            f"Tratamiento visual desconocido: {treatment or '(vacío)'}. "
+            f"Se esperaba uno de: {', '.join(VISUAL_TREATMENTS)}."
+        )
+
     words = prompt.split()
     if not words:
         raise VisualPromptGenerationError("El prompt visual está vacío.")
@@ -242,38 +322,17 @@ def validate_visual_prompt(prompt: str) -> None:
             "cifras, porque la tipografía extensa se renderiza como ruido."
         )
 
+    if treatment == "photorealistic" and not has_photo_signal(prompt):
+        raise VisualPromptGenerationError(
+            "El tratamiento es fotorrealista, pero el prompt no describe una "
+            "fotografía (lente, luz natural, reportaje o realismo fotográfico)."
+        )
 
-def enabled_aspects(
-    config: dict[str, Any],
-    platforms: list[str],
-) -> dict[str, dict[str, Any]]:
-    """Selecciona los aspectos aplicables a las plataformas pedidas.
-
-    Args:
-        config: Configuración de marca cargada desde ``social_config.json``.
-        platforms: Plataformas habilitadas en esta ejecución.
-
-    Returns:
-        dict[str, dict[str, Any]]: Aspectos cuyo destino intersecta con las
-                                   plataformas pedidas.
-    """
-    declared = config.get("visual_prompts", {}).get("aspect_ratios", {})
-    if not isinstance(declared, dict):
-        return {}
-
-    selected: dict[str, dict[str, Any]] = {}
-    for name, spec in declared.items():
-        if not isinstance(spec, dict):
-            continue
-        targets = spec.get("platforms", [])
-        if not isinstance(targets, (list, tuple)):
-            continue
-        # Los aspectos declaran formatos ("instagram_feed"), así que se compara
-        # contra la plataforma base de cada formato.
-        if any(platform_of_format(target) in platforms for target in targets):
-            selected[str(name)] = spec
-
-    return selected
+    if treatment == "caricature" and not has_illustration_signal(prompt):
+        raise VisualPromptGenerationError(
+            "El tratamiento es caricatura, pero el prompt no nombra una "
+            "técnica de ilustración ni caricaturiza a nadie."
+        )
 
 
 def _compose_negative_prompt(base: str, extra: str) -> str:
@@ -308,145 +367,99 @@ def _compose_negative_prompt(base: str, extra: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def build_visual_prompts(
-    payload: dict[str, Any],
-    config: dict[str, Any],
-    aspects: dict[str, dict[str, Any]],
-) -> list[VisualPrompt]:
-    """Construye los prompts visuales a partir del JSON del modelo.
+def build_visual_prompt(
+    payload: dict[str, Any], config: dict[str, Any]
+) -> VisualPrompt:
+    """Construye el prompt visual a partir del JSON del modelo.
 
-    Función pura: no invoca al modelo. Valida cada prompt y compone el prompt
-    negativo definitivo y la variante para Midjourney.
+    Función pura: no invoca al modelo. Valida el tratamiento declarado, el
+    prompt positivo y la coherencia entre ambos, y compone el prompt negativo
+    definitivo y la variante lista para Midjourney.
 
     Args:
         payload: Objeto JSON devuelto por el modelo.
         config: Configuración de marca cargada desde ``social_config.json``.
-        aspects: Aspectos esperados, indexados por nombre.
 
     Returns:
-        list[VisualPrompt]: Prompts validados, en orden de aparición.
+        VisualPrompt: Prompt validado con su tratamiento.
 
     Raises:
-        VisualPromptGenerationError: Si no se obtuvo ningún prompt utilizable.
+        VisualPromptGenerationError: Si el payload no trae un prompt utilizable
+                                     o el tratamiento no es válido.
     """
     visual_config = config.get("visual_prompts", {})
-    base_negative = str(visual_config.get("negative_prompt", ""))
+    base_negative = _strip_quotes(str(visual_config.get("negative_prompt", "")))
     midjourney_suffix = str(visual_config.get("midjourney_suffix", "")).strip()
-    settings = visual_config.get("default_settings", {})
-    if not isinstance(settings, dict):
-        settings = {}
+    aspect_ratio = str(visual_config.get("aspect_ratio", "")).strip()
 
-    raw_prompts = payload.get("prompts")
-    if not isinstance(raw_prompts, (list, tuple)):
+    treatment = payload.get("treatment")
+    treatment = treatment.strip().lower() if isinstance(treatment, str) else ""
+
+    rationale = payload.get("rationale")
+    rationale = _collapse_whitespace(rationale) if isinstance(rationale, str) else ""
+
+    prompt = payload.get("prompt")
+    prompt = _strip_quotes(prompt) if isinstance(prompt, str) else ""
+    if not prompt:
         raise VisualPromptGenerationError(
-            "El modelo no entregó la lista 'prompts' en el JSON visual."
+            "El modelo no entregó un 'prompt' visual utilizable."
         )
 
-    prompts: list[VisualPrompt] = []
-    seen_aspects: set[str] = set()
+    validate_visual_prompt(prompt, treatment)
 
-    for entry in raw_prompts:
-        if not isinstance(entry, dict):
-            continue
-
-        aspect = entry.get("aspect")
-        aspect = str(aspect).strip().lower() if aspect is not None else ""
-        if aspect not in aspects or aspect in seen_aspects:
-            if aspect:
-                logger.debug("Aspecto ignorado por no ser requerido: %s", aspect)
-            continue
-
-        spec = aspects[aspect]
-        prompt = entry.get("prompt")
-        prompt = _collapse_whitespace(prompt) if isinstance(prompt, str) else ""
-        if not prompt:
-            logger.warning("El aspecto '%s' llegó sin prompt: se omite.", aspect)
-            continue
-
-        try:
-            validate_visual_prompt(prompt)
-        except VisualPromptGenerationError as exc:
-            logger.warning("Prompt del aspecto '%s' descartado: %s", aspect, exc)
-            continue
-
-        extra_negative = entry.get("extra_negative")
-        extra_negative = extra_negative if isinstance(extra_negative, str) else ""
-        negative = _compose_negative_prompt(base_negative, extra_negative)
-
-        ratio = str(spec.get("ratio", "")).strip()
-        flag = str(spec.get("midjourney_flag", "")).strip()
-        targets = [str(item) for item in spec.get("platforms", [])]
-
-        negative_flag = f"--no {negative}" if negative else ""
-        midjourney_prompt = " ".join(
-            chunk
-            for chunk in (prompt, flag, midjourney_suffix, negative_flag)
-            if chunk
-        )
-
-        prompts.append(
-            VisualPrompt(
-                aspect=aspect,
-                aspect_ratio=ratio,
-                platforms=targets,
-                prompt=prompt,
-                negative_prompt=negative,
-                midjourney_prompt=midjourney_prompt,
-                settings=dict(settings),
-            )
-        )
-        seen_aspects.add(aspect)
-
-    missing = sorted(set(aspects) - seen_aspects)
-    if missing:
-        logger.warning(
-            "Faltan prompts visuales para los aspectos: %s.", ", ".join(missing)
-        )
-
-    if not prompts:
+    if not rationale:
         raise VisualPromptGenerationError(
-            "No se obtuvo ningún prompt visual válido en la respuesta del modelo."
+            "El modelo no explicó en 'rationale' por qué eligió el "
+            "tratamiento visual."
         )
 
-    return prompts
+    extra_negative = payload.get("extra_negative")
+    extra_negative = (
+        _strip_quotes(extra_negative) if isinstance(extra_negative, str) else ""
+    )
+    negative = _compose_negative_prompt(base_negative, extra_negative)
+
+    aspect_flag = f"--ar {aspect_ratio}" if aspect_ratio else ""
+    negative_flag = f"--no {negative}" if negative else ""
+    midjourney_prompt = " ".join(
+        chunk
+        for chunk in (prompt, aspect_flag, midjourney_suffix, negative_flag)
+        if chunk
+    )
+
+    return VisualPrompt(
+        treatment=treatment,
+        rationale=rationale,
+        prompt=prompt,
+        negative_prompt=negative,
+        midjourney_prompt=midjourney_prompt,
+        aspect_ratio=aspect_ratio,
+    )
 
 
-def generate_visual_prompts(
+def generate_visual_prompt(
     article: ArticleSource,
     copy: SocialCopy,
     config: dict[str, Any],
     client: Any,
-    platforms: list[str],
-) -> list[VisualPrompt]:
-    """Genera los prompts visuales en inglés para un artículo.
+) -> VisualPrompt:
+    """Genera el prompt visual en inglés para una columna.
 
     Args:
         article: Artículo de origen ya parseado.
         copy: Copys ya generados, usados para alinear el concepto visual.
         config: Configuración de marca cargada desde ``social_config.json``.
         client: Cliente LLM con el método ``generate_report``.
-        platforms: Plataformas habilitadas en esta ejecución.
 
     Returns:
-        list[VisualPrompt]: Prompts validados. Lista vacía si no hay aspectos
-                            aplicables a las plataformas pedidas.
+        VisualPrompt: Prompt validado, con el tratamiento declarado.
 
     Raises:
-        VisualPromptGenerationError: Si se agotan los intentos sin obtener
-                                     ningún prompt utilizable.
+        VisualPromptGenerationError: Si se agotan los intentos sin obtener un
+                                     prompt utilizable.
     """
-    aspects = enabled_aspects(config, platforms)
-    if not aspects:
-        logger.info(
-            "No hay aspectos visuales aplicables a las plataformas pedidas: "
-            "se omiten los prompts de imagen."
-        )
-        return []
-
     system_prompt = build_visual_prompt_system_prompt(config)
-    base_user_prompt = build_visual_prompt_user_prompt(
-        article, copy, config, aspects=aspects
-    )
+    base_user_prompt = build_visual_prompt_user_prompt(article, copy, config)
 
     attempts = SOCIAL_JSON_MAX_RETRIES + 1
     last_error: Exception | None = None
@@ -457,7 +470,7 @@ def generate_visual_prompts(
             user_prompt += _RETRY_NOTE.format(reason=last_error)
 
         logger.info(
-            "Solicitando prompts visuales al modelo (intento %d/%d).",
+            "Solicitando el prompt visual al modelo (intento %d/%d).",
             attempt,
             attempts,
         )
@@ -468,24 +481,22 @@ def generate_visual_prompts(
         except JsonExtractionError as exc:
             last_error = exc
             logger.warning(
-                "Intento %d sin JSON válido en los prompts visuales: %s",
+                "Intento %d sin JSON válido en el prompt visual: %s",
                 attempt,
                 exc,
             )
             continue
 
         try:
-            prompts = build_visual_prompts(payload, config, aspects)
+            return build_visual_prompt(payload, config)
         except VisualPromptGenerationError as exc:
             last_error = exc
             logger.warning(
-                "Intento %d sin prompts visuales válidos: %s", attempt, exc
+                "Intento %d sin prompt visual válido: %s", attempt, exc
             )
             continue
 
-        return prompts
-
     raise VisualPromptGenerationError(
-        f"No se pudieron generar prompts visuales válidos tras {attempts} "
+        f"No se pudo generar un prompt visual válido tras {attempts} "
         f"intento(s). Último error: {last_error}"
     )

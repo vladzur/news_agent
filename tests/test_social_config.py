@@ -1,6 +1,7 @@
 """Tests de la configuración del subsistema de RRSS."""
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -254,13 +255,35 @@ class TestRepositoryConfigCoherence:
         visual = social_config["visual_prompts"]
 
         for key in (
-            "style",
+            "treatments",
+            "treatment_rules",
             "negative_prompt",
             "midjourney_suffix",
-            "aspect_ratios",
-            "default_settings",
+            "aspect_ratio",
         ):
             assert key in visual
+
+    def test_declares_both_visual_treatments(self, social_config):
+        treatments = social_config["visual_prompts"]["treatments"]
+
+        assert set(treatments) == {"photorealistic", "caricature"}
+        assert all(isinstance(value, str) and value for value in treatments.values())
+
+    def test_treatment_rules_name_every_configured_treatment(self, social_config):
+        visual = social_config["visual_prompts"]
+        rules = visual["treatment_rules"].lower()
+
+        for treatment in visual["treatments"]:
+            assert treatment in rules
+
+    def test_photorealistic_style_describes_a_documentary_photograph(
+        self, social_config
+    ):
+        style = social_config["visual_prompts"]["treatments"]["photorealistic"].lower()
+
+        assert "photograph" in style
+        assert "natural" in style
+        assert "palette" in style
 
     def test_negative_prompt_rejects_blocks_of_text_but_allows_labels(
         self, social_config
@@ -273,8 +296,10 @@ class TestRepositoryConfigCoherence:
             term in negative for term in ("typography", "numbers", "captions")
         )
 
-    def test_visual_style_prefers_editorial_illustration(self, social_config):
-        style = social_config["visual_prompts"]["style"].lower()
+    def test_caricature_style_keeps_the_editorial_illustration_look(
+        self, social_config
+    ):
+        style = social_config["visual_prompts"]["treatments"]["caricature"].lower()
 
         assert "illustration" in style
         assert "infographic" in style
@@ -286,11 +311,15 @@ class TestRepositoryConfigCoherence:
         assert "desaturated" in negative
         assert "monochrome" in negative
 
-    def test_negative_prompt_excludes_photorealistic_portraits(self, social_config):
+    def test_negative_prompt_forbids_deepfakes_but_allows_photography(
+        self, social_config
+    ):
         negative = social_config["visual_prompts"]["negative_prompt"].lower()
 
         assert "deepfake" in negative
-        assert "photorealistic" in negative
+        assert "staged reenactment" in negative
+        assert "photorealistic" not in negative
+        assert "hyperrealistic photograph" not in negative
 
     def test_negative_prompt_does_not_ban_public_figures(self, social_config):
         negative = social_config["visual_prompts"]["negative_prompt"].lower()
@@ -298,12 +327,11 @@ class TestRepositoryConfigCoherence:
         assert "public figures" not in negative
         assert "real faces" not in negative
 
-    def test_aspect_ratios_cover_every_platform(self, social_config):
-        platforms = set()
-        for spec in social_config["visual_prompts"]["aspect_ratios"].values():
-            platforms.update(spec["platforms"])
+    def test_declares_a_single_midjourney_aspect_ratio(self, social_config):
+        visual = social_config["visual_prompts"]
 
-        assert platforms == {"x", "facebook", "instagram_feed", "instagram_story"}
+        assert re.fullmatch(r"\d+:\d+", visual["aspect_ratio"])
+        assert "--v" in visual["midjourney_suffix"]
 
     def test_story_safe_zones_are_declared(self, social_config):
         safe_zone = social_config["banners"]["safe_zone"]["instagram_story"]

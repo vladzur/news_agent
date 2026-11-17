@@ -270,6 +270,7 @@ class TestAllIntegration:
                 "bundle_dir": tmp_path / "social",
                 "copy_path": tmp_path / "social" / "social_copy.json",
                 "prompts_path": None,
+                "prompt_text_path": None,
                 "manifest_path": tmp_path / "social" / "manifest.json",
                 "asset_paths": [],
                 "markdown_paths": {},

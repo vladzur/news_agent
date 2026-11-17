@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 ASSETS_DIR_NAME = "assets"
 COPY_FILE_NAME = "social_copy.json"
 PROMPTS_FILE_NAME = "visual_prompts.json"
+PROMPT_TEXT_FILE_NAME = "visual_prompt.txt"
 MANIFEST_FILE_NAME = "manifest.json"
 
 # Nombre del archivo Markdown por plataforma
@@ -137,23 +138,36 @@ def save_copy_json(copy: SocialCopy, bundle_dir: str | Path) -> Path:
     return _dump_json(copy.to_dict(), Path(bundle_dir) / COPY_FILE_NAME)
 
 
-def save_visual_prompts_json(
-    prompts: list[VisualPrompt], bundle_dir: str | Path
-) -> Path:
-    """Guarda el JSON de prompts visuales en inglés.
+def save_visual_prompt_json(prompt: VisualPrompt, bundle_dir: str | Path) -> Path:
+    """Guarda el JSON con los metadatos del prompt visual.
 
     Args:
-        prompts: Prompts visuales generados.
+        prompt: Prompt visual generado.
         bundle_dir: Directorio del bundle.
 
     Returns:
         Path: Ruta absoluta del archivo escrito.
     """
-    payload = {
-        "count": len(prompts),
-        "prompts": [prompt.to_dict() for prompt in prompts],
-    }
-    return _dump_json(payload, Path(bundle_dir) / PROMPTS_FILE_NAME)
+    return _dump_json(prompt.to_dict(), Path(bundle_dir) / PROMPTS_FILE_NAME)
+
+
+def save_visual_prompt_text(prompt: VisualPrompt, bundle_dir: str | Path) -> Path:
+    """Guarda el comando de Midjourney como texto plano, listo para pegar.
+
+    Midjourney no admite comillas escapadas ni JSON: el archivo contiene
+    únicamente el comando, con sus tags (``--ar``, ``--style``, ``--v``,
+    ``--no``) y sin ningún carácter de escape.
+
+    Args:
+        prompt: Prompt visual generado.
+        bundle_dir: Directorio del bundle.
+
+    Returns:
+        Path: Ruta absoluta del archivo escrito.
+    """
+    target = Path(bundle_dir).resolve() / PROMPT_TEXT_FILE_NAME
+    target.write_text(f"{prompt.midjourney_prompt}\n", encoding="utf-8")
+    return target
 
 
 # ---------------------------------------------------------------------------
@@ -390,7 +404,7 @@ def save_platform_markdown(
 def save_manifest(
     bundle_dir: str | Path,
     copy: SocialCopy,
-    prompts: list[VisualPrompt],
+    prompt: VisualPrompt | None,
     banners: list[BannerSpec],
     markdown_files: dict[str, Path],
     platforms: list[str],
@@ -401,7 +415,7 @@ def save_manifest(
     Args:
         bundle_dir: Directorio del bundle.
         copy: Copys generados.
-        prompts: Prompts visuales generados.
+        prompt: Prompt visual generado, o None si falló o se omitió.
         banners: Banners renderizados.
         markdown_files: Archivos Markdown escritos, por plataforma.
         platforms: Plataformas habilitadas en la ejecución.
@@ -425,14 +439,16 @@ def save_manifest(
         },
         "files": {
             "copy": COPY_FILE_NAME,
-            "visual_prompts": PROMPTS_FILE_NAME if prompts else None,
+            "visual_prompts": PROMPTS_FILE_NAME if prompt else None,
+            "visual_prompt_text": PROMPT_TEXT_FILE_NAME if prompt else None,
             "markdown": {
                 platform: path.name for platform, path in markdown_files.items()
             },
         },
         "visual_prompts": {
-            "count": len(prompts),
-            "aspects": [prompt.aspect for prompt in prompts],
+            "count": 1 if prompt else 0,
+            "treatment": prompt.treatment if prompt else None,
+            "aspect_ratio": prompt.aspect_ratio if prompt else None,
         },
         "banners": {
             "rendered": len(rendered),

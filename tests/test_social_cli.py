@@ -140,6 +140,7 @@ class TestSocializeMode:
             "bundle_dir": bundle,
             "copy_path": bundle / "social_copy.json",
             "prompts_path": bundle / "visual_prompts.json",
+            "prompt_text_path": bundle / "visual_prompt.txt",
             "manifest_path": bundle / "manifest.json",
             "asset_paths": [bundle / "assets" / "headline_card_x.png"],
             "markdown_paths": {"x": bundle / "x_thread.md"},

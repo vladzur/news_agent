@@ -17,7 +17,7 @@ class FakeLLMClient:
     """Cliente LLM falso que responde según el tipo de prompt recibido.
 
     El orquestador hace dos llamadas con system prompts distintos (copys y
-    prompts visuales), así que el doble despacha por el contenido del prompt.
+    prompt visual), así que el doble despacha por el contenido del prompt.
     """
 
     def __init__(
@@ -35,7 +35,7 @@ class FakeLLMClient:
 
     def generate_report(self, system_prompt: str, user_prompt: str) -> str:
         self.system_prompts.append(system_prompt)
-        if "editorial illustrator" in system_prompt.lower():
+        if "picture editor" in system_prompt.lower():
             return self.visual_response
         return self.copy_response
 
@@ -160,7 +160,18 @@ class TestRunSocialize:
         assert result["copy_path"].is_file()
         assert result["prompts_path"] is not None
         assert result["prompts_path"].is_file()
-        assert result["prompt_count"] == 3
+        assert result["prompt_count"] == 1
+
+    def test_writes_the_midjourney_command_as_plain_text(self, run):
+        runner, _ = run
+
+        result = runner()
+
+        content = result["prompt_text_path"].read_text(encoding="utf-8")
+        assert content.startswith("Documentary photograph")
+        assert "--ar" in content
+        assert "\\" not in content
+        assert '"' not in content
 
     def test_copy_json_has_the_full_thread(self, run):
         runner, _ = run
@@ -198,7 +209,8 @@ class TestRunSocialize:
 
         payload = json.loads(result["manifest_path"].read_text(encoding="utf-8"))
         assert payload["banners"]["rendered"] == 6
-        assert payload["visual_prompts"]["count"] == 3
+        assert payload["visual_prompts"]["count"] == 1
+        assert payload["visual_prompts"]["treatment"] == "photorealistic"
 
     def test_uses_both_llm_stages(self, run, llm):
         runner, _ = run
@@ -344,12 +356,12 @@ class TestRunSocializeFailSafe:
         good = json.dumps(copy_payload, ensure_ascii=False)
 
         class _Mixed:
-            """Responde bien a los copys y mal a los prompts visuales."""
+            """Responde bien a los copys y mal al prompt visual."""
 
             response_format = None
 
             def generate_report(self, system_prompt: str, user_prompt: str) -> str:
-                if "prompt engineer" in system_prompt.lower():
+                if "picture editor" in system_prompt.lower():
                     return "no es json"
                 return good
 

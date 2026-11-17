@@ -128,6 +128,7 @@ def _social_result(tmp_path: Path) -> dict[str, Any]:
         "bundle_dir": bundle,
         "copy_path": bundle / "social_copy.json",
         "prompts_path": bundle / "visual_prompts.json",
+        "prompt_text_path": bundle / "visual_prompt.txt",
         "manifest_path": bundle / "manifest.json",
         "asset_paths": [],
         "markdown_paths": {},

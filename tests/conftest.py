@@ -1,7 +1,7 @@
 """Fixtures compartidas por los tests del subsistema de RRSS.
 
 Se cargan aquí porque los distintos módulos del subsistema (parseo, copys,
-prompts visuales, banners y escritura) comparten el mismo material de origen:
+prompt visual, banners y escritura) comparten el mismo material de origen:
 un artículo real ya publicado y la configuración de marca del repositorio.
 """
 
@@ -202,35 +202,52 @@ def copy_payload() -> dict:
 
 @pytest.fixture
 def visual_payload() -> dict:
-    """Respuesta JSON de ejemplo del modelo para los prompts visuales.
+    """Respuesta JSON de ejemplo del modelo para el prompt visual.
 
     Returns:
-        dict: Payload con un prompt por aspecto declarado.
+        dict: Payload con el tratamiento, su motivo y el prompt en inglés.
     """
-    base = (
-        "Bold editorial illustration of a nameless official in an oversized "
-        "suit standing on a flooded city street at dusk, a towering concrete "
-        "wall looming behind him, a giant red stamp reading \"DESPIDOS\" "
-        "pressed across the scene, flat vector infographics mixed with "
-        "textured digital painting, saturated teal and warm amber palette, "
-        "glowing crimson-red horizon, wide composition with generous negative "
-        "space, dramatic coloured rim light, critical and urgent mood, high "
-        "detail, magazine cover quality"
-    )
     return {
-        "prompts": [
-            {"aspect": "landscape", "prompt": base, "extra_negative": ""},
-            {
-                "aspect": "square",
-                "prompt": base.replace("wide composition", "centred square composition"),
-                "extra_negative": "crowds, banners",
-            },
-            {
-                "aspect": "portrait",
-                "prompt": base.replace("wide composition", "vertical composition"),
-                "extra_negative": "",
-            },
-        ]
+        "treatment": "photorealistic",
+        "rationale": (
+            "La columna narra una detención concreta en Cunco, con lugar, "
+            "fecha y actuación policial documentables."
+        ),
+        "prompt": (
+            "Documentary photograph of a police van parked on a wet gravel "
+            "street in southern Chile at dusk, two investigating officers in "
+            "plain clothes walking towards a modest wooden house, a neighbour "
+            "watching from a doorway, 35mm lens at eye level, natural "
+            "available light, shallow depth of field, film grain, reportage "
+            "palette of crimson red, warm amber and deep teal, wide "
+            "composition with generous negative space, magazine cover quality"
+        ),
+        "extra_negative": "",
+    }
+
+
+@pytest.fixture
+def caricature_payload() -> dict:
+    """Respuesta JSON de ejemplo con el tratamiento de caricatura.
+
+    Returns:
+        dict: Payload con una columna abstracta ilustrada.
+    """
+    return {
+        "treatment": "caricature",
+        "rationale": (
+            "La columna es un ensayo sobre la erosión institucional, sin una "
+            "escena concreta que pueda fotografiarse."
+        ),
+        "prompt": (
+            "Bold editorial illustration of a colossal cracked marble column "
+            "held up by a single matchstick, tiny suited figures pushing from "
+            "opposite sides, flat vector infographics mixed with textured "
+            "digital painting, saturated teal and warm amber palette against "
+            "crimson red, dramatic rim light, poster composition, magazine "
+            "cover quality"
+        ),
+        "extra_negative": "crowds, banners",
     }
 
 

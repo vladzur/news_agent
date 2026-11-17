@@ -156,7 +156,7 @@ def _add_social_platform_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--skip-prompts",
         action="store_true",
-        help="Omite la generación de prompts visuales en inglés.",
+        help="Omite la generación del prompt visual en inglés para Midjourney.",
     )
 
 
@@ -249,7 +249,7 @@ def _add_social_parser(
         "social",
         help=COMMAND_DESCRIPTIONS["social"],
         description=(
-            "Genera copys, prompts visuales y banners para X, Facebook e "
+            "Genera copys, prompt visual y banners para X, Facebook e "
             "Instagram a partir de uno o varios artículos publicados."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -929,8 +929,10 @@ def print_social_summary(result: dict[str, Any]) -> None:
     print(f"   🖼️  Banners generados: {result['banner_count']}")
     if result["banner_failed"]:
         print(f"   ⚠️  Banners fallidos: {result['banner_failed']}")
-    if result["prompts_path"]:
-        print(f"   🎨 Prompts visuales: {result['prompts_path']}")
+    if result.get("prompt_text_path"):
+        print(f"   🎨 Prompt Midjourney: {result['prompt_text_path']}")
+    if result.get("prompts_path"):
+        print(f"   🗂️  Metadatos del prompt: {result['prompts_path']}")
     print(f"   🗂️  Copys: {result['copy_path']}")
     print(f"   🧾 Manifiesto: {result['manifest_path']}")
 
@@ -1016,7 +1018,7 @@ def run_socialize_step(
         config_path: Ruta a la configuración de marca, o None para la default.
         verbose: Si es True, activa logging DEBUG.
         skip_banners: Si es True, omite el renderizado de banners.
-        skip_prompts: Si es True, omite los prompts visuales.
+        skip_prompts: Si es True, omite el prompt visual.
 
     Returns:
         dict[str, Any]: Resumen devuelto por ``run_socialize``.

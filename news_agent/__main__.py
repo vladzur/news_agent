@@ -154,7 +154,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="RUTA_ARTICULO",
         help="Ruta al artículo Markdown (ej: articulos/articulo_1_slug.md) "
-        "del cual generar copys, prompts visuales y banners para redes sociales.",
+        "del cual generar copys, prompt visual y banners para redes sociales.",
     )
     parser.add_argument(
         "--platforms",
@@ -182,7 +182,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--skip-prompts",
         action="store_true",
-        help="Omite la generación de prompts visuales en inglés. "
+        help="Omite la generación del prompt visual en inglés para Midjourney. "
         "Usar junto con --socialize.",
     )
 

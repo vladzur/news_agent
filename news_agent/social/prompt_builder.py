@@ -5,12 +5,12 @@ Hay dos familias de prompts, con contratos deliberadamente distintos:
 - **Copys**: salida en español neutro y JSON estructurado por plataforma. El
   esquema se genera desde la configuración para que el prompt y el validador
   nunca se separen.
-- **Prompts visuales**: salida en inglés, pensada para Flux.1, SDXL y
-  Midjourney, con ilustración editorial vívida como estilo por defecto y \
-  paleta de color obligatoria. La imagen sí puede incluir gráficos y rótulos \
-  breves en español que refuercen el mensaje, y las personas reales quedan \
-  acotadas a personajes ilustrados de figuras públicas nombradas en el \
-  artículo.
+- **Prompts visuales**: salida en inglés, pensada para Midjourney, con dos
+  tratamientos posibles —fotorrealista documental o caricatura editorial— y \
+  paleta de color obligatoria. El fotorrealismo es el tratamiento por defecto \
+  cuando la columna tiene hechos, lugares o escenas concretas; la caricatura \
+  queda reservada para columnas abstractas o sin una escena documentable. La \
+  imagen puede incluir rótulos breves en español integrados en la escena.
 
 Ambas familias separan la identidad editorial (system prompt) de la tarea y el
 esquema de salida (user prompt), igual que el resto del agente.
@@ -110,35 +110,45 @@ línea.
 # ---------------------------------------------------------------------------
 
 VISUAL_PROMPT_SYSTEM_PROMPT = """\
-You are the editorial illustrator of La Chispa Sur, an independent left-wing \
-digital news outlet from southern Chile. You read one article and write the \
-English prompt that a designer will paste into Flux.1, SDXL or Midjourney to \
-illustrate it.
+You are the picture editor of La Chispa Sur, an independent left-wing \
+digital news outlet from southern Chile. You read one column and write the \
+single English prompt that a designer pastes into Midjourney to illustrate it.
 
-Describe one bold editorial illustration that captures the central idea of \
-the article at a glance: the scene, the objects and the visual metaphor that \
-a reader understands without reading the note. Illustrations beat cartoons: \
-build a striking image, not a joke.
+Decide the treatment first, then write the prompt.
 
-You may — and usually should — include graphic and typographic elements that \
-reinforce the message: big numbers, short labels, banners, price tags, charts, \
-arrows, stamps or dotted lines. Any text inside the image must be short (three \
-or four words at most), written in Spanish, spelled correctly and quoted in \
-the prompt, for example "PENSIONES" or "-10,39%". Never ask for paragraphs, \
-fine print or long headlines.
+## Treatment
 
-Rules:
+Photorealistic is the default. Choose it when the column reports concrete, \
+recognisable facts — a place, an event, an object, a person or a scene — that \
+can be shown as one plausible documentary photograph: a street, a courtroom, \
+a market, a picket line, a signed document, a public figure at a podium.
+
+Choose caricature — a bold editorial illustration — only when the column is \
+abstract: an argument, an economic or institutional trend, a metaphor or a \
+critique with no single scene that can be documented. Caricature is never the \
+default and never a way to dodge a fact that can be photographed.
+
+## Rules
 1. Write the prompt in English only; the text you request inside the image is \
 in Spanish.
-2. Illustration, never photography: editorial illustration, digital painting, \
-screen print, collage, flat vector or graphic-novel ink. No photorealistic \
-images and no deepfakes.
-3. People named in the article (president, ministers, senators, mayors) may \
-appear as stylised characters or caricatures. Victims, minors and private \
-individuals appear as generic anonymous figures.
-4. No explicit violence.
-5. Always name a saturated colour palette and the technique.
-6. Keep one shared concept and palette across every format; in the vertical one, leave the top and bottom clear of essential elements.
+2. A photorealistic prompt reads like a documentary photograph: subject, \
+action, place, light, lens and framing. Never invent an event the column does \
+not report; the scene must be plausible and faithful to its facts.
+3. In the photorealistic treatment, public figures named in the column appear \
+only inside a documentary scene: no deepfake, no invented gesture and no \
+invented setting. Victims, minors and private individuals appear unidentified.
+4. In the caricature treatment, named public figures may appear as stylised \
+characters; victims, minors and private individuals appear as anonymous \
+figures.
+5. Short in-image text is welcome when it belongs to the scene — signs, \
+placards, banners, price tags, screens — and reinforces the message. Keep it \
+to three or four words at most, write it in Spanish and in capitals, and never \
+use quotation marks or backslashes: write PENSIONES or -10,39%, not \
+"-10,39%". The prompt is pasted into Midjourney as plain text, so escaped \
+quotes break it. Never ask for paragraphs, fine print or long headlines.
+6. Always name a technique and a colour palette: the medium plus palette for \
+caricature, the photographic treatment plus palette for photorealistic work.
+7. No explicit violence.
 
 Write comma-separated descriptors, never commands such as "generate" or \
 "create an image". Aim for 50 to 120 words.
@@ -370,39 +380,48 @@ def build_visual_prompt_user_prompt(
     article: ArticleSource,
     copy: SocialCopy,
     config: dict[str, Any],
-    aspects: dict[str, Any] | None = None,
 ) -> str:
-    """Construye el user prompt para generar los prompts de imagen.
+    """Construye el user prompt para generar el prompt de imagen.
 
     Args:
         article: Artículo de origen ya parseado.
         copy: Copys ya generados, para alinear el concepto visual con el gancho.
         config: Configuración de marca cargada desde ``social_config.json``.
-        aspects: Aspectos a cubrir, indexados por nombre. Si es None, se usan
-                 todos los declarados en la configuración.
 
     Returns:
         str: El prompt de usuario listo para enviar al modelo.
     """
     visual_config = config.get("visual_prompts", {})
-    style = str(visual_config.get("style", "")).strip()
+    treatments = visual_config.get("treatments", {})
+    if not isinstance(treatments, dict):
+        treatments = {}
+    photorealistic_style = str(treatments.get("photorealistic", "")).strip()
+    caricature_style = str(treatments.get("caricature", "")).strip()
+    treatment_rules = str(visual_config.get("treatment_rules", "")).strip()
     negative = str(visual_config.get("negative_prompt", "")).strip()
-    if aspects is None:
-        declared = visual_config.get("aspect_ratios", {})
-        aspects = declared if isinstance(declared, dict) else {}
+    aspect_ratio = str(visual_config.get("aspect_ratio", "")).strip()
 
     parts: list[str] = [
         "## Task",
         "",
-        ("Read the article material and write one English image-generation "
-        "prompt per aspect ratio. Describe the illustration you would draw "
-        "for this article, then adapt the same visual concept and colour "
-        "palette to each frame."),
+        ("Read the column and write one English Midjourney prompt that "
+        "illustrates it. Decide the treatment first, then describe the "
+        "image."),
         "",
-        "## Article material",
+        "## Treatment decision",
+        "",
+        treatment_rules,
+        "",
+        f"- **photorealistic** — {photorealistic_style}",
+        f"- **caricature** — {caricature_style}",
+        "",
+        "## Column material",
         "",
         f"**Headline:** {article.title}",
     ]
+
+    if article.byline:
+        parts.append(f"**Byline:** {article.byline}")
 
     if article.lead:
         parts.extend(["", f"**Lead:** {article.lead}"])
@@ -414,9 +433,14 @@ def build_visual_prompt_user_prompt(
                 parts.append(f"- {section.heading}: {section.body}")
 
     if article.key_figures:
-        parts.extend(["", "**Key figures usable as big numbers in the artwork:**"])
+        parts.extend(["", "**Key figures quoted in the column:**"])
         for figure in article.key_figures:
             parts.append(f"- {figure}")
+
+    if article.sources:
+        parts.extend(["", "**Sources cited in the column:**"])
+        for source in article.sources:
+            parts.append(f"- {source}")
 
     parts.extend(
         [
@@ -433,41 +457,35 @@ def build_visual_prompt_user_prompt(
         for bullet in copy.summary:
             parts.append(f"- {bullet}")
 
-    parts.extend(["", "## Style directive (apply to every prompt)", "", style])
-
     parts.extend(
         [
             "",
-            "## What the illustration must do",
+            "## What the image must do",
             "",
-            ("1. Capture the central idea of the article in one image, using "
-            "the people, places, objects and numbers it mentions; a reader "
-            "should get it at a glance."),
-            ("2. Include graphic and text elements when they reinforce the "
-            "message: big numbers, short Spanish labels in double quotes, "
-            "banners, charts, arrows or stamps. Keep every label under five "
-            "words."),
-            ("3. Illustrate, never photograph: editorial illustration, "
-            "digital painting, screen print, collage, flat vector or "
-            "graphic-novel ink."),
-            ("4. Named public figures may appear as stylised characters or "
-            "caricatures; victims, minors and private individuals appear as "
-            "generic anonymous figures."),
-            ("5. Always name a saturated colour palette and the technique, "
-            "and keep one shared palette across every prompt."),
+            ("1. Show the central idea of the column in one image, using the "
+            "people, places, objects and figures it actually mentions; a "
+            "reader should get it at a glance."),
+            ("2. Choose photorealistic whenever those facts can be shown as "
+            "a plausible documentary photograph; fall back to caricature "
+            "only for abstract columns with no documentable scene."),
+            ("3. Keep the scene faithful to the column: never turn a "
+            "hypothesis, an investigation or a suspicion into a depicted "
+            "fact, and never invent an event the column does not report."),
+            ("4. Integrate short Spanish text only when it belongs to the "
+            'scene —signs, placards, banners, screens or price tags—, in '
+            "capitals and under five words, with no quotation marks and no "
+            "escaped characters."),
+            ("5. Name the technique and a colour palette, and keep the "
+            "palette consistent with La Chispa Sur: crimson red, warm amber "
+            "and deep teal."),
         ]
     )
 
-    parts.extend(["", "## Aspect ratios", ""])
-    if isinstance(aspects, dict):
-        for name, spec in aspects.items():
-            if not isinstance(spec, dict):
-                continue
-            ratio = spec.get("ratio", "")
-            target_platforms = spec.get("platforms", [])
-            platforms_text = ", ".join(str(item) for item in target_platforms)
-            suffix = f" for {platforms_text}" if platforms_text else ""
-            parts.append(f"- **{name}** ({ratio}){suffix}")
+    if aspect_ratio:
+        parts.append(
+            "6. Do not add Midjourney flags: the system appends "
+            f"--ar {aspect_ratio} and the version flags."
+        )
 
     parts.extend(
         [
@@ -479,25 +497,27 @@ def build_visual_prompt_user_prompt(
             "The object must have exactly this shape:",
             "",
             "{",
-            '  "prompts": [',
-            "    {",
-            '      "aspect": "landscape",',
-            '      "prompt": "English prompt with a named palette and medium",',
-            ('      "extra_negative": "Comma-separated artefacts to avoid, '
+            '  "treatment": "photorealistic",',
+            '  "rationale": "Motivo editorial en español",',
+            '  "prompt": "English prompt with a named technique and palette",',
+            ('  "extra_negative": "Comma-separated artefacts to avoid, '
             'may be an empty string"'),
-            "    }",
-            "  ]",
             "}",
             "",
             "Notes on the schema:",
-            ('- Include exactly one entry per aspect ratio, using the aspect '
-            "names listed above."),
-            ("- `prompt` must be written in English. Quote any text that "
-            'should appear inside the image, in Spanish and no longer than '
-            'five words, e.g. "PENSIONES" or "-10,39%".'),
-            ("- `prompt` must always name a saturated colour palette and a "
-            "medium or technique, and must aim for 50 to 120 words."),
-            ("- `extra_negative` adds article-specific artefacts to avoid on "
+            ('- `treatment` must be exactly "photorealistic" or '
+            '"caricature".'),
+            ("- `rationale` explains in Spanish, in one or two sentences, "
+            "which concrete facts of the column support a documentary "
+            "photograph or which abstract argument forces a caricature."),
+            ("- `prompt` must be written in English. Any text that should "
+            "appear inside the image goes in Spanish, in capitals and "
+            "without quotation marks or backslashes, no longer than five "
+            "words, e.g. PENSIONES or -10,39%. The prompt is copied verbatim "
+            "into Midjourney, so it must stay plain text."),
+            ("- `prompt` must name the technique and a colour palette and "
+            "aim for 50 to 120 words."),
+            ("- `extra_negative` adds column-specific artefacts to avoid on "
             "top of the standard negative prompt. Never repeat the standard "
             "negative prompt here."),
             f"- The standard negative prompt already in force is: {negative}",
