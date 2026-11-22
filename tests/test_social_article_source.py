@@ -121,6 +121,14 @@ class TestContainsVerbatim:
     def test_rejects_short_quotes_that_prove_nothing(self, article):
         assert article.contains_verbatim("44 años") is False
 
+    def test_rejects_text_from_the_sources_block(self, article):
+        quote = (
+            "Radio Universidad de Chile: cobertura original de la detención "
+            "en Cunco."
+        )
+
+        assert article.contains_verbatim(quote) is False
+
 
 # ---------------------------------------------------------------------------
 # Errores y casos límite

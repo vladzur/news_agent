@@ -133,6 +133,18 @@ class TestValidateVisualPrompt:
         with pytest.raises(VisualPromptGenerationError, match="texto"):
             validate_visual_prompt(prompt, "photorealistic")
 
+    def test_rejects_a_prompt_with_explicit_violence(self):
+        prompt = VALID_PHOTO_PROMPT + ", explicit violence and blood on the street"
+
+        with pytest.raises(VisualPromptGenerationError, match="violencia"):
+            validate_visual_prompt(prompt, "photorealistic")
+
+    def test_rejects_a_prompt_with_a_deepfake_scene(self):
+        prompt = VALID_PHOTO_PROMPT + ", a deepfake face of the president"
+
+        with pytest.raises(VisualPromptGenerationError, match="prohibido"):
+            validate_visual_prompt(prompt, "photorealistic")
+
     def test_rejects_a_prompt_written_in_spanish(self):
         prompt = (
             "Una silla de madera sobre el agua, la sombra larga del muro de "
@@ -245,6 +257,18 @@ class TestBuildVisualPrompt:
         prompt = build_visual_prompt(visual_payload, social_config)
 
         assert prompt.aspect_ratio == social_config["visual_prompts"]["aspect_ratio"]
+
+    def test_keeps_quoted_spanish_labels_without_rejecting_the_prompt(
+        self, visual_payload, social_config
+    ):
+        visual_payload["prompt"] = (
+            VALID_PHOTO_PROMPT + ', a hand-painted sign reading "para la gente"'
+        )
+
+        prompt = build_visual_prompt(visual_payload, social_config)
+
+        assert "para la gente" in prompt.prompt
+        assert '"' not in prompt.prompt
 
     def test_includes_the_brand_negative_prompt(self, visual_payload, social_config):
         prompt = build_visual_prompt(visual_payload, social_config)

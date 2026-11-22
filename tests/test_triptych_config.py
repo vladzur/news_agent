@@ -290,6 +290,14 @@ class TestLayoutSection:
     def test_rejects_zero_notes(self, mutate, tmp_path):
         _assert_invalid(tmp_path, mutate("layout", notes=0), "'notes'")
 
+    def test_rejects_more_notes_than_available_panels(self, raw_config, tmp_path):
+        data = copy.deepcopy(raw_config)
+        data["page"]["sides"] = 1
+        data["page"]["columns_per_side"] = 3
+        data["layout"]["notes"] = 5
+
+        _assert_invalid(tmp_path, data, "solo deja 2")
+
     def test_rejects_zero_key_data_items(self, mutate, tmp_path):
         _assert_invalid(
             tmp_path, mutate("layout", key_data_items=0), "'key_data_items'"

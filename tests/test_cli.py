@@ -1029,7 +1029,27 @@ class TestAllCommand:
 
         assert excinfo.value.code == 2
         assert "--number" in capsys.readouterr().err
-        assert steps["order"] == ["report"]
+        assert steps["order"] == []
+
+    def test_rejects_an_unknown_platform_before_running_any_step(
+        self, tmp_path, steps, capsys
+    ):
+        with pytest.raises(SystemExit) as excinfo:
+            main(
+                [
+                    "all",
+                    "--base",
+                    str(tmp_path),
+                    "--number",
+                    "1",
+                    "--platforms",
+                    "tiktok",
+                ]
+            )
+
+        assert excinfo.value.code == 2
+        assert "tiktok" in capsys.readouterr().err
+        assert steps["order"] == []
 
 
 # ---------------------------------------------------------------------------
@@ -1088,8 +1108,50 @@ class TestCleanCommand:
 
         assert not old.exists()
 
+    def test_without_a_terminal_it_exits_with_a_usage_error(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        self._old_report(tmp_path)
+
+        def _no_terminal(_question: str) -> str:
+            raise EOFError
+
+        monkeypatch.setattr("builtins.input", _no_terminal)
+
+        with pytest.raises(SystemExit) as excinfo:
+            main(["clean", "--base", str(tmp_path)])
+
+        assert excinfo.value.code == 2
+        assert "--yes" in capsys.readouterr().err
+
+    def test_reports_partial_deletion_failures_with_code_1(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        old = self._old_report(tmp_path)
+        monkeypatch.setattr(cli, "remove_entries", lambda entries: (0, 1))
+
+        with pytest.raises(SystemExit) as excinfo:
+            main(["clean", "--base", str(tmp_path), "--yes"])
+
+        assert excinfo.value.code == 1
+        assert old.exists()
+        assert "No se pudieron eliminar: 1" in capsys.readouterr().out
+
+    def test_verbose_reaches_the_logging_setup(
+        self, tmp_path, monkeypatch
+    ):
+        calls: dict[str, Any] = {}
+        monkeypatch.setattr(
+            cli, "setup_logging", lambda verbose: calls.update(verbose=verbose)
+        )
+
+        main(["clean", "--base", str(tmp_path), "--dry-run", "--verbose"])
+
+        assert calls["verbose"] is True
+
     def test_informs_when_there_is_nothing_to_delete(self, tmp_path, capsys):
-        _create_file(tmp_path / "reportes" / "pauta_semanal_2026_09_23.md")
+        today = datetime.now(timezone.utc).strftime("%Y_%m_%d")
+        _create_file(tmp_path / "reportes" / f"pauta_semanal_{today}.md")
 
         main(["clean", "--base", str(tmp_path)])
 

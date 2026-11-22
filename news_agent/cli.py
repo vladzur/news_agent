@@ -49,7 +49,7 @@ from .config import (
     DEFAULT_SOCIAL_OUTPUT_DIR,
     NUM_PROPOSALS,
 )
-from .orchestrator import run_pipeline
+from .orchestrator import run_pipeline, setup_logging
 from .social.platform_specs import ALL_PLATFORMS, parse_platforms
 from .triptych.orchestrator import TriptychError, run_print
 
@@ -1218,6 +1218,22 @@ def _handle_all(args: argparse.Namespace) -> None:
     Args:
         args: Argumentos ya parseados.
     """
+    # Validar las entradas que no dependen de la pauta antes de gastar tokens
+    # en el primer paso. Sin esta guarda, un cron sin --number generaba la
+    # pauta y la nota antes de fallar con código 2.
+    if args.number is None and not sys.stdin.isatty():
+        print(
+            "Error: la selección interactiva necesita una terminal. "
+            "Indica la propuesta con --number N.",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+    try:
+        parse_platforms(args.platforms)
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(2)
+
     base = Path(args.base)
 
     print("\n▶️  Paso 1/4: generando la pauta editorial...")
@@ -1314,6 +1330,8 @@ def _handle_clean(args: argparse.Namespace) -> None:
     Args:
         args: Argumentos ya parseados.
     """
+    setup_logging(args.verbose)
+
     if args.days < 1:
         print(
             "Error: --days debe ser un número entero mayor o igual a 1.",
@@ -1338,16 +1356,27 @@ def _handle_clean(args: argparse.Namespace) -> None:
         print("\n🔍 Modo simulación: no se eliminó ningún archivo.")
         return
 
-    if not args.yes and not _confirm(
-        f"\n¿Eliminar estos {len(entries)} artefactos?"
-    ):
-        print("Limpieza cancelada.")
-        return
+    if not args.yes:
+        try:
+            confirmed = _confirm(
+                f"\n¿Eliminar estos {len(entries)} artefactos?"
+            )
+        except (EOFError, OSError):
+            print(
+                "Error: no hay una terminal interactiva para confirmar. "
+                "Usa --yes para borrar o --dry-run para revisar la lista.",
+                file=sys.stderr,
+            )
+            sys.exit(2)
+        if not confirmed:
+            print("Limpieza cancelada.")
+            return
 
     removed, failed = remove_entries(entries)
     print(f"\n✅ Artefactos eliminados: {removed}.")
     if failed:
         print(f"⚠️  No se pudieron eliminar: {failed}.")
+        sys.exit(1)
 
 
 # ---------------------------------------------------------------------------

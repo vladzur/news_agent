@@ -1,5 +1,6 @@
 """Tests de la configuración del subsistema de RRSS."""
 
+import copy
 import json
 import re
 from pathlib import Path
@@ -135,6 +136,57 @@ class TestLoadSocialConfig:
         path.write_text(json.dumps(payload), encoding="utf-8")
 
         with pytest.raises(ConfigurationError, match="'colors'"):
+            load_social_config(path)
+
+    def test_brand_with_a_missing_color_raises(self, tmp_path, social_config):
+        payload = copy.deepcopy(social_config)
+        payload["brand"]["colors"].pop("surface")
+        path = tmp_path / "color-faltante.json"
+        path.write_text(json.dumps(payload), encoding="utf-8")
+
+        with pytest.raises(ConfigurationError, match="surface"):
+            load_social_config(path)
+
+    def test_brand_with_an_invalid_color_raises(self, tmp_path, social_config):
+        payload = copy.deepcopy(social_config)
+        payload["brand"]["colors"]["accent"] = "rojo"
+        path = tmp_path / "color-invalido.json"
+        path.write_text(json.dumps(payload), encoding="utf-8")
+
+        with pytest.raises(ConfigurationError, match="hexadecimal"):
+            load_social_config(path)
+
+    def test_visual_prompts_without_a_required_key_raises(
+        self, tmp_path, social_config
+    ):
+        payload = copy.deepcopy(social_config)
+        payload["visual_prompts"].pop("negative_prompt")
+        path = tmp_path / "prompt-sin-negativo.json"
+        path.write_text(json.dumps(payload), encoding="utf-8")
+
+        with pytest.raises(ConfigurationError, match="negative_prompt"):
+            load_social_config(path)
+
+    def test_visual_prompts_with_an_invalid_aspect_ratio_raises(
+        self, tmp_path, social_config
+    ):
+        payload = copy.deepcopy(social_config)
+        payload["visual_prompts"]["aspect_ratio"] = "panorámica"
+        path = tmp_path / "proporcion-invalida.json"
+        path.write_text(json.dumps(payload), encoding="utf-8")
+
+        with pytest.raises(ConfigurationError, match="ancho:alto"):
+            load_social_config(path)
+
+    def test_visual_prompts_without_a_version_flag_raises(
+        self, tmp_path, social_config
+    ):
+        payload = copy.deepcopy(social_config)
+        payload["visual_prompts"]["midjourney_suffix"] = "--style raw"
+        path = tmp_path / "sin-version.json"
+        path.write_text(json.dumps(payload), encoding="utf-8")
+
+        with pytest.raises(ConfigurationError, match="--v"):
             load_social_config(path)
 
     def test_banners_without_templates_raises(self, tmp_path, social_config):

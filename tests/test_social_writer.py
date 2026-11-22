@@ -1,5 +1,6 @@
 """Tests de la escritura del bundle de artefactos de RRSS."""
 
+import copy as copy_module
 import json
 from datetime import datetime, timezone
 
@@ -8,8 +9,8 @@ from news_agent.social.writer import (
     COPY_FILE_NAME,
     MANIFEST_FILE_NAME,
     MARKDOWN_FILE_NAMES,
-    PROMPTS_FILE_NAME,
     PROMPT_TEXT_FILE_NAME,
+    PROMPTS_FILE_NAME,
     assets_dir,
     build_bundle_dir,
     render_facebook_markdown,
@@ -218,6 +219,20 @@ class TestSavePlatformMarkdown:
         written = save_platform_markdown(social_copy, tmp_path, ["tiktok"])
 
         assert written == {}
+
+    def test_uses_the_configured_x_limit_in_the_character_count(
+        self, tmp_path, social_copy, social_config
+    ):
+        config = copy_module.deepcopy(social_config)
+        config["platforms"]["x"]["max_chars"] = 260
+
+        written = save_platform_markdown(
+            social_copy, tmp_path, ["x"], config=config
+        )
+
+        content = written["x"].read_text(encoding="utf-8")
+        assert "/260 caracteres" in content
+        assert "/280 caracteres" not in content
 
 
 # ---------------------------------------------------------------------------

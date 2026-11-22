@@ -315,7 +315,7 @@ def _run_article_mode(args: argparse.Namespace) -> None:
             "junto con --write-article.",
             file=sys.stderr,
         )
-        sys.exit(1)
+        sys.exit(2)
 
     output_dir = _resolve_legacy_output(args, DEFAULT_ARTICLES_DIR)
 
@@ -416,6 +416,13 @@ def main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(raw)
 
     _validate_socialize_args(args)
+
+    if args.article is not None and not args.write_article:
+        print(
+            "Error: --article solo se puede usar junto con --write-article.",
+            file=sys.stderr,
+        )
+        sys.exit(2)
 
     if args.socialize:
         _run_socialize_mode(args)

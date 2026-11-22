@@ -16,6 +16,7 @@ from news_agent.triptych.generator import (
     generate_triptych,
 )
 from news_agent.triptych.models import TriptychPackage
+from news_agent.triptych.specs import budget_report, triptych_specs
 
 # Cuerpo de ejemplo: supera el mínimo exigido y sus oraciones son cortas.
 BODY = (
@@ -166,6 +167,22 @@ class TestBuildTriptych:
         assert note.measurement["chars_per_line"] == 24
         assert note.measurement["block_max_columns"] == 1.5
 
+    def test_measures_the_sources_as_part_of_the_block(
+        self, triptych_source, triptych_config
+    ):
+        note = build_triptych(
+            _payload(), triptych_source, triptych_config
+        ).notes[0]
+        block_without_sources = "\n\n".join(
+            [note.title, note.body, note.why_it_matters, *note.key_data]
+        )
+        expected = budget_report(
+            block_without_sources, triptych_specs(triptych_config)
+        )
+
+        assert note.sources
+        assert note.measurement["chars"] > expected["chars"]
+
     def test_reads_the_page_format_from_the_config(
         self, triptych_source, triptych_config
     ):
@@ -267,6 +284,15 @@ class TestStructuralErrors:
             build_triptych(payload, triptych_source, triptych_config)
 
         assert "por debajo del mínimo" in str(excinfo.value)
+
+    def test_note_without_why_it_matters(self, triptych_source, triptych_config):
+        payload = _payload()
+        payload["notes"][0]["why_it_matters"] = "   "
+
+        with pytest.raises(TriptychGenerationError) as excinfo:
+            build_triptych(payload, triptych_source, triptych_config)
+
+        assert "why_it_matters" in str(excinfo.value)
 
 
 class TestWarnings:

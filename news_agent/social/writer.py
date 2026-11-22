@@ -15,6 +15,7 @@ from typing import Any
 from ..config import SOCIAL_X_MAX_CHARS
 from ..report_writer import _slugify
 from .models import ArticleSource, BannerSpec, SocialCopy, VisualPrompt
+from .platform_specs import platform_spec
 from .text_utils import render_hashtags
 
 # ---------------------------------------------------------------------------
@@ -361,6 +362,7 @@ def save_platform_markdown(
     copy: SocialCopy,
     bundle_dir: str | Path,
     platforms: list[str],
+    config: dict[str, Any] | None = None,
 ) -> dict[str, Path]:
     """Guarda un Markdown por cada plataforma habilitada.
 
@@ -368,6 +370,8 @@ def save_platform_markdown(
         copy: Copys generados.
         bundle_dir: Directorio del bundle.
         platforms: Plataformas para las que escribir archivo.
+        config: Configuración de marca, usada para resolver el límite de X
+                cuando la plataforma lo sobrescribe.
 
     Returns:
         dict[str, Path]: Mapa plataforma → ruta del archivo escrito.
@@ -377,6 +381,7 @@ def save_platform_markdown(
         "facebook": render_facebook_markdown,
         "instagram": render_instagram_markdown,
     }
+    x_limit = int(platform_spec(config, "x")["max_chars"])
 
     written: dict[str, Path] = {}
     for platform in platforms:
@@ -389,7 +394,11 @@ def save_platform_markdown(
             continue
 
         file_path = Path(bundle_dir) / MARKDOWN_FILE_NAMES[platform]
-        file_path.write_text(renderer(copy), encoding="utf-8")
+        if platform == "x":
+            content = render_x_thread_markdown(copy, limit=x_limit)
+        else:
+            content = renderer(copy)
+        file_path.write_text(content, encoding="utf-8")
         logger.info("Markdown guardado: %s", file_path.resolve())
         written[platform] = file_path.resolve()
 

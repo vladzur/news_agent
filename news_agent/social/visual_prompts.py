@@ -68,6 +68,21 @@ _NEGATED_TERM_RE = re.compile(
 _QUOTED_LABEL_RE = re.compile(r"\"[^\"]*\"|“[^”]*”")
 _UPPERCASE_LABEL_RE = re.compile(r"\b[A-ZÁÉÍÓÚÑÜ][A-ZÁÉÍÓÚÑÜ0-9$%.,:+\-]*\b")
 
+# Contenido que no debe aparecer en una imagen editorial: violencia explícita
+# y escenas fabricadas o suplantaciones de identidad. Las reglas sobre figuras
+# públicas y personas privadas se redactan en el prompt, pero estos términos sí
+# se pueden detectar de forma determinista.
+_VIOLENCE_TERMS_RE = re.compile(
+    r"\b(?:explicit\s+violence|graphic\s+violence|blood|bloody|gore|gory|"
+    r"corpse|corpses|wounded|mutilated|dismembered|beheaded|massacre)\b",
+    re.IGNORECASE,
+)
+_FAKE_SCENE_TERMS_RE = re.compile(
+    r"\b(?:deepfake|deep\s+fake|face\s*swap|staged\s+reenactment|"
+    r"fabricated\s+scene|fake\s+photo(?:graph)?)\b",
+    re.IGNORECASE,
+)
+
 # Comillas que se retiran del prompt final: el comando de Midjourney es texto
 # plano y los caracteres de escape del JSON lo ensucian al copiarlo.
 _QUOTE_CHARS_RE = re.compile(r"[\\\"“”]")
@@ -199,6 +214,20 @@ def _find_text_blocks(prompt: str) -> list[str]:
     return sorted({match.group(0).lower() for match in _TEXT_BLOCK_RE.finditer(without_negations)})
 
 
+def _find_forbidden_scene_terms(prompt: str) -> list[str]:
+    """Detecta violencia explícita y escenas fabricadas en el prompt positivo.
+
+    Args:
+        prompt: Prompt positivo en inglés.
+
+    Returns:
+        list[str]: Términos prohibidos encontrados, sin duplicados.
+    """
+    matches = _VIOLENCE_TERMS_RE.findall(prompt)
+    matches += _FAKE_SCENE_TERMS_RE.findall(prompt)
+    return sorted({match.lower() for match in matches})
+
+
 def spanish_signal_count(text: str) -> int:
     """Cuenta las palabras funcionales españolas distintas de un texto.
 
@@ -284,8 +313,9 @@ def validate_visual_prompt(prompt: str, treatment: str) -> None:
                                      prompt está vacío, tiene un largo fuera de
                                      rango, no está en inglés, no nombra una
                                      paleta de color, pide bloques de texto en
-                                     la imagen o no coincide con la técnica del
-                                     tratamiento declarado.
+                                     la imagen, incluye violencia explícita o
+                                     escenas fabricadas, o no coincide con la
+                                     técnica del tratamiento declarado.
     """
     if treatment not in VISUAL_TREATMENTS:
         raise VisualPromptGenerationError(
@@ -320,6 +350,14 @@ def validate_visual_prompt(prompt: str, treatment: str) -> None:
             "El prompt visual pide bloques de texto en la imagen "
             f"({', '.join(text_blocks)}); solo se permiten rótulos breves y "
             "cifras, porque la tipografía extensa se renderiza como ruido."
+        )
+
+    forbidden_terms = _find_forbidden_scene_terms(prompt)
+    if forbidden_terms:
+        raise VisualPromptGenerationError(
+            "El prompt visual incluye contenido prohibido "
+            f"({', '.join(forbidden_terms)}): no se admite violencia explícita "
+            "ni escenas fabricadas o suplantaciones de identidad."
         )
 
     if treatment == "photorealistic" and not has_photo_signal(prompt):
@@ -398,14 +436,18 @@ def build_visual_prompt(
     rationale = payload.get("rationale")
     rationale = _collapse_whitespace(rationale) if isinstance(rationale, str) else ""
 
-    prompt = payload.get("prompt")
-    prompt = _strip_quotes(prompt) if isinstance(prompt, str) else ""
-    if not prompt:
+    raw_prompt = payload.get("prompt")
+    raw_prompt = _collapse_whitespace(raw_prompt) if isinstance(raw_prompt, str) else ""
+    if not raw_prompt:
         raise VisualPromptGenerationError(
             "El modelo no entregó un 'prompt' visual utilizable."
         )
 
-    validate_visual_prompt(prompt, treatment)
+    # Se valida antes de quitar comillas para que la heurística de español
+    # pueda excluir los rótulos entrecomillados que sí van en español. El
+    # prompt que se publica es el texto plano, sin comillas ni escapes.
+    validate_visual_prompt(raw_prompt, treatment)
+    prompt = _strip_quotes(raw_prompt)
 
     if not rationale:
         raise VisualPromptGenerationError(
