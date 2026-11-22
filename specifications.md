@@ -14,16 +14,20 @@ Automatizar la recopilación, filtrado y análisis de la agenda noticiosa nacion
 
 ### 2.1. Capa de Ingesta (Data Ingestion)
 
-- **Mecanismo:** Extracción de datos sin intermediarios mediante la librería `feedparser`.
+- **Mecanismo:** Extracción de datos sin intermediarios mediante dos vías:
+  - `feedparser` para canales RSS/Atom.
+  - `requests` + `BeautifulSoup` para medios sin feed, con `"method": "scraping"` y selectores CSS configurables (`selectors.article`, `selectors.title` y, opcionalmente, `summary`, `date`, `link_prefix` y `request_headers`).
   
-- **Fuentes de Entrada:** Matriz de canales RSS gestionada en un diccionario/configuración JSON independiente del código principal.
+- **Fuentes de Entrada:** Matriz de canales gestionada en un diccionario/configuración JSON independiente del código principal (`rss_feeds.json`).
+
+- **Tolerancia a fallos:** Si un feed o un scraping falla, se registra el error y se continúa con el siguiente medio sin abortar la ejecución.
   
 - **Frecuencia de Ejecución:** El agente operará bajo demanda o mediante una tarea programada (`cronjob`) de manera semanal (recomendado: domingos a las 23:00 hrs o lunes a las 07:00 hrs).
   
 
 ### 2.2. Capa de Filtrado y Ventana de Tiempo
 
-- **Ventana Operativa:** El agente sólo procesará noticias cuya etiqueta de publicación (`published_parsed` o `updated_parsed`) se encuentre dentro de las **últimas 48 horas** respecto a la ejecución del script.
+- **Ventana Operativa:** El agente sólo procesará noticias cuya etiqueta de publicación (`published_parsed`) se encuentre dentro de las **últimas 96 horas (4 días)** respecto a la ejecución del script. Se usa `published_parsed`; una entrada sin esa fecha se descarta. La ventana es configurable con `TIME_WINDOW_HOURS`.
   
 - **Truncamiento de Datos:** Para optimizar la ventana de contexto y evitar ruido, cada noticia se limitará a:
   
@@ -31,7 +35,7 @@ Automatizar la recopilación, filtrado y análisis de la agenda noticiosa nacion
     
   - Nombre del medio emisor.
     
-  - Resumen o descripción truncado a un máximo de **200 caracteres** (limpiando cualquier etiqueta HTML residual).
+  - Resumen o descripción truncado a un máximo de **500 caracteres** (limpiando cualquier etiqueta HTML residual). Si el enriquecimiento con `trafilatura` logró extraer el texto completo, se usa ese texto como resumen de entrada y también se trunca a 500 caracteres. El límite es configurable con `SUMMARY_MAX_CHARS`.
     
 
 ### 2.3. Capa de Inteligencia (Cerebro IA)
@@ -42,9 +46,17 @@ Automatizar la recopilación, filtrado y análisis de la agenda noticiosa nacion
   
 - **Hiperparámetros de Control:**
   
-  - `temperature`: **0.5** (Garantiza un balance entre creatividad periodística y estricta fidelidad a los hechos reportados, minimizando alucinaciones).
+  - `temperature`: **0.1** (baja temperatura para privilegiar la precisión factual y minimizar alucinaciones).
+
+  - `base_url`: `https://api.deepseek.com/v1`.
+
+  - `PAUTA_MAX_TOKENS`: **65536** para la pauta semanal (presupuesto compartido entre razonamiento y contenido).
+
+  - `ARTICLE_MAX_TOKENS`: **16384** para la escritura de artículos.
     
-  - `base_url`: `[https://api.deepseek.com/v1](https://api.deepseek.com/v1)`.
+  - Razonamiento: `PAUTA_REASONING_EFFORT="high"` y `ARTICLE_REASONING_EFFORT="high"`. El modo thinking se activa por llamada; el reintento sin razonamiento usa `CONTENT_RETRY_MAX_TOKENS=8192` como piso.
+
+  - La configuración canónica vive en `news_agent/config.py`; esta tabla resume sus valores por defecto.
     
 
 ## 3. Directrices Editoriales Obligatorias (System Prompt)
@@ -54,6 +66,8 @@ El agente debe ceñirse estrictamente al perfil de identidad de *La Chispa Sur*:
 - **Tono:** Incisivo, analítico, audaz y de lectura ágil. No debe limitarse a replicar titulares del *mainstream*; su valor radica en **conectar puntos ocultos**, encontrar contradicciones o proponer enfoques de fondo (ensayo, reportaje o columnas de opinión).
   
 - **Restricción de Volumen:** El agente debe entregar **exactamente cinco (5) propuestas** por informe: **tres (3) de ámbito nacional** y **dos (2) de ámbito internacional**, estas últimas con énfasis en hechos que conmocionan al mundo, pueblos oprimidos y políticas imperialistas que afectan la estabilidad mundial. Ni más, ni menos.
+
+- **Excepción por temas prioritarios (`MAIN_TOPICS`):** cuando la variable de entorno `MAIN_TOPICS` está definida con un array JSON de temas, esos temas tienen prioridad sobre la distribución geográfica 3/2. La cantidad total sigue siendo cinco, pero la proporción entre propuestas nacionales e internacionales puede ajustarse para cubrirlos. Si no hay material suficiente para un tema prioritario, se marca «Requiere investigación adicional» en lugar de inventar contenido.
   
 
 ## 4. Formato de Salida Requerido (Output Schema)
@@ -75,6 +89,8 @@ Markdown
     1. [Arista de investigación o contexto fáctico 1]
     2. [Arista de investigación o contexto fáctico 2]
     3. [Ángulo crítico, proyección o pregunta abierta para el lector]
+*   **Fuentes Sugeridas para Ampliar:**
+    *   [Nombre del medio o recurso]: [Qué aporta esta fuente]
 
 ## 2. [TÍTULO GANCHO DEL ARTÍCULO 2]
 ...
@@ -93,7 +109,7 @@ Markdown
 
 - **Fallas de Conexión en Feeds:** Si un canal RSS falla (caída del servidor de origen o cambio de URL), el script debe registrar el error en la terminal mediante una excepción estructurada (`try-except`) y **continuar inmediatamente** con el siguiente medio de la lista sin abortar la ejecución.
   
-- **Ausencia de Datos:** En caso de que la recolección sume 0 noticias en la ventana de 48 horas, el agente detendrá el flujo antes de invocar la API de DeepSeek, generando un log de advertencia para evitar consumo innecesario de tokens.
+- **Ausencia de Datos:** En caso de que la recolección sume 0 noticias en la ventana de 96 horas, el agente detendrá el flujo antes de invocar la API de DeepSeek, generando un log de advertencia para evitar consumo innecesario de tokens.
   
 - **Fallo de API Key:** El script validará la existencia de la variable de entorno `DEEPSEEK_API_KEY` antes de iniciar. Si no se encuentra, arrojará un error explícito de configuración.
 
@@ -232,7 +248,7 @@ Un color mal escrito, una clave de color faltante, un tamaño inválido, una sec
 
 ### 7.1. Objetivo
 
-El motor se opera desde un CLI por subcomandos que reduce la ejecución de cada flujo a un solo comando y encadena los tres pasos del proceso editorial cuando se quiere de punta a punta. Los modos clásicos por banderas se conservan para los scripts y cron ya desplegados.
+El motor se opera desde un CLI por subcomandos que reduce la ejecución de cada flujo a un solo comando y encadena los cuatro pasos del proceso editorial cuando se quiere de punta a punta: pauta, nota, redes sociales y tríptico impreso. Los modos clásicos por banderas se conservan para los scripts y cron ya desplegados.
 
 ### 7.2. Subcomandos
 
@@ -240,12 +256,12 @@ El motor se opera desde un CLI por subcomandos que reduce la ejecución de cada 
 |---------|-----------------|----------|------------|
 | `report` | Genera la pauta editorial semanal | `--feeds`, `--output`, `--debug` | `reportes/pauta_semanal_AAAA_MM_DD.md` y su companion JSON |
 | `article` | Escribe una nota desde una propuesta | `--pauta`, `-n/--number`, `--output` | `articulos/articulo_N_slug.md` |
-| `social` | Repurposing para redes sociales | `--article`, `--output`, `--platforms`, `--social-config`, `--skip-banners`, `--skip-prompts` | `social/AAAA_MM_DD_slug/` con copys, prompts, Markdown y banners |
+| `social` | Repurposing para redes sociales | `--article`, `--articles-dir`, `--all`, `--select`, `--output`, `--platforms`, `--social-config`, `--skip-banners`, `--skip-prompts` | `social/AAAA_MM_DD_slug/` con copys, prompts, Markdown y banners |
 | `print` | Tríptico impreso de la semana | `--pauta`, `--output`, `--triptych-config` | `impresos/AAAA_MM_DD_pauta-semanal/` con el tríptico en JSON, el Markdown panel por panel y el manifiesto |
 | `all` | Secuencia completa | `--feeds`, `--base`, `-n/--number`, opciones sociales, `--triptych-config` y `--debug` | Los cuatro anteriores |
 | `clean` | Limpieza de artefactos antiguos | `--base`, `--target`, `--days`, `--dry-run`, `--yes` | Elimina archivos y bundles |
 
-Todos los comandos aceptan `--verbose`.
+Todos los comandos aceptan `--verbose`. En `clean` la bandera se acepta por uniformidad del parser, pero todavía no cambia el nivel de logging.
 
 ### 7.3. Comando secuencial `all`
 
@@ -254,8 +270,8 @@ Ejecuta, en orden y dentro de una misma invocación: la generación de la pauta,
 ### 7.4. Entradas implícitas y directorio de salida
 
 - **Pauta:** si `article` no recibe `--pauta`, toma la más reciente de `reportes/`. El orden lo da el nombre, que incluye la fecha (`AAAA_MM_DD`).
-- **Artículo:** si `social` no recibe `--article`, toma el de fecha de modificación más reciente de `articulos/`, porque las notas no llevan fecha en el nombre.
-- **Propuesta:** si `article` o `all` no reciben `-n/--number`, muestran los cinco titulares y preguntan cuál desarrollar. Sin terminal interactiva (por ejemplo en un cron) la ejecución falla con código 2 y un mensaje que pide `--number`, en lugar de quedar esperando una respuesta que nunca llegará.
+- **Artículo:** si `social` no recibe `--article` ni usa `--all`/`--select`, toma el de fecha de modificación más reciente del directorio indicado por `--articles-dir` (`articulos/` por defecto), porque las notas no llevan fecha en el nombre.
+- **Propuesta:** si `article` o `all` no reciben `-n/--number`, muestran los cinco titulares y preguntan cuál desarrollar. Sin terminal interactiva (por ejemplo en un cron) la ejecución falla con código 2 y un mensaje que pide `--number`, en lugar de quedar esperando una respuesta que nunca llegará. En `all`, esa comprobación y la de `--platforms` ocurren después de generar la pauta y la nota: conviene validar ambos valores antes de lanzarlo en un cron.
 - **Pauta del tríptico:** si `print` no recibe `--pauta`, toma la más reciente de `reportes/`. El tríptico no pide número de propuesta: cubre las cinco, así que `-n` no aplica.
 - **Directorio de salida:** si no se indica `--output`, cada flujo usa su carpeta por defecto (`reportes/`, `articulos/`, `social/` o `impresos/`) y la crea si no existe. Una ruta que apunte al directorio actual se rechaza con error de uso, en los subcomandos y también en los modos clásicos.
 - **Sin argumentos:** `python -m news_agent` no ejecuta ningún flujo. Muestra la ayuda y sale con código 2, porque el modo clásico por defecto consumiría tokens de la API y escribiría en el directorio actual sin que el usuario lo haya pedido. Los cron deben indicar el flujo y la salida explícitamente.
@@ -267,7 +283,7 @@ Ejecuta, en orden y dentro de una misma invocación: la generación de la pauta,
 - **Nunca se elimina** la caché de contenido (`cache/`) ni los recursos de la marca (`assets/`): ninguna entrada fuera de los patrones declarados se considera, aunque sea antigua.
 - **Fecha de referencia:** la fecha codificada en el nombre cuando existe (pautas y bundles) y, cuando no (las notas), la fecha de modificación. La fecha del nombre es la fuente fiable: al clonar o copiar el repositorio, todos los archivos quedan con la fecha de la copia.
 - **Umbral:** `--days N` (por defecto `DEFAULT_CLEAN_MAX_AGE_DAYS`, 30). Se elimina lo que supere ese corte; un valor menor que 1 es un error de uso.
-- **Confirmación:** el comando lista lo que va a eliminar, con antigüedad y tamaño, y pide confirmación. `--dry-run` muestra el listado sin borrar nada y `--yes` omite la confirmación para automatizar. Sin una terminal interactiva, `clean` sin `--yes` no puede confirmar y termina con error de uso.
+- **Confirmación:** el comando lista lo que va a eliminar, con antigüedad y tamaño, y pide confirmación. `--dry-run` muestra el listado sin borrar nada y `--yes` omite la confirmación para automatizar. En un cron no hay terminal para confirmar, así que se debe usar `--yes` o `--dry-run`; sin terminal y sin `--yes`, el comando sale con error de uso.
 - **Aislamiento de fallos:** si un artefacto no se puede eliminar, se registra en el log, el resto del lote continúa y el resumen final informa cuántos fallaron. Si hubo fallos parciales, el comando termina con código 1.
 
 ### 7.6. Estructura
@@ -287,7 +303,7 @@ Ejecuta, en orden y dentro de una misma invocación: la generación de la pauta,
 |:------:|-------------|
 | `0` | Ejecución exitosa (o nada que procesar, sin invocar a la API) |
 | `1` | Error de ejecución: configuración, API, pauta imposible de parsear, artefacto de entrada inexistente o fallos parciales al eliminar artefactos |
-| `2` | Error de uso: comando desconocido, opción inválida, plataforma desconocida, falta `--number` sin terminal, `--article` sin `--write-article`, `clean` sin terminal para confirmar o `--days` no positivo |
+| `2` | Error de uso: comando desconocido, opción inválida, plataforma desconocida, `--select` sin terminal interactiva, falta `--number` sin terminal, combinación inválida de `--write-article`/`--article`, `clean` sin terminal para confirmar o `--days` no positivo |
 | `130` | Interrupción con Ctrl+C |
 
 ## 8. Subsistema de Tríptico Impreso
