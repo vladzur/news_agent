@@ -408,7 +408,7 @@ Edita `social_config.json` para ajustar la identidad visual sin tocar código:
 | `brand.logo_path` | ❌ | Ruta a un PNG con transparencia. Si es una ruta no vacía y el archivo no existe o no se puede abrir, el banner se genera sin logo y se advierte en el log. Si es `null` o está ausente, se genera sin logo y sin advertencia |
 | `brand.logo_height_ratio` | ❌ | Alto del logo como fracción del ancho del lienzo (por defecto `0.11`). El ancho se limita al 22% para que no invada la etiqueta de marca |
 | `brand.fonts.*` | ❌ | Ruta a un `.ttf` por rol. Si es `null`, se resuelven fuentes del sistema (DejaVu, Liberation, Noto o Arial) y, como último recurso, la fuente por defecto de Pillow |
-| `platforms` | ❌ | Límites por plataforma. Sobrescriben los valores por defecto de `config.py` |
+| `platforms` | ❌ | Límites por plataforma. Sobrescriben los valores por defecto de `config.py` y se validan al cargar |
 | `banners.templates`, `banners.sizes` | ✅ | Matriz plantilla → formatos y tamaño de cada formato |
 | `banners.safe_zone` | ❌ | Zonas seguras superior e inferior para los formatos verticales |
 | `visual_prompts.*` | ✅ | Tratamientos, reglas de decisión, prompt negativo, proporción y sufijo de Midjourney; se validan al cargar |
@@ -506,11 +506,14 @@ El agente implementa fail-safe en cada etapa del pipeline:
 - **Configuración de scraping inválida** → error descriptivo al cargar `rss_feeds.json` si faltan selectores obligatorios.
 - **Respuesta sin JSON válido en RRSS** → se reintenta la llamada con una nota de corrección, hasta `SOCIAL_JSON_MAX_RETRIES` veces; el JSON se extrae de forma defensiva (bloques de código, texto alrededor, comas finales sueltas).
 - **Copys incompletos** → se reintenta; si se agotan los intentos, aborta sin escribir un bundle a medias.
-- **Prompts visuales fallidos** → el bundle se escribe igualmente con los copys y los banners; el manifiesto registra que quedaron pendientes.
+- **Prompts visuales fallidos** → el bundle se escribe igualmente con los copys y los banners; el manifiesto registra `status: "failed"` y el motivo en `error` (un prompt omitido con `--skip-prompts` queda como `"skipped"`).
 - **Banner que falla al renderizar** → se registra el error y el bucle continúa; el manifiesto guarda esa pieza como pendiente.
 - **Fuente tipográfica ausente** → se usa la fuente por defecto de Pillow y se advierte en el log.
 - **Artículo demasiado corto para RRSS** → aborta antes de llamar a la API (ahorro de tokens).
-- **Configuración de marca inválida** → error descriptivo al cargar `social_config.json` si falta una sección, un tamaño o una plantilla apunta a un formato inexistente.
+- **Configuración de marca inválida** → error descriptivo al cargar `social_config.json` si falta una sección, un color o una clave de `visual_prompts`, si una plataforma declara límites inválidos, o si una plantilla apunta a un formato inexistente.
+- **Tríptico: JSON inválido o contrato incumplido** → se reintenta con una nota de corrección; agotados los intentos, se aborta sin escribir el bundle.
+- **Tríptico: nota sin «por qué te importa», cuerpo demasiado corto o cantidad de notas incorrecta** → error estructural; no se escribe una pieza impublicable.
+- **Tríptico: bloque que desborda la columna o regla de estilo incumplida** → advertencia en el Markdown y el manifiesto; el texto nunca se recorta.
 
 ---
 
@@ -601,7 +604,7 @@ social/2026_09_14_criminalizacion-de-la-disidencia/
 ├── x_thread.md                 # Hilo listo para copiar, con conteo de caracteres por tweet
 ├── facebook_post.md            # Post con hashtags, texto alternativo y CTA
 ├── instagram_caption.md        # Caption, hashtags, tarjeta de cita y advertencia si la cita no es literal
-├── manifest.json               # Qué se generó, qué falló y con qué artículo se produjo
+├── manifest.json               # Qué se generó, qué falló (incluido el estado del prompt visual) y con qué artículo se produjo
 └── assets/
     ├── headline_card_x.png                 # 1600×900
     ├── headline_card_facebook.png          # 1200×630

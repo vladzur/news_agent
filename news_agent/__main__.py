@@ -6,7 +6,8 @@ Ofrece dos interfaces sobre el mismo motor:
      report   Genera la pauta editorial semanal.
      article  Escribe una nota completa desde una propuesta de la pauta.
      social   Genera el bundle de redes sociales de un artículo.
-     all      Encadena los tres pasos anteriores en una sola ejecución.
+     print    Genera el tríptico impreso desde la pauta semanal.
+     all      Encadena los cuatro pasos anteriores en una sola ejecución.
      clean    Elimina los artefactos generados con más de N días.
 
 2. **Modos clásicos por banderas**, que se mantienen por compatibilidad con
@@ -16,6 +17,7 @@ Uso con subcomandos:
     python -m news_agent report --feeds rss_feeds.json
     python -m news_agent article --number 2
     python -m news_agent social --platforms x,instagram
+    python -m news_agent print
     python -m news_agent all --number 1
     python -m news_agent clean --days 30 --dry-run
 

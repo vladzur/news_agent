@@ -199,7 +199,7 @@ Dos plantillas declaradas en la configuración, renderizadas en los formatos ped
 
 ### 6.6. Formato de salida (bundle)
 
-Cada ejecución escribe una carpeta autocontenida `social/AAAA_MM_DD_slug-del-titulo/` con los copys en JSON, el comando de Midjourney en `visual_prompt.txt`, los metadatos del prompt en `visual_prompts.json`, un Markdown listo para copiar y pegar por plataforma, los PNG de los banners en `assets/` y un `manifest.json` que registra qué se generó, qué falló y con qué artículo se produjo.
+Cada ejecución escribe una carpeta autocontenida `social/AAAA_MM_DD_slug-del-titulo/` con los copys en JSON, el comando de Midjourney en `visual_prompt.txt`, los metadatos del prompt en `visual_prompts.json`, un Markdown listo para copiar y pegar por plataforma, los PNG de los banners en `assets/` y un `manifest.json` que registra qué se generó, qué falló y con qué artículo se produjo. El bloque `visual_prompts` del manifiesto incluye `status` (`generated`, `skipped` o `failed`) y `error` cuando la generación falló, de modo que omitir el prompt con `--skip-prompts` no se confunde con un fallo.
 
 El campo `quote_card.verbatim` del JSON de copys —repetido como `verified_quote` en el manifiesto— indica si la cita destacada se verificó palabra por palabra contra el artículo de origen.
 
@@ -210,12 +210,12 @@ La identidad visual y los límites viven en `social_config.json`, versionado en 
 | Sección | Contenido | Obligatoria |
 |---------|-----------|:-----------:|
 | `brand` | Nombre, handle, sitio, logo opcional, paleta de colores y tipografías por rol | ✅ |
-| `platforms` | Límite de caracteres, largo del hilo y tope de hashtags por plataforma. Sobrescriben los valores por defecto de `config.py` | ❌ |
+| `platforms` | Límite de caracteres, largo del hilo y tope de hashtags por plataforma. Sobrescriben los valores por defecto de `config.py` y se validan al cargar | ❌ |
 | `banners.templates` / `banners.sizes` | Matriz plantilla → formatos y tamaño de cada formato | ✅ |
 | `banners.safe_zone` | Bandas no utilizables de los formatos verticales | ❌ |
 | `visual_prompts` | Tratamientos, reglas de decisión, prompt negativo, proporción única y sufijo de Midjourney | ✅ |
 
-Un color mal escrito, una clave de color faltante, un tamaño inválido, una sección `visual_prompts` incompleta o una plantilla que apunte a un formato inexistente se detectan al cargar el archivo, con un mensaje que indica el campo culpable.
+Un color mal escrito, una clave de color faltante, un tamaño inválido, una sección `visual_prompts` incompleta, una plataforma con límites inválidos o una plantilla que apunte a un formato inexistente se detectan al cargar el archivo, con un mensaje que indica el campo culpable.
 
 ### 6.8. Estructura del subsistema
 
@@ -237,7 +237,7 @@ Un color mal escrito, una clave de color faltante, un tamaño inválido, una sec
 
 - **JSON inválido o incompleto** → reintento con nota de corrección, hasta agotar `SOCIAL_JSON_MAX_RETRIES`.
 - **Copys imposibles de validar** → se aborta sin escribir un bundle a medias.
-- **Prompt visual fallido** → el bundle se escribe igualmente con los copys y los banners, y el manifiesto lo refleja.
+- **Prompt visual fallido** → el bundle se escribe igualmente con los copys y los banners; el manifiesto lo registra con `status: "failed"` y el motivo en `error`.
 - **Banner fallido** → se registra el error y el resto del lote continúa.
 - **Directorio de salida inexistente** → se crea automáticamente (incluidos los directorios intermedios).
 - **Artículo inexistente, vacío o sin titular** → error explícito de parseo y salida con código distinto de cero.
