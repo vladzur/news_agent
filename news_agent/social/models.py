@@ -71,11 +71,13 @@ class ArticleSource:
         return "\n\n".join(parts)
 
     def contains_verbatim(self, quote: str, min_length: int = 40) -> bool:
-        """Comprueba si una cita aparece literalmente en el artículo.
+        """Comprueba si una cita aparece literalmente en el cuerpo del artículo.
 
         La comparación ignora diferencias de espacios, comillas tipográficas y
         marcas de énfasis de Markdown, de modo que una cita copiada por el LLM
-        se valide aunque normalice comillas o colapse espacios.
+        se valide aunque normalice comillas o colapse espacios. Se usa solo el
+        cuerpo (lead y secciones): el titular, el bloque de fuentes y el
+        apéndice de portada no son material publicable.
 
         Args:
             quote: Texto citado que se quiere verificar.
@@ -84,12 +86,12 @@ class ArticleSource:
                         porque una coincidencia tan breve no prueba nada.
 
         Returns:
-            bool: True si la cita proviene del artículo.
+            bool: True si la cita proviene del cuerpo del artículo.
         """
         normalized_quote = normalize_for_match(quote)
         if len(normalized_quote) < min_length:
             return False
-        return normalized_quote in normalize_for_match(self.raw_text)
+        return normalized_quote in normalize_for_match(self.body_text())
 
 
 def normalize_for_match(text: str) -> str:

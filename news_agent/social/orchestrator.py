@@ -382,7 +382,9 @@ def run_socialize(
         prompts_path = save_visual_prompt_json(prompt, bundle_dir)
         prompt_text_path = save_visual_prompt_text(prompt, bundle_dir)
 
-    markdown_paths = save_platform_markdown(copy, bundle_dir, selected_platforms)
+    markdown_paths = save_platform_markdown(
+        copy, bundle_dir, selected_platforms, config=config
+    )
 
     manifest_path = save_manifest(
         bundle_dir=bundle_dir,

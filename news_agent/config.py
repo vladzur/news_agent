@@ -7,6 +7,7 @@ También carga automáticamente un archivo .env del directorio del proyecto.
 import json
 import logging
 import os
+import re
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
@@ -487,6 +488,18 @@ def _validate_social_sections(data: dict) -> None:
             )
 
 
+_REQUIRED_BRAND_COLORS = (
+    "background",
+    "surface",
+    "text",
+    "muted",
+    "accent",
+    "accent_alt",
+)
+_HEX_COLOR_RE = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
+_ASPECT_RATIO_RE = re.compile(r"^\d+:\d+$")
+
+
 def _validate_brand_section(brand: dict) -> None:
     """Valida que la sección de marca tenga lo mínimo para dibujar banners.
 
@@ -507,6 +520,21 @@ def _validate_brand_section(brand: dict) -> None:
             "La sección 'brand' de la configuración de RRSS requiere "
             "'colors' como objeto no vacío."
         )
+
+    missing = [key for key in _REQUIRED_BRAND_COLORS if key not in colors]
+    if missing:
+        raise ConfigurationError(
+            "La sección 'brand.colors' de la configuración de RRSS requiere "
+            f"los colores: {', '.join(missing)}."
+        )
+
+    for key in _REQUIRED_BRAND_COLORS:
+        value = colors[key]
+        if not isinstance(value, str) or not _HEX_COLOR_RE.match(value.strip()):
+            raise ConfigurationError(
+                f"El color '{key}' de la sección 'brand.colors' debe ser un "
+                f"valor hexadecimal #RRGGBB o #RGB, pero es {value!r}."
+            )
 
 
 def _validate_banner_sizes(sizes: dict) -> None:
@@ -583,6 +611,60 @@ def _validate_banners_section(banners: dict) -> None:
     _validate_banner_templates(templates, sizes)
 
 
+def _validate_visual_prompts_section(visual: dict) -> None:
+    """Valida la sección ``visual_prompts`` de la configuración RRSS.
+
+    El prompt visual necesita los dos tratamientos, las reglas que los eligen,
+    el negativo de marca, el sufijo de versión y una proporción única. Sin
+    estos campos el comando de Midjourney se genera incompleto, así que se
+    rechazan al cargar en lugar de producir un prompt parcial.
+
+    Args:
+        visual: Sección 'visual_prompts' de la configuración.
+
+    Raises:
+        ConfigurationError: Si falta un campo o su valor no es utilizable.
+    """
+    treatments = visual.get("treatments")
+    if not isinstance(treatments, dict) or not treatments:
+        raise ConfigurationError(
+            "La sección 'visual_prompts' requiere 'treatments' como objeto "
+            "no vacío."
+        )
+
+    for name in ("photorealistic", "caricature"):
+        value = treatments.get(name)
+        if not isinstance(value, str) or not value.strip():
+            raise ConfigurationError(
+                "La sección 'visual_prompts.treatments' requiere el "
+                f"tratamiento '{name}' como texto no vacío."
+            )
+
+    for field in ("treatment_rules", "negative_prompt", "midjourney_suffix"):
+        value = visual.get(field)
+        if not isinstance(value, str) or not value.strip():
+            raise ConfigurationError(
+                "La sección 'visual_prompts' requiere el campo "
+                f"'{field}' como texto no vacío."
+            )
+
+    suffix = str(visual["midjourney_suffix"]).strip()
+    if "--v" not in suffix.split():
+        raise ConfigurationError(
+            "El campo 'midjourney_suffix' de 'visual_prompts' debe incluir "
+            "un flag de versión de Midjourney (por ejemplo, '--v 6.1')."
+        )
+
+    aspect_ratio = visual.get("aspect_ratio")
+    if not isinstance(aspect_ratio, str) or not _ASPECT_RATIO_RE.match(
+        aspect_ratio.strip()
+    ):
+        raise ConfigurationError(
+            "El campo 'aspect_ratio' de 'visual_prompts' debe tener el "
+            f"formato ancho:alto (por ejemplo, '16:9'), pero es {aspect_ratio!r}."
+        )
+
+
 def load_social_config(path: str | Path | None = None) -> dict:
     """Carga la configuración de marca y plantillas del subsistema RRSS.
 
@@ -608,6 +690,7 @@ def load_social_config(path: str | Path | None = None) -> dict:
     _validate_social_sections(data)
     _validate_brand_section(data["brand"])
     _validate_banners_section(data["banners"])
+    _validate_visual_prompts_section(data["visual_prompts"])
 
     return data
 
@@ -871,6 +954,36 @@ def _validate_triptych_layout(layout: dict) -> None:
         _require_positive_int("layout", field, layout[field])
 
 
+def _validate_triptych_panel_capacity(data: dict) -> None:
+    """Comprueba que las notas quepan en los paneles disponibles.
+
+    La portada ocupa el panel 1, así que una hoja de ``sides`` caras por
+    ``columns_per_side`` columnas deja ``sides * columns_per_side - 1``
+    paneles para notas. Sin esta validación, una configuración podía declarar
+    más notas que paneles y producir un tríptico imposible de maquetar.
+
+    Args:
+        data: Configuración completa ya validada por secciones.
+
+    Raises:
+        ConfigurationError: Si la cantidad de notas supera los paneles útiles.
+    """
+    page = data["page"]
+    layout = data["layout"]
+    sides = page.get("sides", TRIPTYCH_SIDES)
+    columns = page["columns_per_side"]
+    notes = layout["notes"]
+
+    panels = sides * columns
+    available = panels - 1
+    if notes > available:
+        raise ConfigurationError(
+            f"La sección 'layout' declara {notes} notas, pero una hoja de "
+            f"{panels} paneles solo deja {available} después de la portada. "
+            "Ajusta 'layout.notes' o la geometría de la hoja."
+        )
+
+
 def load_triptych_config(path: str | Path | None = None) -> dict:
     """Carga la configuración del tríptico impreso.
 
@@ -900,6 +1013,7 @@ def load_triptych_config(path: str | Path | None = None) -> dict:
     _validate_triptych_limits(data["limits"])
     _validate_triptych_style(data["style"])
     _validate_triptych_layout(data["layout"])
+    _validate_triptych_panel_capacity(data)
 
     brand = data.get("brand")
     if brand is not None and not isinstance(brand, dict):

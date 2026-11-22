@@ -14,7 +14,9 @@ from typing import Any
 from ..config import (
     SOCIAL_JSON_MAX_RETRIES,
     SOCIAL_MAX_HOOKS,
+    SOCIAL_MAX_SUMMARY_BULLETS,
     SOCIAL_MIN_HOOKS,
+    SOCIAL_MIN_SUMMARY_BULLETS,
 )
 from ..report_writer import _slugify
 from .json_utils import JsonExtractionError, extract_json_object
@@ -48,6 +50,7 @@ class SocialCopyValidationError(Exception):
 
 
 # Topes de los campos auxiliares del copy
+_HOOKS_MAX_CHARS = 120
 _HOOK_MAX_CHARS = 200
 _BULLET_MAX_CHARS = 180
 _CTA_MAX_CHARS = 90
@@ -163,7 +166,9 @@ def _filter_key_figures(raw: object, article: ArticleSource) -> list[str]:
         list[str]: Cifras verificadas contra el texto del artículo.
     """
     candidates = ensure_list_of_text(raw)
-    haystack = normalize_for_match(article.raw_text)
+    # Solo se verifica contra el cuerpo publicable: el bloque de fuentes y el
+    # apéndice de portada no deben validar cifras que no están en la nota.
+    haystack = normalize_for_match(article.body_text())
 
     figures: list[str] = []
     for candidate in candidates:
@@ -436,12 +441,25 @@ def build_social_copy(
             len(hooks),
             SOCIAL_MIN_HOOKS,
         )
-    hooks = [fit_char_limit(_collapse_whitespace(item), _HOOK_MAX_CHARS)[0] for item in hooks]
+    hooks = [fit_char_limit(_collapse_whitespace(item), _HOOKS_MAX_CHARS)[0] for item in hooks]
 
     summary = ensure_list_of_text(payload.get("summary"))
     if not summary:
         raise SocialCopyValidationError(
             "El modelo no entregó síntesis ejecutiva ('summary' está vacío)."
+        )
+    if len(summary) > SOCIAL_MAX_SUMMARY_BULLETS:
+        logger.warning(
+            "La síntesis ejecutiva trae %d bullets; se recortan a %d.",
+            len(summary),
+            SOCIAL_MAX_SUMMARY_BULLETS,
+        )
+        summary = summary[:SOCIAL_MAX_SUMMARY_BULLETS]
+    elif len(summary) < SOCIAL_MIN_SUMMARY_BULLETS:
+        logger.warning(
+            "La síntesis ejecutiva trae %d bullet(s); se esperaban al menos %d.",
+            len(summary),
+            SOCIAL_MIN_SUMMARY_BULLETS,
         )
     summary = [
         fit_char_limit(_collapse_whitespace(item), _BULLET_MAX_CHARS)[0]

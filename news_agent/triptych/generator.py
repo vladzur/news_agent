@@ -168,8 +168,11 @@ def _build_note(
 
     title = _require_text(raw.get("title"), f"notes[{index}].title")
     body = _require_text(raw.get("body"), f"notes[{index}].body")
-    why_it_matters = _clean_text(raw.get("why_it_matters"))
+    why_it_matters = _require_text(
+        raw.get("why_it_matters"), f"notes[{index}].why_it_matters"
+    )
     key_data = _clean_list(raw.get("key_data"))
+    sources = list(proposal.fuentes)
 
     if len(body) < TRIPTYCH_NOTE_MIN_CHARS:
         raise TriptychGenerationError(
@@ -178,7 +181,9 @@ def _build_note(
             "La respuesta no es una nota publicable."
         )
 
-    block = "\n\n".join([title, body, why_it_matters, *key_data])
+    # El bloque que se mide es el que ocupa la columna: incluye las fuentes
+    # que se imprimen al pie de la nota, no solo el texto del modelo.
+    block = "\n\n".join([title, body, why_it_matters, *key_data, *sources])
     measurement = budget_report(block, specs)
     measurement["body"] = budget_report(body, specs)
 
@@ -197,7 +202,7 @@ def _build_note(
         body=body,
         key_data=key_data,
         why_it_matters=why_it_matters,
-        sources=list(proposal.fuentes),
+        sources=sources,
         measurement=measurement,
         warnings=warnings,
     )

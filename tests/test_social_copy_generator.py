@@ -158,7 +158,17 @@ class TestBuildSocialCopy:
 
         assert len(result.hooks) <= 5
         for hook in result.hooks:
-            assert len(hook) <= 200
+            assert len(hook) <= 120
+
+    def test_summary_is_capped_to_the_configured_maximum(
+        self, copy_payload, article, social_config
+    ):
+        payload = copy_module.deepcopy(copy_payload)
+        payload["summary"] = [f"Bullet {index}" for index in range(9)]
+
+        result = build_social_copy(payload, article, social_config)
+
+        assert len(result.summary) <= 5
 
     def test_hook_falls_back_to_the_first_hook_variant(self, copy_payload, article, social_config):
         payload = copy_module.deepcopy(copy_payload)
@@ -251,6 +261,17 @@ class TestKeyFigures:
         result = build_social_copy(payload, article, social_config)
 
         assert result.key_figures == article.key_figures
+
+    def test_drops_figures_that_only_appear_outside_the_body(
+        self, copy_payload, article, social_config
+    ):
+        article.raw_text += "\n\n999 millones de dólares en el bloque de fuentes."
+        payload = copy_module.deepcopy(copy_payload)
+        payload["key_figures"] = ["999 millones"]
+
+        result = build_social_copy(payload, article, social_config)
+
+        assert "999 millones" not in result.key_figures
 
     def test_handles_a_missing_field(self, copy_payload, article, social_config):
         payload = copy_module.deepcopy(copy_payload)

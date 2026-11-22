@@ -5,6 +5,7 @@ Markdown panel por panel con el reporte de largo y el manifiesto con lo que
 quedó pendiente. Estos tests fijan los tres archivos y su contenido.
 """
 
+import copy
 import json
 from datetime import datetime, timezone
 from pathlib import Path
@@ -186,6 +187,18 @@ class TestRenderMarkdown:
         assert "**Pliegue:** tríptico de cartera (roll fold)" in markdown
         assert "monospace 12 pt" in markdown
         assert "**Tope por nota:** 1.5 columnas" in markdown
+
+    def test_uses_the_preset_name_from_the_config(
+        self, package, triptych_source, triptych_config
+    ):
+        config = copy.deepcopy(triptych_config)
+        config["page"]["preset"] = "carta"
+        species = triptych_specs(config)
+
+        markdown = render_triptych_markdown(package, triptych_source, species)
+
+        assert "**Formato:** carta" in markdown
+        assert "**Formato:** oficio" not in markdown
 
     def test_explains_the_assembly_order(self, package, triptych_source, species):
         markdown = render_triptych_markdown(package, triptych_source, species)

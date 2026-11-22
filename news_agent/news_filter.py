@@ -29,7 +29,7 @@ def is_within_window(
         published_parsed: Tupla struct_time de la fecha de publicación (UTC),
                           o None si la fecha no está disponible.
         window_hours: Horas de la ventana de análisis. Por defecto usa
-                      TIME_WINDOW_HOURS (168h, 7 días).
+                      TIME_WINDOW_HOURS (96h, 4 días).
 
     Returns:
         bool: True si la noticia está dentro de la ventana, False en caso
@@ -102,7 +102,7 @@ def truncate(text: str, max_chars: int | None = None) -> str:
     Args:
         text: Texto a truncar.
         max_chars: Número máximo de caracteres. Por defecto usa
-                   SUMMARY_MAX_CHARS (200).
+                   SUMMARY_MAX_CHARS (500).
 
     Returns:
         str: Texto truncado al límite, sin cortar palabras a la mitad

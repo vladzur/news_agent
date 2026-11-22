@@ -54,7 +54,7 @@ Toma un artículo ya publicado (`articulos/articulo_N_slug.md`) y produce un **b
    - **Post de Facebook** con gancho en la primera línea (lo único visible antes del "ver más") y cierre con pregunta.
    - **Caption de Instagram** con gancho de apertura, cuerpo breve y CTA.
    - **Tarjeta de cita**, **cifras clave**, **llamado a la acción** y **textos alternativos** por plataforma.
-3. **Prompt visual (LLM)** — Genera **un** prompt **en inglés** listo para **Midjourney** (proporción y flags de versión incluidos). El tratamiento se decide por columna: **fotorrealista documental** cuando el texto reporta hechos, lugares, objetos o escenas concretas que pueden mostrarse como una fotografía plausible, y **caricatura** editorial (ilustración) solo cuando la columna es abstracta —un argumento, una tendencia o una metáfora— y no hay una escena documentable. Los textos breves en español siguen permitidos cuando pertenecen a la escena (letreros, pancartas, carteles, pantallas y precios), y se escriben en mayúsculas y **sin comillas** (`PENSIONES`, `-10,39%`): el comando se pega tal cual en Midjourney, que no interpreta comillas escapadas ni JSON. Lo que se rechaza en código son los **bloques de texto** (párrafos, letra pequeña, titulares largos), porque los modelos de difusión los renderizan como ruido. La salida incluye el tratamiento elegido, su justificación en español, el prompt positivo, el prompt negativo de marca y el comando completo para Midjourney, además de un `.txt` con solo el comando, listo para pegar.
+3. **Prompt visual (LLM)** — Genera **un** prompt **en inglés** listo para **Midjourney** (proporción y flags de versión incluidos). El tratamiento se decide por columna: **fotorrealista documental** cuando el texto reporta hechos, lugares, objetos o escenas concretas que pueden mostrarse como una fotografía plausible, y **caricatura** editorial (ilustración) solo cuando la columna es abstracta —un argumento, una tendencia o una metáfora— y no hay una escena documentable. Los textos breves en español siguen permitidos cuando pertenecen a la escena (letreros, pancartas, carteles, pantallas y precios), y se escriben en mayúsculas y **sin comillas** (`PENSIONES`, `-10,39%`): el comando se pega tal cual en Midjourney, que no interpreta comillas escapadas ni JSON. Lo que se rechaza en código son los **bloques de texto** (párrafos, letra pequeña, titulares largos), porque los modelos de difusión los renderizan como ruido; también se rechazan la **violencia explícita** y las **escenas fabricadas o suplantaciones de identidad** (*deepfake*, *face swap*, *staged reenactment*). La salida incluye el tratamiento elegido, su justificación en español, el prompt positivo, el prompt negativo de marca y el comando completo para Midjourney, además de un `.txt` con solo el comando, listo para pegar.
 4. **Banners locales (Pillow)** — Renderiza dos plantillas en cuatro formatos, sin depender de servicios externos:
 
    | Plantilla | Contenido | Formatos por defecto |
@@ -64,21 +64,21 @@ Toma un artículo ya publicado (`articulos/articulo_N_slug.md`) y produce un **b
 
    El diseño se parametriza por un factor de escala respecto de un ancho de referencia, así que una sola implementación sirve para los cuatro tamaños. En el formato vertical respeta las **zonas seguras** superior e inferior (la interfaz de la plataforma las tapa). Si la marca define un logo, se recorta su padding transparente, se escala según `logo_height_ratio` y se pega en la esquina superior derecha; el titular se desplaza hacia abajo si el logo es más alto que la etiqueta de marca.
 
-> **¿Por qué se valida todo en código y no se confía en el LLM?** Las reglas duras de cada plataforma se aplican de forma determinista: recorte al límite de caracteres, largo del hilo, topes de hashtags, normalización de hashtags (`#La Araucania` → `#LaAraucania`) y retiro de los que el modelo haya dejado dentro del cuerpo del texto para no duplicarlos en el tweet de cierre, verificación de que cada cifra exista en el artículo y de que la cita sea **literal**. Si el modelo entrega una cita inventada, el sistema la reemplaza por una oración verificada del propio artículo. El guardarraíl es también editorial: el prompt visual debe nombrar una paleta de color, usar el tratamiento declarado —fotorrealista con lenguaje fotográfico, caricatura con técnica de ilustración— y queda acotado a **rótulos breves y cifras** —los párrafos de texto se rechazan en código, porque los modelos de difusión los convierten en ruido—. El fotorrealismo es el camino por defecto y las figuras públicas solo aparecen dentro de una escena documental, sin *deepfake* ni gestos o escenarios inventados; las víctimas, menores y personas privadas se representan de forma anónima. La caricatura queda reservada para columnas abstractas.
+> **¿Por qué se valida todo en código y no se confía en el LLM?** Las reglas duras de cada plataforma se aplican de forma determinista: recorte al límite de caracteres, largo del hilo, topes de hashtags, normalización de hashtags (`#La Araucania` → `#LaAraucania`) y retiro de los que el modelo haya dejado dentro del cuerpo del texto para no duplicarlos en el tweet de cierre, verificación de que cada cifra exista en el artículo y de que la cita sea **literal**. Si el modelo entrega una cita inventada, el sistema la reemplaza por una oración verificada del propio artículo. El guardarraíl es también editorial: el prompt visual debe nombrar una paleta de color, usar el tratamiento declarado —fotorrealista con lenguaje fotográfico, caricatura con técnica de ilustración— y queda acotado a **rótulos breves y cifras** —los párrafos de texto se rechazan en código, porque los modelos de difusión los convierten en ruido—. El código rechaza además la violencia explícita y las escenas fabricadas o suplantaciones de identidad. El prompt pide que el fotorrealismo sea el camino por defecto y que las figuras públicas solo aparezcan dentro de una escena documental, sin gestos o escenarios inventados; las víctimas, menores y personas privadas se representan de forma anónima. La caricatura queda reservada para columnas abstractas.
 
 ### 4. Tríptico impreso en lenguaje simple
 
 Toma la pauta semanal completa y la convierte en una **hoja oficio doblada en tres** —seis paneles, doble faz— con cinco mini-notas en lenguaje simple, una por propuesta, más un panel de portada:
 
 1. **Material de origen** — De cada propuesta toma el título, el enfoque editorial, los puntos clave y las fuentes sugeridas; y del companion JSON, el contenido de las noticias que la respaldan. Si el companion falta o está corrupto, la nota se redacta solo con la pauta y el flujo continúa.
-2. **Redacción en lenguaje llano (LLM)** — Una sola llamada devuelve un objeto JSON con la portada y las cinco notas. Cada nota trae título, cuerpo, tres datos clave y un bloque «por qué te importa».
-3. **Tope físico verificado** — El cuerpo de cada nota no puede pasar de **una columna y media**, y eso se traduce a caracteres: 24 caracteres por línea en una columna, 36 en columna y media, 59 líneas por columna y **2.124 caracteres** de techo para el bloque completo. La medición se deriva de la geometría configurada, no de una estimación a ojo.
+2. **Redacción en lenguaje llano (LLM)** — Una llamada devuelve un objeto JSON con la portada y las cinco notas; si el JSON no cumple el contrato, se reintenta con una nota de corrección. Cada nota trae título, cuerpo, tres datos clave y un bloque «por qué te importa».
+3. **Tope físico verificado** — El bloque de cada nota no puede pasar de **una columna y media**, y eso se traduce a caracteres: 24 caracteres por línea en una columna, 36 en columna y media, 59 líneas por columna y **2.124 caracteres** de techo para el bloque completo (título, cuerpo, datos clave, «por qué te importa» y fuentes). La medición se deriva de la geometría configurada, no de una estimación a ojo.
 4. **Reglas de lenguaje simple** — Frases de 15 palabras o menos, ninguna sigla sin explicar, nada de jerga, trato directo al lector y una estructura fija: qué pasó, por qué te importa, los datos que lo prueban.
 5. **Bundle de salida** — `impresos/AAAA_MM_DD_pauta-semanal/` con el tríptico en JSON, el mismo contenido en Markdown panel por panel y un manifiesto con la medición de cada nota.
 
-> **¿Por qué se advierte y no se recorta?** Las reglas duras se aplican de forma determinista, pero el desborde **nunca** se recorta: una oración larga, una sigla sin explicar o un bloque que se pasa de columna y media quedan intactos y viajan como advertencia al Markdown y al manifiesto. Un recorte automático mutila la redacción, y el ajuste final de una pieza que se imprime lo hace una persona. Lo que sí aborta la escritura es un fallo estructural —que no lleguen cinco notas o que un cuerpo venga vacío—, para no dejar en disco una pieza impublicable.
+> **¿Por qué se advierte y no se recorta?** Las reglas duras se aplican de forma determinista, pero el desborde **nunca** se recorta: una oración larga, una sigla sin explicar o un bloque que se pasa de columna y media quedan intactos y viajan como advertencia al Markdown y al manifiesto. Un recorte automático mutila la redacción, y el ajuste final de una pieza que se imprime lo hace una persona. Lo que sí aborta la escritura es un fallo estructural —que no lleguen cinco notas, que falte la portada, que un cuerpo venga vacío o que falte el bloque «por qué te importa»—, para no dejar en disco una pieza impublicable.
 
-La geometría del papel, el cuerpo de la tipografía y las reglas de estilo viven en `triptych_config.json`, validado al cargarse: cambiar la medida de la hoja o el tope de columnas no requiere tocar código, porque el presupuesto de caracteres se recalcula solo.
+La geometría del papel, el cuerpo de la tipografía y las reglas de estilo viven en `triptych_config.json`, validado al cargarse: la cantidad de notas debe caber en los paneles disponibles (la portada ocupa uno), y cambiar la medida de la hoja o el tope de columnas no requiere tocar código, porque el presupuesto de caracteres se recalcula solo y el Markdown usa el `preset` declarado.
 
 ### 5. CLI por subcomandos
 
@@ -119,7 +119,7 @@ python -m news_agent clean --days 90
 
 **Nunca escribe en el directorio actual:** cuando se omite `--output`, cada flujo usa su carpeta por defecto (`reportes/`, `articulos/`, `social/` o `impresos/`) y la crea si no existe; una ruta que apunte al directorio actual se rechaza con un error de uso. Así la raíz del proyecto no se llena de pautas ni de bundles sueltos.
 
-**Limpieza:** `clean` solo considera los artefactos propios de la herramienta (pautas, companion JSON, notas y bundles `AAAA_MM_DD_slug`). La caché de contenido (`cache/`) y los assets de la marca (`assets/`) quedan **siempre** fuera de su alcance. La antigüedad se ajusta con `--days`, el alcance con `--target` (incluye `--yes` para automatizar y `--dry-run` para revisar qué se borraría sin eliminar nada).
+**Limpieza:** `clean` solo considera los artefactos propios de la herramienta (pautas, companion JSON, notas y bundles `AAAA_MM_DD_slug`). La caché de contenido (`cache/`) y los assets de la marca (`assets/`) quedan **siempre** fuera de su alcance. La antigüedad se ajusta con `--days`, el alcance con `--target` (incluye `--yes` para automatizar y `--dry-run` para revisar qué se borraría sin eliminar nada). Si algún borrado falla, el comando informa cuántos fallaron y termina con código 1.
 
 #### Opciones por comando
 
@@ -157,6 +157,8 @@ Flags de los modos clásicos:
 
 - `--verbose`: Activa logging nivel DEBUG para diagnóstico detallado.
 - `--output`: Directorio donde guardar los archivos generados. Si se omite se usa `reportes/`, `articulos/` o `social/` según el modo, y una ruta que apunte al directorio actual se rechaza: los modos clásicos tampoco escriben en el directorio actual. El tríptico impreso se genera desde `print` o desde el paso 4 de `all`; los modos clásicos no lo generan (usa `impresos/` por defecto).
+- `--write-article RUTA_PAUTA`: Activa el modo de escritura de artículo desde una pauta existente. Requiere `--article N`.
+- `--article N`: Propuesta a desarrollar (1 a 5). Solo es válido junto con `--write-article`; sin él, el CLI rechaza la invocación con código 2.
 - `--debug`: Guarda un archivo JSON intermedio en `<directorio_de_salida>/debug/articulos_procesados_YYYY_MM_DD.json` con los datos completos de cada artículo (resumen RSS, contenido extraído y resumen final enviado al LLM) para depuración y ajuste de prompts. Con la salida por defecto queda en `reportes/debug/`.
 - `--socialize RUTA_ARTICULO`: Activa el modo de repurposing para redes sociales. No se puede combinar con `--feeds`, `--debug`, `--write-article` ni `--article`.
 - `--platforms LISTA`: Plataformas a preparar, separadas por comas (`x,facebook,instagram`). Por defecto, todas. Filtra los Markdown y los banners generados.
@@ -221,7 +223,7 @@ news_agent/
 | Renderizado de assets | `Pillow` | Generación local de banners promocionales, sin servicios externos |
 | Lenguaje | Python ≥ 3.10 | stdlib + 6 dependencias |
 | Configuración | `.env` + `rss_feeds.json` + `social_config.json` + `triptych_config.json` | Separación de credenciales, fuentes, marca y geometría de imprenta |
-| Testing | `pytest`, `pytest-mock`, `freezegun`; `pytest-cov` opcional | Tests unitarios de los módulos del pipeline, RRSS y tríptico; `__main__` y las dataclasses se cubren de forma indirecta |
+| Testing | `pytest`, `pytest-mock`, `freezegun`, `pytest-cov` | Tests unitarios de los módulos del pipeline, RRSS y tríptico; `__main__` y las dataclasses se cubren de forma indirecta |
 
 ### Parámetros del modelo
 
@@ -401,7 +403,7 @@ Edita `social_config.json` para ajustar la identidad visual sin tocar código:
 |-------|:-----------:|-------------|
 | `brand.name` | ✅ | Nombre de la marca, usado en las etiquetas de los banners |
 | `brand.tagline` | ❌ | Texto descriptivo de la marca; se conserva en la configuración, pero los banners actuales no lo dibujan |
-| `brand.colors` | ✅ | Paleta del diseño (`background`, `surface`, `text`, `muted`, `accent`, `accent_alt`) |
+| `brand.colors` | ✅ | Paleta del diseño (`background`, `surface`, `text`, `muted`, `accent`, `accent_alt`); cada color debe ser hexadecimal `#RRGGBB` o `#RGB` |
 | `brand.handle`, `brand.website` | ❌ | Barra inferior de los banners |
 | `brand.logo_path` | ❌ | Ruta a un PNG con transparencia. Si es una ruta no vacía y el archivo no existe o no se puede abrir, el banner se genera sin logo y se advierte en el log. Si es `null` o está ausente, se genera sin logo y sin advertencia |
 | `brand.logo_height_ratio` | ❌ | Alto del logo como fracción del ancho del lienzo (por defecto `0.11`). El ancho se limita al 22% para que no invada la etiqueta de marca |
@@ -409,7 +411,7 @@ Edita `social_config.json` para ajustar la identidad visual sin tocar código:
 | `platforms` | ❌ | Límites por plataforma. Sobrescriben los valores por defecto de `config.py` |
 | `banners.templates`, `banners.sizes` | ✅ | Matriz plantilla → formatos y tamaño de cada formato |
 | `banners.safe_zone` | ❌ | Zonas seguras superior e inferior para los formatos verticales |
-| `visual_prompts.*` | ✅ | Tratamientos, reglas de decisión, prompt negativo, proporción y sufijo de Midjourney |
+| `visual_prompts.*` | ✅ | Tratamientos, reglas de decisión, prompt negativo, proporción y sufijo de Midjourney; se validan al cargar |
 
 Los formatos de banner se nombran con el prefijo de su plataforma (`instagram_feed`, `instagram_story`), lo que permite filtrar por `--platforms` sin mantener un mapa adicional. Además, la variable de entorno `SOCIAL_FONT_DIR` permite apuntar a un directorio propio de fuentes.
 
@@ -485,7 +487,7 @@ Para ejecutar el agente de forma semanal (recomendado: domingo a las 23:00 o lun
 0 6 1 * * cd /ruta/al/news_agent && /ruta/al/.venv/bin/python -m news_agent clean --days 90 --yes
 ```
 
-> En un cron no hay terminal: `all` y `article` necesitan `--number N`; `all` resuelve ese número y `--platforms` después del primer paso, así que conviene validarlos antes de lanzarlo. `clean` necesita `--yes` o `--dry-run`.
+> En un cron no hay terminal: `all` y `article` necesitan `--number N`; `all` valida ese número y `--platforms` antes del primer paso. `clean` necesita `--yes` o `--dry-run` (sin terminal, sin `--yes` el comando sale con error de uso).
 
 ---
 

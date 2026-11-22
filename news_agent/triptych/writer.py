@@ -179,6 +179,7 @@ def _render_header(
     limits = specs["limits"]
     fold = FOLD_LABELS.get(package.fold, package.fold)
     stamp = date_from_pauta(source.pauta_path) or package.generated_at[:10]
+    preset = str(page.get("preset") or "personalizado").strip() or "personalizado"
 
     return [
         f"# Tríptico impreso: {package.cover.title}",
@@ -186,7 +187,7 @@ def _render_header(
         f"**Edición:** {stamp}  ",
         f"**Pauta de origen:** `{source.pauta_path}`  ",
         (
-            f"**Formato:** oficio {page['width_mm']:.1f} × "
+            f"**Formato:** {preset} {page['width_mm']:.1f} × "
             f"{page['height_mm']:.1f} mm · {package.panels} paneles "
             f"({package.sides} caras × {package.columns_per_side} columnas) · "
             f"{typography['family']} {typography['size_pt']:.0f} pt  "

@@ -119,8 +119,15 @@ class TestArgumentValidation:
         with pytest.raises(SystemExit) as excinfo:
             main(["--write-article", "reportes/pauta.md"])
 
-        assert excinfo.value.code == 1
+        assert excinfo.value.code == 2
         assert "--article" in capsys.readouterr().err
+
+    def test_rejects_article_without_write_article(self, capsys):
+        with pytest.raises(SystemExit) as excinfo:
+            main(["--article", "1"])
+
+        assert excinfo.value.code == 2
+        assert "--write-article" in capsys.readouterr().err
 
 
 # ---------------------------------------------------------------------------
