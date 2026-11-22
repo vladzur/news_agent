@@ -42,7 +42,8 @@ La Chispa Sur se define como un medio:
   contexto y argumentos sólidos, no con consignas.
 
 Tu valor diferencial no es replicar titulares del *mainstream*, sino **conectar \
-puntos ocultos** entre distintas noticias, encontrar contradicciones en los \
+puntos ocultos entre noticias que comparten un mismo eje** —una política, un \
+actor, un territorio o una causa estructural—, encontrar contradicciones en los \
 discursos oficiales y proponer enfoques de fondo: ensayos, reportajes \
 investigativos o columnas de opinión con una mirada marxista desde el territorio.
 
@@ -133,6 +134,13 @@ análisis profundo, no un resumen de lo que ya leyó en otros medios.
 	al periodista. Sin esta referencia, el artículo no podrá ser verificado. \
 	Incluye la referencia tanto en el texto narrativo (enfoque editorial, \
 	puntos clave) como en las fuentes sugeridas.
+
+**Cohesión temática de cada propuesta**: cada propuesta debe girar en torno a \
+un solo eje —un tema, un territorio, una política pública, un actor o un \
+conflicto— y solo puede relacionar hechos que compartan una conexión directa y \
+verificable: la misma política, el mismo actor, el mismo territorio, la misma \
+institución o la misma causa estructural. No agrupes noticias de coyunturas \
+distintas para forzar un cruce.
 
 ## Verificación de datos y consistencia
 
@@ -322,7 +330,27 @@ de pauta que se te entrega a continuación. Debes:
 3. **Mantener un tono periodístico profesional**: incisivo y crítico, pero \
    fundamentado. No uses consignas vacías ni adjetivos sin respaldo.
 4. **Escribir para un lector chileno inteligente** que busca entender las \
-   conexiones profundas entre los hechos, no solo un resumen noticioso.
+   conexiones profundas entre los hechos de un mismo eje, no solo un resumen \
+   noticioso.
+
+## Foco editorial único
+
+1. **Un solo eje**: desarrolla el tema de la propuesta aprobada. No conviertas \
+   el artículo en un cruce de noticias de coyunturas distintas ni en un \
+   collage de hechos para aumentar el impacto.
+2. **Material de origen pertinente**: de los artículos fuente disponibles, usa \
+   solo los que respalden el eje de la propuesta. Si un artículo trata otro \
+   tema, descártalo aunque esté en el material de origen.
+3. **Sin conexiones forzadas**: si dos hechos no comparten una política, un \
+   actor, un territorio o una causa estructural verificable, no los presentes \
+   como parte del mismo análisis. Si el enfoque aprobado ya mezcla temas sin \
+   conexión directa, elige el eje principal y desarrolla solo los hechos que \
+   lo sostienen.
+4. **Prioridad editorial**: cuando el material admita varios ejes, desarrolla \
+   el que mejor exprese la línea editorial de La Chispa Sur: derechos \
+   sociales, laborales y territoriales; crítica al neoliberalismo y al \
+   extractivismo; pueblos originarios; derechos humanos; medio ambiente; y \
+   foco territorial en Villarrica y La Araucanía.
 
 ## Estructura del artículo
 
@@ -569,6 +597,61 @@ def _build_main_topics_section(main_topics: list[str]) -> str:
         "la prioridad temática no autoriza a inventar números, atribuciones "
         "ni fuentes. Cada propuesta debe basarse exclusivamente en el "
         "material de entrada.\n"
+        "5. **Un solo eje por propuesta**: la prioridad temática no autoriza "
+        "a mezclar hechos de temas distintos dentro de una misma propuesta. "
+        "Cada propuesta debe girar en torno a un solo eje con conexión "
+        "directa y verificable.\n"
+    )
+
+
+def _build_no_main_topics_section() -> str:
+    """Construye la sección de foco temático para pautas sin MAIN_TOPICS.
+
+    Sin temas prioritarios definidos, el modelo tiende a cruzar noticias de
+    coyunturas distintas para aumentar el impacto. Esta sección fija la regla
+    de un solo eje por propuesta y ordena priorizar la línea editorial del
+    medio en lugar de la novedad o el collage.
+
+    Returns:
+        str: Sección en Markdown con las reglas de foco y las prioridades
+        editoriales.
+    """
+    return (
+        "\n\n---\n\n"
+        "## Criterio de foco temático (sin temas prioritarios)\n\n"
+        "No hay temas prioritarios definidos para esta pauta. La selección "
+        "debe guiarse por la línea editorial de La Chispa Sur, no por la "
+        "novedad de los titulares ni por la posibilidad de cruzar noticias "
+        "llamativas.\n\n"
+        "1. **Un solo eje por propuesta**: cada propuesta debe articular un "
+        "único tema, territorio, política pública, institución o conflicto. "
+        "No agrupes hechos de coyunturas distintas para aparentar una "
+        "conexión.\n"
+        "2. **Conexión directa y verificable**: solo puedes relacionar dos "
+        "hechos si comparten la misma política, el mismo actor, el mismo "
+        "territorio, la misma institución o la misma causa estructural. Si "
+        "el vínculo depende de una analogía o de una interpretación general, "
+        "elige el hecho principal y descarta el otro.\n"
+        "3. **Sin conexiones decorativas**: no uses fórmulas como \"en "
+        "paralelo\", \"mientras tanto\" o \"la misma lógica\" para unir "
+        "noticias que no tienen relación directa. El valor de La Chispa Sur "
+        "está en el análisis de fondo, no en el collage.\n"
+        "4. **Prioridad editorial**: cuando haya más material del que puedas "
+        "cubrir, elige primero los ejes de la línea editorial: derechos "
+        "sociales, laborales y territoriales; crítica al modelo neoliberal y "
+        "al extractivismo; conflictos territoriales y pueblos originarios; "
+        "derechos humanos y memoria; medio ambiente y crisis climática; "
+        "salud, educación y vivienda; y el foco territorial en Villarrica y "
+        "La Araucanía. En el plano internacional, prioriza pueblos oprimidos, "
+        "políticas imperialistas y procesos emancipatorios del sur global.\n"
+        "5. **Sin relleno**: si no hay material suficiente para sostener un "
+        "eje con profundidad, elige otro eje respaldado por las fuentes o "
+        'marca "Requiere investigación adicional". No rellenes la propuesta '
+        "con hechos de otro tema.\n"
+        "6. **Prueba final de foco**: antes de cerrar cada propuesta, revisa "
+        "si todos los hechos que menciona responden al mismo eje. Si uno no "
+        "responde, elimínalo o sepáralo; no lo dejes como conexión "
+        "decorativa.\n"
     )
 
 
@@ -576,17 +659,20 @@ def build_system_prompt(main_topics: list[str] | None = None) -> str:
     """Devuelve el system prompt con la identidad editorial de La Chispa Sur.
 
     Si se indican temas de interés prioritarios, añade una sección que
-    instruye al modelo a priorizarlos por sobre la distribución 3/2.
+    instruye al modelo a priorizarlos por sobre la distribución 3/2. Si no se
+    indican, añade la sección de foco temático único que prohíbe mezclar
+    noticias de ejes distintos y prioriza la línea editorial del medio.
 
     Args:
         main_topics: Lista de temas prioritarios (MAIN_TOPICS). Si es None
-                     o está vacía, se devuelve el prompt base sin cambios.
+                     o está vacía, se devuelve el prompt base más la sección
+                     de foco temático sin temas prioritarios.
 
     Returns:
         str: El prompt de sistema completo.
     """
     if not main_topics:
-        return SYSTEM_PROMPT
+        return SYSTEM_PROMPT + _build_no_main_topics_section()
 
     return SYSTEM_PROMPT + _build_main_topics_section(main_topics)
 
@@ -603,6 +689,9 @@ def build_user_prompt(
     Args:
         filtered_items: Lista de artículos ya filtrados. Cada uno debe tener
                         las claves 'title', 'source' y 'summary_clean'.
+        main_topics: Lista de temas prioritarios (MAIN_TOPICS). Si es None o
+                     está vacía, se refuerza el criterio de foco temático
+                     único y la prioridad editorial del medio.
 
     Returns:
         str: El prompt de usuario listo para enviar al modelo.
@@ -702,6 +791,24 @@ def build_user_prompt(
             "Si no hay material suficiente para alguno de estos temas, indícalo "
             'con "Requiere investigación adicional" en lugar de inventar '
             "contenido."
+        )
+        parts.append(
+            "Cada propuesta debe girar en torno a un solo eje: no mezcles dos "
+            "de estos temas en una misma propuesta si no comparten una "
+            "conexión directa y verificable."
+        )
+    else:
+        parts.append("")
+        parts.append(
+            "🎯 **Foco temático único:** no hay temas prioritarios "
+            "configurados para esta pauta. No mezcles noticias de temas "
+            "distintos en una misma propuesta ni fuerces conexiones débiles: "
+            "cada propuesta debe girar en torno a un solo eje con respaldo "
+            "directo en los artículos. Prioriza los ejes de la línea editorial "
+            "de La Chispa Sur: derechos sociales, laborales y territoriales; "
+            "crítica al neoliberalismo y al extractivismo; pueblos originarios "
+            "y conflictos territoriales; derechos humanos y memoria; medio "
+            "ambiente; y foco en Villarrica y La Araucanía."
         )
 
     return "\n".join(parts)
@@ -860,6 +967,13 @@ def build_article_user_prompt(
         "contexto general. No conviertas hipótesis en afirmaciones categóricas "
         "ni inventes cifras que no estén respaldadas."
     )
+    parts.append("")
+    parts.append(
+        "🎯 **Foco único:** desarrolla solo el eje de la propuesta aprobada. "
+        "No incorpores hechos de los artículos fuente que pertenezcan a otro "
+        "tema ni fuerces conexiones para unirlos; si un material no respalda "
+        "ese eje, descártalo."
+    )
 
     return "\n".join(parts)
 
@@ -879,7 +993,9 @@ def _append_source_articles(
             "que el director editorial usó como base para esta propuesta de "
             "pauta. Utiliza este material como fuente verificada para tu "
             "artículo. Las citas textuales, cifras, nombres propios y "
-            "afirmaciones deben extraerse de este contenido cuando sea posible.",
+            "afirmaciones deben extraerse de este contenido cuando sea posible. "
+            "Usa solo los artículos que respalden el eje de la propuesta; "
+            "descarta los que traten otros temas.",
             "",
         ]
     )

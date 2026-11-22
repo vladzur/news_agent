@@ -72,14 +72,19 @@ class TestBuildSystemPrompt:
         prompt = build_system_prompt()
         assert "reales y verificables" in prompt.lower() or "reales" in prompt.lower()
 
-    def test_returns_system_prompt_constant(self):
-        """Debe devolver exactamente la constante SYSTEM_PROMPT."""
-        assert build_system_prompt() == SYSTEM_PROMPT
+    def test_returns_base_prompt_plus_focus_section(self):
+        """Sin temas debe devolver el prompt base más la sección de foco."""
+        prompt = build_system_prompt()
 
-    def test_without_topics_returns_base_prompt(self):
-        """Sin temas (None o lista vacía) debe devolver el prompt base."""
-        assert build_system_prompt(main_topics=None) == SYSTEM_PROMPT
-        assert build_system_prompt(main_topics=[]) == SYSTEM_PROMPT
+        assert prompt.startswith(SYSTEM_PROMPT)
+        assert "Criterio de foco temático" in prompt
+
+    def test_without_topics_appends_focus_section(self):
+        """Sin temas (None o lista vacía) debe añadir la sección de foco."""
+        expected = build_system_prompt(main_topics=None)
+
+        assert build_system_prompt(main_topics=[]) == expected
+        assert "Criterio de foco temático" in expected
 
     def test_with_topics_appends_priority_section(self):
         """Con temas debe añadir la sección de prioridad manteniendo el prompt base."""
@@ -88,8 +93,34 @@ class TestBuildSystemPrompt:
         assert prompt.startswith(SYSTEM_PROMPT)
         assert "Temas de interés prioritarios" in prompt
         assert "prioridad absoluta" in prompt.lower()
+        assert "Criterio de foco temático" not in prompt
+        assert "Un solo eje por propuesta" in prompt
         for topic in topics:
             assert topic in prompt
+
+    def test_without_topics_forbids_unrelated_topic_mixing(self):
+        """Debe prohibir mezclar temas sin conexión directa."""
+        section = build_system_prompt()[len(SYSTEM_PROMPT):].lower()
+
+        assert "un solo eje por propuesta" in section
+        assert "conexión directa y verificable" in section
+        assert "no agrupes" in section
+
+    def test_without_topics_prioritizes_editorial_line(self):
+        """Debe priorizar los ejes de la línea editorial del medio."""
+        section = build_system_prompt()[len(SYSTEM_PROMPT):]
+
+        assert "línea editorial de La Chispa Sur" in section
+        assert "derechos sociales, laborales y territoriales" in section
+        assert "neoliberal" in section
+        assert "pueblos originarios" in section
+        assert "Villarrica" in section
+        assert "La Araucanía" in section
+
+    def test_base_prompt_requires_topic_cohesion(self):
+        """El prompt base debe exigir un solo eje por propuesta."""
+        assert "Cohesión temática de cada propuesta" in SYSTEM_PROMPT
+        assert "conexión directa y verificable" in SYSTEM_PROMPT
 
     def test_contains_chile_focus(self):
         """Debe mencionar el enfoque en Chile."""
@@ -257,6 +288,15 @@ class TestBuildArticleSystemPrompt:
 
         assert "*[Bajada o copete" in prompt
 
+    def test_requires_single_focus_and_discards_unrelated_material(self):
+        """Debe exigir foco único y descartar material de otros temas."""
+        prompt = build_article_system_prompt().lower()
+
+        assert "foco editorial único" in prompt
+        assert "un solo eje" in prompt
+        assert "descártalo" in prompt
+        assert "sin conexiones forzadas" in prompt
+
 
 class TestBuildArticleUserPrompt:
     """Pruebas para build_article_user_prompt."""
@@ -305,6 +345,13 @@ class TestBuildArticleUserPrompt:
         """Debe incluir la instrucción de escritura."""
         result = build_article_user_prompt(sample_proposal)
         assert "artículo completo" in result.lower() or "escribe" in result.lower()
+
+    def test_includes_single_focus_reminder(self, sample_proposal):
+        """Debe recordar desarrollar solo el eje de la propuesta."""
+        result = build_article_user_prompt(sample_proposal)
+
+        assert "Foco único" in result
+        assert "descártalo" in result
 
     def test_reinforces_provocative_headline_and_editorial_criticism(
         self, sample_proposal
@@ -369,6 +416,27 @@ class TestBuildArticleUserPrompt:
         assert "Artículo fuente 2" in result
         assert "La Tercera" in result
         assert "DF Diario" in result
+
+    def test_source_articles_are_limited_to_the_proposal_axis(
+        self, sample_proposal
+    ):
+        """Debe pedir descartar el material de origen de otros temas."""
+        source_articles = [
+            {
+                "title": "Noticia de economía",
+                "source": "Cooperativa",
+                "link": "https://example.com/eco",
+                "summary": "Resumen breve.",
+                "content": "Contenido de la noticia.",
+            }
+        ]
+
+        result = build_article_user_prompt(
+            sample_proposal, source_articles=source_articles
+        )
+
+        assert "respalden el eje de la propuesta" in result
+        assert "descarta los que traten otros temas" in result
 
     def test_does_not_include_section_when_source_articles_is_none(
         self, sample_proposal
@@ -604,6 +672,7 @@ class TestBuildUserPrompt:
         assert "MAIN_TOPICS" in result
         assert "genocidio en Gaza" in result
         assert "Retrocesos laborales" in result
+        assert "un solo eje" in result.lower()
 
     def test_omits_main_topics_when_not_provided(self):
         """No debe incluir la sección de temas si no se proporcionan."""
@@ -612,6 +681,16 @@ class TestBuildUserPrompt:
         result = build_user_prompt(items)
 
         assert "MAIN_TOPICS" not in result
+
+    def test_includes_single_focus_reminder_without_topics(self):
+        """Sin temas debe recordar el foco único y la prioridad editorial."""
+        items = [self._make_item("T1", "S1", "R1")]
+
+        result = build_user_prompt(items)
+
+        assert "Foco temático único" in result
+        assert "un solo eje" in result.lower()
+        assert "Villarrica" in result
 
 
 class TestPortadaPrompts:
