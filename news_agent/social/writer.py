@@ -14,7 +14,13 @@ from typing import Any
 
 from ..config import SOCIAL_X_MAX_CHARS
 from ..report_writer import _slugify
-from .models import ArticleSource, BannerSpec, SocialCopy, VisualPrompt
+from .models import (
+    ArticleSource,
+    BannerSpec,
+    InstagramSlideSpec,
+    SocialCopy,
+    VisualPrompt,
+)
 from .platform_specs import platform_spec
 from .text_utils import render_hashtags
 
@@ -25,6 +31,7 @@ logger = logging.getLogger(__name__)
 
 # Nombre de la subcarpeta de assets y de los archivos del bundle
 ASSETS_DIR_NAME = "assets"
+INSTAGRAM_DIR_NAME = "instagram"
 COPY_FILE_NAME = "social_copy.json"
 PROMPTS_FILE_NAME = "visual_prompts.json"
 PROMPT_TEXT_FILE_NAME = "visual_prompt.txt"
@@ -87,6 +94,24 @@ def assets_dir(bundle_dir: str | Path) -> Path:
         Path: Ruta absoluta a la carpeta de assets.
     """
     path = Path(bundle_dir) / ASSETS_DIR_NAME
+    path.mkdir(parents=True, exist_ok=True)
+    return path.resolve()
+
+
+def instagram_dir(bundle_dir: str | Path) -> Path:
+    """Crea y devuelve el subdirectorio exclusivo del carrusel de Instagram.
+
+    Las cinco piezas verticales viven juntas aquí, separadas del resto de los
+    banners del bundle, para que se publiquen como un carrusel y no se mezclen
+    con las imágenes de otras plataformas.
+
+    Args:
+        bundle_dir: Directorio del bundle.
+
+    Returns:
+        Path: Ruta absoluta a la carpeta del carrusel.
+    """
+    path = Path(bundle_dir) / INSTAGRAM_DIR_NAME
     path.mkdir(parents=True, exist_ok=True)
     return path.resolve()
 
@@ -344,6 +369,33 @@ def render_instagram_markdown(copy: SocialCopy) -> str:
             ]
         )
 
+    if copy.instagram.slides:
+        lines.extend(
+            [
+                "---",
+                "",
+                "## Carrusel vertical · 3 slides de resumen",
+                "",
+                (
+                    "Los PNG están en `instagram/`, en orden de publicación: "
+                    "portada, tres resúmenes y firma de marca. Todas las "
+                    "piezas son verticales de 1080×1440 (4:3)."
+                ),
+                "",
+            ]
+        )
+        for index, slide in enumerate(copy.instagram.slides, start=1):
+            lines.extend(
+                [
+                    f"### Slide {index}",
+                    "",
+                    slide.text,
+                    "",
+                ]
+            )
+            if slide.figure:
+                lines.extend([f"**Dato clave:** {slide.figure}", ""])
+
     if copy.alt_text.get("instagram"):
         lines.extend(
             [
@@ -420,6 +472,9 @@ def save_manifest(
     article: ArticleSource,
     prompt_status: str | None = None,
     prompt_error: str | None = None,
+    carousel_slides: list[InstagramSlideSpec] | None = None,
+    carousel_dir_path: Path | None = None,
+    carousel_format: str | None = None,
 ) -> Path:
     """Guarda el manifiesto del bundle con todo lo generado.
 
@@ -435,6 +490,9 @@ def save_manifest(
                        ``skipped`` o ``failed``. Si se omite, se deduce de
                        ``prompt``.
         prompt_error: Motivo del fallo cuando ``prompt_status`` es ``failed``.
+        carousel_slides: Slides del carrusel de Instagram renderizados.
+        carousel_dir_path: Subdirectorio exclusivo del carrusel, si se generó.
+        carousel_format: Nombre del formato vertical usado por el carrusel.
 
     Returns:
         Path: Ruta absoluta del manifiesto escrito.
@@ -448,6 +506,16 @@ def save_manifest(
         status = prompt_status
     else:
         status = "skipped"
+
+    carousel_items = list(carousel_slides or [])
+    carousel_rendered = [slide for slide in carousel_items if slide.path is not None]
+    carousel_failed = [slide for slide in carousel_items if slide.path is None]
+    if carousel_rendered:
+        carousel_status = "generated" if not carousel_failed else "partial"
+    elif carousel_failed:
+        carousel_status = "failed"
+    else:
+        carousel_status = "skipped"
 
     payload: dict[str, Any] = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -466,6 +534,9 @@ def save_manifest(
             "markdown": {
                 platform: path.name for platform, path in markdown_files.items()
             },
+            "instagram_carousel": (
+                INSTAGRAM_DIR_NAME if carousel_dir_path else None
+            ),
         },
         "visual_prompts": {
             "status": status,
@@ -478,6 +549,19 @@ def save_manifest(
             "rendered": len(rendered),
             "failed": len(failed),
             "items": [banner.to_dict() for banner in banners],
+        },
+        "instagram_carousel": {
+            "status": carousel_status,
+            "directory": (
+                carousel_dir_path.name if carousel_dir_path else None
+            ),
+            "format": carousel_format,
+            "width": carousel_items[0].width if carousel_items else None,
+            "height": carousel_items[0].height if carousel_items else None,
+            "slides": len(carousel_items),
+            "rendered": len(carousel_rendered),
+            "failed": len(carousel_failed),
+            "items": [slide.to_dict() for slide in carousel_items],
         },
         "verified_quote": copy.quote_card.verbatim,
     }

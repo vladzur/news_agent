@@ -130,7 +130,7 @@ python -m news_agent social --platforms x,instagram
 python -m news_agent --socialize articulos/articulo_1_slug.md --output ./social
 ```
 
-El subsistema produce tres familias de artefactos: **copys estructurados**, **prompts visuales en inglés** y **banners renderizados localmente**. No publica nada en las plataformas ni genera las imágenes finales: entrega al equipo editorial el material listo para publicar y para pegar en un generador de imágenes.
+El subsistema produce cuatro familias de artefactos: **copys estructurados**, **prompts visuales en inglés**, **banners renderizados localmente** y el **carrusel vertical de Instagram**. No publica nada en las plataformas ni genera las imágenes finales del prompt visual: entrega al equipo editorial el material listo para publicar y para pegar en un generador de imágenes.
 
 ### 6.2. Entrada
 
@@ -144,7 +144,7 @@ El único origen admitido es un **artículo Markdown ya publicado** (`articulos/
 
 - **Salida JSON, no Markdown.** A diferencia de la pauta y de los artículos, el subsistema pide al modelo un objeto JSON estructurado con el contrato completo de la pieza.
 - **Extracción defensiva.** La respuesta se parsea tolerando bloques de código Markdown, texto explicativo alrededor y comas finales sueltas. Si no se obtiene un objeto válido, se reintenta la llamada con una nota de corrección, hasta `SOCIAL_JSON_MAX_RETRIES` veces.
-- **Campos del contrato:** `hooks`, `summary`, `hook`, `quote_card`, `key_figures`, `cta`, `alt_text`, `x`, `facebook`, `instagram`.
+- **Campos del contrato:** `hooks`, `summary`, `hook`, `quote_card`, `key_figures`, `cta`, `alt_text`, `x`, `facebook`, `instagram` (con `caption`, `hashtags` y `slides`).
 
 #### Reglas aplicadas en código, no delegadas al modelo
 
@@ -159,6 +159,8 @@ El único origen admitido es un **artículo Markdown ya publicado** (`articulos/
 | Cita literal | Se verifica palabra por palabra; si no proviene del artículo, se reemplaza por una oración candidata verificada o por el lead |
 | Cifras verificables | Se descartan las cifras que no aparecen en el texto; si ninguna se verifica, se usan las detectadas en el artículo |
 | Textos alternativos | Se completan y se recortan al límite de cada plataforma (X 300, Facebook 200, Instagram 100 caracteres) |
+| Slides del carrusel de Instagram | Se exigen exactamente 3; cada slide tiene solo `text` (≤ 240 caracteres) y un `figure` opcional (≤ 40). No hay titular. Las cifras se verifican contra el artículo. Si faltan slides, se completan con la síntesis ejecutiva y material del artículo. |
+| Coherencia de los slides | Se descartan textos duplicados, se conserva el orden y se usa la misma retícula, el mismo tamaño de lectura y los mismos topes en los tres slides. |
 
 ### 6.4. Capa del prompt visual
 
@@ -197,9 +199,25 @@ Dos plantillas declaradas en la configuración, renderizadas en los formatos ped
 - **Fuentes:** se resuelve primero la ruta declarada en `brand.fonts`, luego el directorio de `SOCIAL_FONT_DIR` y después las rutas habituales del sistema (DejaVu, Liberation, Noto o Arial). Si ninguna existe, se usa la fuente por defecto de Pillow y se advierte en el log.
 - **Aislamiento de fallos:** un banner que falla al renderizar no interrumpe el resto del lote; queda registrado en el manifiesto como pendiente.
 
+#### 6.5.1. Carrusel vertical de Instagram
+
+Cuando la plataforma `instagram` está habilitada, el subsistema suma un carrusel de **cinco piezas verticales de 1080×1440 (4:3 vertical)**, todas con la misma retícula y la misma identidad visual del banner:
+
+| Orden | Pieza | Contenido |
+|:-----:|-------|-----------|
+| 1 | Portada | Barra de acento, etiqueta de marca, logo, titular, bajada, llamado a deslizar y contador `01 / 05` |
+| 2–4 | Tres slides de resumen | Número de punto discreto, idea principal en tipografía grande, tarjeta opcional de dato duro, puntos de progreso y contador. Sin titular. |
+| 5 | Firma | Logo centrado, nombre de la marca, tagline, sitio, handle y llamado a leer la nota completa |
+
+- **Estética compartida:** las cinco piezas reutilizan la paleta, las fuentes, el logo, la barra de acento y el pie de marca de `banner_renderer.py`. El encabezado y el pie están en la misma coordenada en todas, y los tres resúmenes usan el mismo bloque de texto y el mismo tamaño de lectura.
+- **Formato obligatorio:** `instagram_carousel.format` debe apuntar a un `instagram_*` declarado en `banners.sizes` y con alto mayor que ancho. El formato del repositorio es `instagram_portrait`, de 1080×1440, para que la pieza sea 4:3 vertical y no el 9:16 de un reel. Cualquier otra combinación se rechaza al cargar la configuración y, si se construye el renderizador directamente, lanza `InstagramRenderError`.
+- **Contenido de los resúmenes:** sale de `instagram.slides` del contrato de copys. Cada slide trae `text` y `figure`; no existe un titular separado. La portada y la firma se componen siempre con datos de la marca, no con texto del modelo.
+- **Tolerancia a fallos:** un slide que falla no interrumpe los otros cuatro; queda con `path: null` en el manifiesto.
+- **Salida:** los cinco PNG se escriben juntos en el subdirectorio exclusivo `instagram/` del bundle.
+
 ### 6.6. Formato de salida (bundle)
 
-Cada ejecución escribe una carpeta autocontenida `social/AAAA_MM_DD_slug-del-titulo/` con los copys en JSON, el comando de Midjourney en `visual_prompt.txt`, los metadatos del prompt en `visual_prompts.json`, un Markdown listo para copiar y pegar por plataforma, los PNG de los banners en `assets/` y un `manifest.json` que registra qué se generó, qué falló y con qué artículo se produjo. El bloque `visual_prompts` del manifiesto incluye `status` (`generated`, `skipped` o `failed`) y `error` cuando la generación falló, de modo que omitir el prompt con `--skip-prompts` no se confunde con un fallo.
+Cada ejecución escribe una carpeta autocontenida `social/AAAA_MM_DD_slug-del-titulo/` con los copys en JSON, el comando de Midjourney en `visual_prompt.txt`, los metadatos del prompt en `visual_prompts.json`, un Markdown listo para copiar y pegar por plataforma, los PNG de los banners en `assets/`, el carrusel vertical 4:3 (1080×1440) en el subdirectorio exclusivo `instagram/` (`01_cover.png`, `02_point_1.png`, `03_point_2.png`, `04_point_3.png` y `05_signature.png`) y un `manifest.json` que registra qué se generó, qué falló y con qué artículo se produjo. El bloque `visual_prompts` del manifiesto incluye `status` (`generated`, `skipped` o `failed`) y `error` cuando la generación falló, de modo que omitir el prompt con `--skip-prompts` no se confunde con un fallo. El bloque `instagram_carousel` registra `status` (`generated`, `partial`, `failed` o `skipped`), formato, dimensiones, cantidad de slides y la ruta de cada pieza.
 
 El campo `quote_card.verbatim` del JSON de copys —repetido como `verified_quote` en el manifiesto— indica si la cita destacada se verificó palabra por palabra contra el artículo de origen.
 
@@ -212,10 +230,11 @@ La identidad visual y los límites viven en `social_config.json`, versionado en 
 | `brand` | Nombre, handle, sitio, logo opcional, paleta de colores y tipografías por rol | ✅ |
 | `platforms` | Límite de caracteres, largo del hilo y tope de hashtags por plataforma. Sobrescriben los valores por defecto de `config.py` y se validan al cargar | ❌ |
 | `banners.templates` / `banners.sizes` | Matriz plantilla → formatos y tamaño de cada formato | ✅ |
-| `banners.safe_zone` | Bandas no utilizables de los formatos verticales | ❌ |
+| `banners.safe_zone` | Bandas no utilizables de los formatos verticales, incluido `instagram_portrait` | ❌ |
+| `instagram_carousel` | Formato del carrusel vertical; debe ser un `instagram_*` vertical declarado en `banners.sizes`. Por defecto, `instagram_portrait` (1080×1440) | ❌ |
 | `visual_prompts` | Tratamientos, reglas de decisión, prompt negativo, proporción única y sufijo de Midjourney | ✅ |
 
-Un color mal escrito, una clave de color faltante, un tamaño inválido, una sección `visual_prompts` incompleta, una plataforma con límites inválidos o una plantilla que apunte a un formato inexistente se detectan al cargar el archivo, con un mensaje que indica el campo culpable.
+Un color mal escrito, una clave de color faltante, un tamaño inválido, una sección `visual_prompts` incompleta, una plataforma con límites inválidos, una plantilla que apunte a un formato inexistente, o un carrusel que apunte a un formato no vertical o de otra plataforma se detectan al cargar el archivo, con un mensaje que indica el campo culpable.
 
 ### 6.8. Estructura del subsistema
 
@@ -226,7 +245,8 @@ Un color mal escrito, una clave de color faltante, un tamaño inválido, una sec
 | `prompt_builder.py` | Construye los prompts de copys (español) y del prompt visual (inglés) |
 | `copy_generator.py` | Genera y valida los copys contra los límites de cada plataforma |
 | `visual_prompts.py` | Genera y valida el prompt visual en inglés con su tratamiento |
-| `banner_renderer.py` | Renderiza los banners con Pillow |
+| `banner_renderer.py` | Renderiza los banners con Pillow y expone las primitivas de retícula compartidas |
+| `instagram_renderer.py` | Renderiza el carrusel vertical: portada, tres resúmenes y firma |
 | `platform_specs.py` | Resuelve los límites por plataforma y filtra por formato |
 | `text_utils.py` | Recorte por caracteres y normalización de hashtags |
 | `json_utils.py` | Extracción defensiva de JSON de las respuestas del modelo |
@@ -239,6 +259,8 @@ Un color mal escrito, una clave de color faltante, un tamaño inválido, una sec
 - **Copys imposibles de validar** → se aborta sin escribir un bundle a medias.
 - **Prompt visual fallido** → el bundle se escribe igualmente con los copys y los banners; el manifiesto lo registra con `status: "failed"` y el motivo en `error`.
 - **Banner fallido** → se registra el error y el resto del lote continúa.
+- **Slide del carrusel fallido** → se registra el error, el slide queda con ruta nula y los otros cuatro se escriben igualmente.
+- **Formato de carrusel inválido** → se rechaza al cargar la configuración si no es un `instagram_*` vertical; si se construye el renderizador directamente, lanza `InstagramRenderError` y el bundle se escribe sin carrusel.
 - **Directorio de salida inexistente** → se crea automáticamente (incluidos los directorios intermedios).
 - **Artículo inexistente, vacío o sin titular** → error explícito de parseo y salida con código distinto de cero.
 - **API key ausente** → error explícito de configuración antes de cualquier llamada.
@@ -248,7 +270,7 @@ Un color mal escrito, una clave de color faltante, un tamaño inválido, una sec
 
 ### 7.1. Objetivo
 
-El motor se opera desde un CLI por subcomandos que reduce la ejecución de cada flujo a un solo comando y encadena los cuatro pasos del proceso editorial cuando se quiere de punta a punta: pauta, nota, redes sociales y tríptico impreso. Los modos clásicos por banderas se conservan para los scripts y cron ya desplegados.
+El motor se opera desde un CLI por subcomandos que reduce la ejecución de cada flujo a un solo comando y encadena los cuatro pasos del proceso editorial cuando se quiere de punta a punta: pauta, una o todas las notas, redes sociales de cada nota y tríptico impreso. Los modos clásicos por banderas se conservan para los scripts y cron ya desplegados.
 
 ### 7.2. Subcomandos
 
@@ -258,20 +280,24 @@ El motor se opera desde un CLI por subcomandos que reduce la ejecución de cada 
 | `article` | Escribe una nota desde una propuesta | `--pauta`, `-n/--number`, `--output` | `articulos/articulo_N_slug.md` |
 | `social` | Repurposing para redes sociales | `--article`, `--articles-dir`, `--all`, `--select`, `--output`, `--platforms`, `--social-config`, `--skip-banners`, `--skip-prompts` | `social/AAAA_MM_DD_slug/` con copys, prompts, Markdown y banners |
 | `print` | Tríptico impreso de la semana | `--pauta`, `--output`, `--triptych-config` | `impresos/AAAA_MM_DD_pauta-semanal/` con el tríptico en JSON, el Markdown panel por panel y el manifiesto |
-| `all` | Secuencia completa | `--feeds`, `--base`, `-n/--number`, opciones sociales, `--triptych-config` y `--debug` | Los cuatro anteriores |
+| `all` | Secuencia completa, con una nota o la edición entera | `--feeds`, `--base`, `-n/--number`, `--all-articles`, opciones sociales, `--triptych-config` y `--debug` | Los cuatro anteriores; con `--all-articles`, una nota y un bundle de RRSS por propuesta |
 | `clean` | Limpieza de artefactos antiguos | `--base`, `--target`, `--days`, `--dry-run`, `--yes` | Elimina archivos y bundles |
 
 Todos los comandos aceptan `--verbose`. En `clean` la bandera se acepta por uniformidad del parser, pero todavía no cambia el nivel de logging.
 
 ### 7.3. Comando secuencial `all`
 
-Ejecuta, en orden y dentro de una misma invocación: la generación de la pauta, la escritura de la nota elegida, el bundle de redes sociales y el tríptico impreso. La pauta y el artículo recién generados se pasan como entrada al paso siguiente, sin intervención manual. El tríptico se arma desde la pauta del primer paso, así que no depende de la nota elegida. Si un paso falla, la ejecución se detiene con su código de error y no se ejecutan los pasos posteriores.
+Ejecuta, en orden y dentro de una misma invocación: la generación de la pauta, la escritura de una nota o de todas las propuestas, el bundle de redes sociales de cada nota y el tríptico impreso. La pauta y las notas recién generadas se pasan como entrada al paso siguiente, sin intervención manual.
+
+- **Modo de una nota** (`--number N`): escribe esa propuesta, genera su bundle de RRSS y arma el tríptico. Un fallo en cualquiera de las etapas detiene la ejecución con su código de error.
+- **Edición completa** (`--all-articles`): lee las propuestas reales de la pauta, escribe una nota por cada una y genera un bundle de RRSS por nota. Si una nota o un bundle social falla, se informa y se continúa con los demás; el tríptico se arma igualmente desde la pauta. Al final se muestra un resumen y se sale con código 1 si hubo incidencias. No pregunta por la terminal, así que es el modo recomendado para cron.
+- El tríptico se arma desde la pauta del primer paso, así que no depende de las notas generadas.
 
 ### 7.4. Entradas implícitas y directorio de salida
 
 - **Pauta:** si `article` no recibe `--pauta`, toma la más reciente de `reportes/`. El orden lo da el nombre, que incluye la fecha (`AAAA_MM_DD`).
 - **Artículo:** si `social` no recibe `--article` ni usa `--all`/`--select`, toma el de fecha de modificación más reciente del directorio indicado por `--articles-dir` (`articulos/` por defecto), porque las notas no llevan fecha en el nombre.
-- **Propuesta:** si `article` o `all` no reciben `-n/--number`, muestran los cinco titulares y preguntan cuál desarrollar. Sin terminal interactiva (por ejemplo en un cron) la ejecución falla con código 2 y un mensaje que pide `--number`, en lugar de quedar esperando una respuesta que nunca llegará. En `all`, esa comprobación y la de `--platforms` ocurren después de generar la pauta y la nota: conviene validar ambos valores antes de lanzarlo en un cron.
+- **Propuesta:** si `article` o `all` no reciben `-n/--number`, muestran los cinco titulares y preguntan cuál desarrollar. Sin terminal interactiva (por ejemplo en un cron) la ejecución falla con código 2 y un mensaje que pide `--number` o `--all-articles`, en lugar de quedar esperando una respuesta que nunca llegará. `all` valida el modo de edición y `--platforms` antes de generar la pauta. `--all-articles` es excluyente con `--number` y no requiere terminal.
 - **Pauta del tríptico:** si `print` no recibe `--pauta`, toma la más reciente de `reportes/`. El tríptico no pide número de propuesta: cubre las cinco, así que `-n` no aplica.
 - **Directorio de salida:** si no se indica `--output`, cada flujo usa su carpeta por defecto (`reportes/`, `articulos/`, `social/` o `impresos/`) y la crea si no existe. Una ruta que apunte al directorio actual se rechaza con error de uso, en los subcomandos y también en los modos clásicos.
 - **Sin argumentos:** `python -m news_agent` no ejecuta ningún flujo. Muestra la ayuda y sale con código 2, porque el modo clásico por defecto consumiría tokens de la API y escribiría en el directorio actual sin que el usuario lo haya pedido. Los cron deben indicar el flujo y la salida explícitamente.
@@ -302,8 +328,8 @@ Ejecuta, en orden y dentro de una misma invocación: la generación de la pauta,
 | Código | Significado |
 |:------:|-------------|
 | `0` | Ejecución exitosa (o nada que procesar, sin invocar a la API) |
-| `1` | Error de ejecución: configuración, API, pauta imposible de parsear, artefacto de entrada inexistente o fallos parciales al eliminar artefactos |
-| `2` | Error de uso: comando desconocido, opción inválida, plataforma desconocida, `--select` sin terminal interactiva, falta `--number` sin terminal, combinación inválida de `--write-article`/`--article`, `clean` sin terminal para confirmar o `--days` no positivo |
+| `1` | Error de ejecución: configuración, API, pauta imposible de parsear, artefacto de entrada inexistente, fallos parciales de la edición completa o fallos parciales al eliminar artefactos |
+| `2` | Error de uso: comando desconocido, opción inválida, plataforma desconocida, `--select` sin terminal interactiva, falta `--number` sin terminal y sin `--all-articles`, combinación inválida de `--number` con `--all-articles`, combinación inválida de `--write-article`/`--article`, `clean` sin terminal para confirmar o `--days` no positivo |
 | `130` | Interrupción con Ctrl+C |
 
 ## 8. Subsistema de Tríptico Impreso

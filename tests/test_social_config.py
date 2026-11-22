@@ -13,6 +13,7 @@ from news_agent.config import (
     SOCIAL_CONFIG_PATH,
     SOCIAL_FONT_BOLD_CANDIDATES,
     SOCIAL_FONT_REGULAR_CANDIDATES,
+    SOCIAL_IG_CAROUSEL_SLIDES,
     SOCIAL_IG_MAX_HASHTAGS,
     SOCIAL_JSON_MAX_RETRIES,
     SOCIAL_MAX_HOOKS,
@@ -66,6 +67,9 @@ class TestSocialConstants:
 
     def test_instagram_hashtag_cap_is_generous(self):
         assert SOCIAL_IG_MAX_HASHTAGS >= 10
+
+    def test_instagram_carousel_declares_three_summary_slides(self):
+        assert SOCIAL_IG_CAROUSEL_SLIDES == 3
 
 
 # ---------------------------------------------------------------------------
@@ -305,6 +309,71 @@ class TestLoadSocialConfig:
         with pytest.raises(ConfigurationError, match="no está declarado"):
             load_social_config(path)
 
+    def test_instagram_carousel_is_optional(self, tmp_path, social_config):
+        payload = copy.deepcopy(social_config)
+        payload.pop("instagram_carousel")
+        path = tmp_path / "sin-carrusel.json"
+        path.write_text(json.dumps(payload), encoding="utf-8")
+
+        config = load_social_config(path)
+
+        assert "instagram_carousel" not in config
+
+    def test_instagram_carousel_with_a_wrong_type_raises(
+        self, tmp_path, social_config
+    ):
+        payload = {**social_config, "instagram_carousel": "vertical"}
+        path = tmp_path / "carrusel-malo.json"
+        path.write_text(json.dumps(payload), encoding="utf-8")
+
+        with pytest.raises(ConfigurationError, match="objeto JSON"):
+            load_social_config(path)
+
+    def test_instagram_carousel_with_an_unknown_field_raises(
+        self, tmp_path, social_config
+    ):
+        payload = copy.deepcopy(social_config)
+        payload["instagram_carousel"]["inventado"] = 1
+        path = tmp_path / "carrusel-campo.json"
+        path.write_text(json.dumps(payload), encoding="utf-8")
+
+        with pytest.raises(ConfigurationError, match="inventado"):
+            load_social_config(path)
+
+    def test_instagram_carousel_pointing_to_an_unknown_format_raises(
+        self, tmp_path, social_config
+    ):
+        payload = copy.deepcopy(social_config)
+        payload["instagram_carousel"]["format"] = "formato_inexistente"
+        path = tmp_path / "carrusel-formato.json"
+        path.write_text(json.dumps(payload), encoding="utf-8")
+
+        with pytest.raises(ConfigurationError, match="no está declarado"):
+            load_social_config(path)
+
+    def test_instagram_carousel_rejects_a_non_instagram_format(
+        self, tmp_path, social_config
+    ):
+        payload = copy.deepcopy(social_config)
+        payload["instagram_carousel"]["format"] = "x"
+        path = tmp_path / "carrusel-x.json"
+        path.write_text(json.dumps(payload), encoding="utf-8")
+
+        with pytest.raises(ConfigurationError, match="formato de Instagram"):
+            load_social_config(path)
+
+    def test_instagram_carousel_rejects_a_horizontal_format(
+        self, tmp_path, social_config
+    ):
+        payload = copy.deepcopy(social_config)
+        payload["banners"]["sizes"]["instagram_apaisado"] = [1920, 1080]
+        payload["instagram_carousel"]["format"] = "instagram_apaisado"
+        path = tmp_path / "carrusel-horizontal.json"
+        path.write_text(json.dumps(payload), encoding="utf-8")
+
+        with pytest.raises(ConfigurationError, match="vertical"):
+            load_social_config(path)
+
     def test_template_with_an_empty_list_raises(self, tmp_path, social_config):
         payload = {
             **social_config,
@@ -332,13 +401,28 @@ class TestRepositoryConfigCoherence:
             for target in targets:
                 assert target in sizes
 
-    def test_declares_the_four_platform_formats(self, social_config):
+    def test_declares_the_platform_formats(self, social_config):
         assert set(social_config["banners"]["sizes"]) == {
             "x",
             "facebook",
             "instagram_feed",
             "instagram_story",
+            "instagram_portrait",
         }
+
+    def test_declares_a_vertical_instagram_carousel_format(self, social_config):
+        carousel = social_config["instagram_carousel"]
+        size = social_config["banners"]["sizes"][carousel["format"]]
+
+        assert carousel["format"].startswith("instagram_")
+        assert size[1] > size[0]
+
+    def test_the_carousel_uses_a_four_by_three_vertical_format(self, social_config):
+        carousel = social_config["instagram_carousel"]
+        width, height = social_config["banners"]["sizes"][carousel["format"]]
+
+        assert (width, height) == (1080, 1440)
+        assert height * 3 == width * 4
 
     def test_declares_the_headline_and_quote_templates(self, social_config):
         templates = social_config["banners"]["templates"]

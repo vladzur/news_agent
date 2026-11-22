@@ -156,6 +156,11 @@ class TestSocializeMode:
             "prompt_count": 1,
             "banner_count": 1,
             "banner_failed": 0,
+            "instagram_dir": bundle / "instagram",
+            "carousel_paths": [bundle / "instagram" / "01_cover.png"],
+            "carousel_count": 5,
+            "carousel_failed": 0,
+            "carousel_format": "instagram_portrait",
         }
 
     @pytest.fixture
@@ -227,6 +232,14 @@ class TestSocializeMode:
         assert str(fake_result["bundle_dir"]) in output
         assert fake_result["title"] in output
         assert str(fake_result["copy_path"]) in output
+
+    def test_prints_the_instagram_carousel(self, capsys, captured, fake_result):
+        main(ARGS)
+
+        output = capsys.readouterr().out
+        assert "Slides de Instagram: 5" in output
+        assert "instagram_portrait" in output
+        assert str(fake_result["instagram_dir"]) in output
 
     def test_reports_failed_banners(self, capsys, monkeypatch, fake_result):
         failed = {**fake_result, "banner_failed": 2, "banner_count": 4}

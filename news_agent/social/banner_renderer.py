@@ -57,10 +57,27 @@ _FONT_SIZES: dict[str, tuple[int, int]] = {
     "kicker": (26, 14),
     "attribution": (32, 18),
     "body": (24, 14),
+    # Roles propios del carrusel vertical de Instagram. Se declaran aquí para
+    # que el carrusel comparta la tabla tipográfica y el ajuste automático de
+    # los banners en lugar de duplicar tamaños.
+    "deck": (34, 20),
+    "slide_body": (60, 32),
+    "signature_name": (76, 40),
+    "signature_body": (36, 20),
+    "signature_web": (54, 28),
 }
 
 # Roles que se resuelven con una fuente en negrita
-_BOLD_ROLES = frozenset({"headline", "kicker", "quote", "attribution"})
+_BOLD_ROLES = frozenset(
+    {
+        "headline",
+        "kicker",
+        "quote",
+        "attribution",
+        "signature_name",
+        "signature_web",
+    }
+)
 
 # Altura del logo como fracción del ancho del lienzo, tope admisible de esa
 # proporción y ancho máximo que puede ocupar sin invadir la etiqueta de marca
@@ -306,6 +323,23 @@ def _min_size(role: str, scale: float) -> int:
     return max(round(minimum * scale), 8)
 
 
+def base_size(role: str, scale: float) -> int:
+    """Devuelve el tamaño base de un rol tipográfico ya escalado.
+
+    Es el punto de entrada público para que otras piezas gráficas del
+    subsistema —como el carrusel de Instagram— compartan la misma escala
+    tipográfica que los banners sin duplicar la tabla de tamaños.
+
+    Args:
+        role: Rol tipográfico.
+        scale: Factor de escala respecto del ancho de referencia.
+
+    Returns:
+        int: Tamaño en píxeles.
+    """
+    return _base_size(role, scale)
+
+
 def _line_height(font: ImageFont.FreeTypeFont | ImageFont.ImageFont) -> int:
     """Devuelve el alto de línea de una fuente.
 
@@ -317,6 +351,18 @@ def _line_height(font: ImageFont.FreeTypeFont | ImageFont.ImageFont) -> int:
     """
     ascent, descent = font.getmetrics()
     return ascent + descent
+
+
+def line_height(font: ImageFont.FreeTypeFont | ImageFont.ImageFont) -> int:
+    """Devuelve el alto de línea de una fuente ya cargada.
+
+    Args:
+        font: Fuente cargada.
+
+    Returns:
+        int: Alto de línea en píxeles.
+    """
+    return _line_height(font)
 
 
 # ---------------------------------------------------------------------------
@@ -416,6 +462,20 @@ def _block_height(lines: list[str], font: Any, line_gap: int) -> int:
         return 0
     line_height = _line_height(font)
     return len(lines) * line_height + max(0, len(lines) - 1) * line_gap
+
+
+def block_height(lines: list[str], font: Any, line_gap: int) -> int:
+    """Calcula el alto total de un bloque de líneas ya envuelto.
+
+    Args:
+        lines: Líneas del bloque.
+        font: Fuente del bloque.
+        line_gap: Separación adicional entre líneas, en píxeles.
+
+    Returns:
+        int: Alto total en píxeles.
+    """
+    return _block_height(lines, font, line_gap)
 
 
 def fit_text(
@@ -566,9 +626,32 @@ def _draw_background_shapes(
     )
 
 
+def draw_background(
+    draw: ImageDraw.ImageDraw,
+    width: int,
+    height: int,
+    palette: dict[str, tuple[int, int, int]],
+    scale: float,
+    surface: bool = False,
+) -> None:
+    """Dibuja las formas de fondo de la identidad visual.
+
+    Args:
+        draw: Lienzo de dibujo.
+        width: Ancho del lienzo.
+        height: Alto del lienzo.
+        palette: Paleta de marca resuelta.
+        scale: Factor de escala respecto del ancho de referencia.
+        surface: Si es True, el fondo es el color de superficie de la marca.
+    """
+    _draw_background_shapes(draw, width, height, palette, scale, surface=surface)
+
+
 def prepare_logo(
     config: dict[str, Any],
     canvas_width: int,
+    height_ratio: float | None = None,
+    max_width_ratio: float = _LOGO_MAX_WIDTH_RATIO,
 ) -> Image.Image | None:
     """Carga el logo de la marca y lo deja listo para pegar en el banner.
 
@@ -579,6 +662,11 @@ def prepare_logo(
     Args:
         config: Configuración de marca.
         canvas_width: Ancho del lienzo en píxeles.
+        height_ratio: Proporción de alto pedida explícitamente. Si es None se
+                      usa ``brand.logo_height_ratio`` o el valor por defecto.
+        max_width_ratio: Tope de ancho como fracción del lienzo. Permite que
+                         una pieza centrada, como la firma del carrusel, use
+                         un logo más grande sin invadir otros elementos.
 
     Returns:
         Image.Image | None: Logo recortado y escalado, o None si la marca no
@@ -608,11 +696,19 @@ def prepare_logo(
     if bounds:
         logo = logo.crop(bounds)
 
-    target_height = max(round(canvas_width * _logo_height_ratio(brand)), 12)
+    ratio = (
+        height_ratio
+        if isinstance(height_ratio, (int, float))
+        and not isinstance(height_ratio, bool)
+        and 0 < float(height_ratio) <= 1.0
+        else _logo_height_ratio(brand)
+    )
+    target_height = max(round(canvas_width * float(ratio)), 12)
     target_width = max(round(logo.width * (target_height / logo.height)), 1)
 
-    # El logo no puede invadir la etiqueta de marca del encabezado
-    max_width = max(round(canvas_width * _LOGO_MAX_WIDTH_RATIO), 12)
+    # El logo no puede invadir los demás elementos del diseño
+    width_ratio = min(max(float(max_width_ratio), 0.01), 1.0)
+    max_width = max(round(canvas_width * width_ratio), 12)
     if target_width > max_width:
         target_width = max_width
         target_height = max(round(logo.height * (target_width / logo.width)), 1)
@@ -744,6 +840,27 @@ def _content_box(
     content_width = max(width - 2 * margin, 1)
 
     return margin, top, bottom, content_width
+
+
+def content_box(
+    width: int,
+    height: int,
+    scale: float,
+    safe_zone: dict[str, Any] | None,
+) -> tuple[int, int, int, int]:
+    """Calcula la caja útil de una pieza gráfica.
+
+    Args:
+        width: Ancho del lienzo.
+        height: Alto del lienzo.
+        scale: Factor de escala respecto del ancho de referencia.
+        safe_zone: Zonas seguras superior e inferior, si la plataforma las tiene.
+
+    Returns:
+        tuple[int, int, int, int]: Margen lateral, borde superior, borde
+        inferior y ancho útil.
+    """
+    return _content_box(width, height, scale, safe_zone)
 
 
 # ---------------------------------------------------------------------------

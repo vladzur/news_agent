@@ -31,12 +31,24 @@ from ..orchestrator import setup_logging
 from .article_source import ArticleParseError, parse_article_file
 from .banner_renderer import render_all_banners
 from .copy_generator import SocialCopyValidationError, generate_social_copy
-from .models import ArticleSource, BannerSpec, SocialCopy, VisualPrompt
+from .instagram_renderer import (
+    InstagramRenderError,
+    render_instagram_carousel,
+    resolve_carousel_layout,
+)
+from .models import (
+    ArticleSource,
+    BannerSpec,
+    InstagramSlideSpec,
+    SocialCopy,
+    VisualPrompt,
+)
 from .platform_specs import ALL_PLATFORMS
 from .visual_prompts import VisualPromptGenerationError, generate_visual_prompt
 from .writer import (
     assets_dir,
     build_bundle_dir,
+    instagram_dir,
     save_copy_json,
     save_manifest,
     save_platform_markdown,
@@ -248,6 +260,54 @@ def _render_banner_stage(
         return []
 
 
+def _render_carousel_stage(
+    copy: SocialCopy,
+    config: dict[str, Any],
+    bundle_dir: Path,
+) -> tuple[str | None, Path | None, list[InstagramSlideSpec]]:
+    """Renderiza el carrusel vertical de Instagram, sin abortar el bundle.
+
+    Args:
+        copy: Copys generados con los slides de resumen.
+        config: Configuración de marca.
+        bundle_dir: Directorio del bundle.
+
+    Returns:
+        tuple[str | None, Path | None, list[InstagramSlideSpec]]: Nombre del
+        formato, subdirectorio del carrusel y slides renderizados. Si el
+        formato no es utilizable o falla la preparación del directorio, se
+        devuelve ``(None, None, [])``.
+    """
+    try:
+        format_name, _width, _height, _safe_zone = resolve_carousel_layout(config)
+    except InstagramRenderError as exc:
+        logger.error(
+            "No se pudo resolver el formato del carrusel de Instagram: %s",
+            exc,
+        )
+        return None, None, []
+
+    try:
+        destination = instagram_dir(bundle_dir)
+    except OSError as exc:
+        logger.error(
+            "No se pudo preparar la carpeta del carrusel de Instagram: %s", exc
+        )
+        return format_name, None, []
+
+    try:
+        slides = render_instagram_carousel(copy, config, destination)
+    except (OSError, InstagramRenderError) as exc:
+        logger.error(
+            "No se pudo renderizar el carrusel de Instagram: %s. "
+            "El bundle se escribirá sin los slides.",
+            exc,
+        )
+        return format_name, destination, []
+
+    return format_name, destination, slides
+
+
 # ---------------------------------------------------------------------------
 # API pública
 # ---------------------------------------------------------------------------
@@ -271,7 +331,8 @@ def run_socialize(
                      ``social_config.json``.
         platforms: Plataformas a preparar. Por defecto, todas.
         verbose: Si es True, activa logging DEBUG.
-        skip_banners: Si es True, omite el renderizado con Pillow.
+        skip_banners: Si es True, omite el renderizado con Pillow, incluido
+                      el carrusel de Instagram.
         skip_prompts: Si es True, omite el prompt visual en inglés.
 
     Returns:
@@ -288,6 +349,12 @@ def run_socialize(
             - prompt_count (int): 1 si se generó el prompt visual, 0 si no.
             - banner_count (int): Cantidad de banners renderizados.
             - banner_failed (int): Cantidad de banners que fallaron.
+            - instagram_dir (Path | None): Subdirectorio exclusivo del
+              carrusel, o None si no se generó.
+            - carousel_paths (list[Path]): Rutas de los slides verticales.
+            - carousel_count (int): Cantidad de slides renderizados.
+            - carousel_failed (int): Cantidad de slides que fallaron.
+            - carousel_format (str | None): Formato vertical usado.
 
     Raises:
         ValueError: Si se pidió una plataforma desconocida.
@@ -378,6 +445,33 @@ def run_socialize(
         banners = _render_banner_stage(copy, config, bundle_dir, selected_platforms)
 
     # -------------------------------------------------------------------
+    # Carrusel vertical de Instagram
+    # -------------------------------------------------------------------
+    carousel_slides: list[InstagramSlideSpec] = []
+    carousel_dir_path: Path | None = None
+    carousel_format: str | None = None
+    if skip_banners:
+        logger.info("Carrusel de Instagram omitido junto con los banners.")
+    elif "instagram" not in selected_platforms:
+        logger.info(
+            "Carrusel de Instagram omitido: la plataforma no fue solicitada."
+        )
+    else:
+        carousel_format, carousel_dir_path, carousel_slides = (
+            _render_carousel_stage(copy, config, bundle_dir)
+        )
+        if carousel_slides:
+            rendered_slides = sum(
+                1 for slide in carousel_slides if slide.path is not None
+            )
+            logger.info(
+                "Carrusel de Instagram: %d/%d slide(s) en %s.",
+                rendered_slides,
+                len(carousel_slides),
+                carousel_dir_path,
+            )
+
+    # -------------------------------------------------------------------
     # Escritura del bundle
     # -------------------------------------------------------------------
     copy_path = save_copy_json(copy, bundle_dir)
@@ -402,9 +496,15 @@ def run_socialize(
         article=article,
         prompt_status=prompt_status,
         prompt_error=prompt_error,
+        carousel_slides=carousel_slides,
+        carousel_dir_path=carousel_dir_path,
+        carousel_format=carousel_format,
     )
 
     asset_paths = [banner.path for banner in banners if banner.path is not None]
+    carousel_paths = [
+        slide.path for slide in carousel_slides if slide.path is not None
+    ]
     logger.info("=== Bundle de RRSS completado: %s ===", bundle_dir)
 
     return {
@@ -420,4 +520,9 @@ def run_socialize(
         "prompt_count": 1 if prompt else 0,
         "banner_count": len(asset_paths),
         "banner_failed": len(banners) - len(asset_paths),
+        "instagram_dir": carousel_dir_path,
+        "carousel_paths": carousel_paths,
+        "carousel_count": len(carousel_paths),
+        "carousel_failed": len(carousel_slides) - len(carousel_paths),
+        "carousel_format": carousel_format,
     }

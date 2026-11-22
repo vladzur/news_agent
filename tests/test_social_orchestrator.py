@@ -127,6 +127,11 @@ class TestRunSocialize:
             "prompt_count",
             "banner_count",
             "banner_failed",
+            "instagram_dir",
+            "carousel_paths",
+            "carousel_count",
+            "carousel_failed",
+            "carousel_format",
         } <= set(result)
 
     def test_creates_the_bundle_inside_the_output_directory(self, run):
@@ -202,6 +207,32 @@ class TestRunSocialize:
             assert path.is_file()
             assert path.suffix == ".png"
 
+    def test_renders_the_instagram_carousel_in_its_own_subdirectory(self, run):
+        runner, _ = run
+
+        result = runner()
+
+        assert result["carousel_count"] == 5
+        assert result["carousel_failed"] == 0
+        assert result["carousel_format"] == "instagram_portrait"
+        assert result["instagram_dir"] is not None
+        assert result["instagram_dir"].name == "instagram"
+        assert result["instagram_dir"].parent == result["bundle_dir"]
+        for path in result["carousel_paths"]:
+            assert path.is_file()
+            assert path.parent == result["instagram_dir"]
+            assert path.suffix == ".png"
+
+    def test_every_instagram_slide_is_vertical(self, run):
+        runner, _ = run
+        from PIL import Image
+
+        result = runner()
+
+        for path in result["carousel_paths"]:
+            with Image.open(path) as image:
+                assert image.size == (1080, 1440)
+
     def test_writes_the_manifest(self, run):
         runner, _ = run
 
@@ -212,6 +243,9 @@ class TestRunSocialize:
         assert payload["visual_prompts"]["status"] == "generated"
         assert payload["visual_prompts"]["count"] == 1
         assert payload["visual_prompts"]["treatment"] == "photorealistic"
+        assert payload["instagram_carousel"]["status"] == "generated"
+        assert payload["instagram_carousel"]["rendered"] == 5
+        assert payload["instagram_carousel"]["format"] == "instagram_portrait"
 
     def test_uses_both_llm_stages(self, run, llm):
         runner, _ = run
@@ -236,6 +270,16 @@ class TestRunSocialize:
         assert result["platforms"] == ["x"]
         assert set(result["markdown_paths"]) == {"x"}
         assert result["banner_count"] == 1
+        assert result["carousel_count"] == 0
+        assert result["instagram_dir"] is None
+
+    def test_renders_only_the_requested_platforms(self, run):
+        runner, _ = run
+
+        result = runner(platforms=["instagram"])
+
+        assert result["carousel_count"] == 5
+        assert result["instagram_dir"].is_dir()
 
     def test_can_skip_the_banners(self, run):
         runner, _ = run
@@ -244,6 +288,8 @@ class TestRunSocialize:
 
         assert result["banner_count"] == 0
         assert result["asset_paths"] == []
+        assert result["carousel_count"] == 0
+        assert result["instagram_dir"] is None
         assert result["copy_path"].is_file()
 
     def test_can_skip_the_visual_prompts(self, run):
@@ -396,3 +442,23 @@ class TestRunSocializeFailSafe:
 
         assert result["banner_count"] == 0
         assert result["copy_path"].is_file()
+
+    def test_keeps_the_bundle_when_the_instagram_carousel_fails(
+        self, run, monkeypatch
+    ):
+        runner, _ = run
+
+        def _raise(*args, **kwargs):
+            raise OSError("no se puede escribir en disco")
+
+        monkeypatch.setattr(orchestrator, "render_instagram_carousel", _raise)
+
+        result = runner()
+
+        assert result["carousel_count"] == 0
+        assert result["copy_path"].is_file()
+        assert result["manifest_path"].is_file()
+        manifest = json.loads(
+            result["manifest_path"].read_text(encoding="utf-8")
+        )
+        assert manifest["instagram_carousel"]["status"] == "skipped"

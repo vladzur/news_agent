@@ -20,7 +20,13 @@ import logging
 from datetime import datetime, timezone
 from typing import Any
 
-from ..config import SOCIAL_MAX_HOOKS, SOCIAL_MIN_HOOKS
+from ..config import (
+    SOCIAL_IG_CAROUSEL_SLIDES,
+    SOCIAL_IG_SLIDE_FIGURE_MAX_CHARS,
+    SOCIAL_IG_SLIDE_TEXT_MAX_CHARS,
+    SOCIAL_MAX_HOOKS,
+    SOCIAL_MIN_HOOKS,
+)
 from .models import ArticleSource, SocialCopy
 from .platform_specs import ALL_PLATFORMS, platform_specs, thread_bounds
 
@@ -95,6 +101,22 @@ una pregunta que invite a comentar.
 línea.
 - Cierra con un llamado a la acción (leer la nota completa, opinar, compartir).
 - Los hashtags van separados del texto, como palabras sueltas sin #.
+- Además de la caption, la publicación es un **carrusel vertical** de cinco \
+piezas: portada, tres slides de resumen y una firma de marca. Los tres slides \
+son el corazón de la pieza: quien los lee debe quedar informado de lo esencial \
+sin abrir la nota.
+- `instagram.slides` trae **exactamente tres** objetos, en orden de lectura. \
+Cada slide cubre un punto distinto y complementario: el primero sitúa el \
+conflicto, el segundo aporta el dato o el detalle que lo prueba, y el tercero \
+explica la consecuencia o lo que está en juego. No repitas el titular de la \
+portada ni el mismo argumento con otras palabras.
+- Cada slide tiene un solo campo de texto, `text`, **sin titular aparte**. El \
+texto es la idea completa y debe entenderse solo, como si fuera la única frase \
+de la pantalla. Escríbelo en una o dos oraciones, con máximo 240 caracteres.
+- `figure` es opcional: si lo usas, debe ser una cifra o un dato presente en \
+el artículo, no una estimación.
+- Los slides no llevan emojis, hashtags, comillas decorativas, números de \
+slide ni el prefijo "Slide 1".
 
 ## Prohibiciones
 
@@ -228,6 +250,11 @@ def _render_platform_limits(parts: list[str], config: dict[str, Any]) -> None:
             (f"- **Instagram**: caption de máximo "
             f"{specs['instagram']['caption_max_chars']} caracteres. Máximo "
             f"{specs['instagram']['max_hashtags']} hashtags."),
+            ("- **Carrusel de Instagram**: exactamente "
+            f"{SOCIAL_IG_CAROUSEL_SLIDES} slides de resumen, sin titular. Cada "
+            f"`text` de máximo {SOCIAL_IG_SLIDE_TEXT_MAX_CHARS} caracteres y "
+            f"cada `figure` de máximo {SOCIAL_IG_SLIDE_FIGURE_MAX_CHARS} "
+            "caracteres."),
             (f"- **hooks**: entre {SOCIAL_MIN_HOOKS} y {SOCIAL_MAX_HOOKS} "
             "variantes, cada una de máximo 120 caracteres."),
             ("- **summary**: entre 3 y 5 bullets de síntesis ejecutiva, cada "
@@ -277,7 +304,21 @@ def _render_copy_schema(parts: list[str]) -> None:
             "  },",
             '  "instagram": {',
             '    "caption": "Texto de la publicación",',
-            '    "hashtags": ["Chile", "LaAraucania"]',
+            '    "hashtags": ["Chile", "LaAraucania"],',
+            '    "slides": [',
+            "      {",
+            '        "text": "Idea principal del primer punto, en una o dos oraciones.",',
+            '        "figure": "44 años"',
+            "      },",
+            "      {",
+            '        "text": "Idea principal del segundo punto, en una o dos oraciones.",',
+            '        "figure": ""',
+            "      },",
+            "      {",
+            '        "text": "Idea principal del tercer punto, en una o dos oraciones.",',
+            '        "figure": "más de 200"',
+            "      }",
+            "    ]",
             "  }",
             "}",
             "",
@@ -285,6 +326,12 @@ def _render_copy_schema(parts: list[str]) -> None:
             "- `x.thread[0]` debe ser idéntico a `x.hook_tweet`.",
             ("- Los campos `hashtags` contienen palabras sueltas, sin el "
             "símbolo # y sin espacios internos."),
+            (f"- `instagram.slides` debe traer exactamente "
+            f"{SOCIAL_IG_CAROUSEL_SLIDES} objetos, en el orden en que se leerán "
+            "en el carrusel. Cada objeto lleva solo `text` y `figure`: no hay "
+            "`title` ni `body`."),
+            ("- Cada `figure` puede quedar vacío; si se completa, la cifra debe "
+            "existir textualmente en el artículo."),
             ("- `alt_text` describe la imagen promocional que acompañará al "
             "copy, pensando en lectores con discapacidad visual."),
             (f"- El JSON debe cubrir las plataformas: "
