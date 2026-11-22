@@ -23,24 +23,24 @@ Flujo automatizado que:
 6. **Guardado intermedio de depuración (opcional)** — Con el flag `--debug`, guarda un archivo JSON con los artículos procesados (resumen RSS original, contenido extraído y resumen final) para comparar y ajustar el prompt.
 7. **Análisis con IA** — Envía los artículos filtrados a DeepSeek-Flash con un system prompt que define la identidad editorial de La Chispa Sur (izquierda independiente, rigor periodístico, distribución 3 propuestas nacionales + 2 internacionales, foco territorial en Villarrica y La Araucanía).
 8. **Reporte Markdown** — Genera un archivo `pauta_semanal_AAAA_MM_DD.md` con cinco propuestas estructuradas (tres nacionales y dos internacionales): título gancho, enfoque editorial, puntos clave a desarrollar y fuentes sugeridas para ampliar. La cabecera (fecha y cantidad de notas) se genera automáticamente desde el código para garantizar precisión.
-9. **Companion JSON de fuentes** — Extrae las fuentes sugeridas desde el texto de la pauta, las empareja determinísticamente con los artículos del pipeline por nombre de medio y similitud temática (keywords), enriquece los artículos emparejados con contenido completo y guarda un archivo `pauta_semanal_AAAA_MM_DD_companion.json`. Este archivo permite que el redactor de artículos reciba el contenido completo de las fuentes correctas.
+9. **Companion JSON de fuentes** — Resuelve las referencias `[art. N]` que el modelo escribe en la pauta contra los artículos del pipeline; si la pauta no trae referencias utilizables, cae a un emparejamiento por nombre de medio y similitud temática (keywords). Enriquece los artículos emparejados con contenido completo y guarda un archivo `pauta_semanal_AAAA_MM_DD_companion.json`. Este archivo permite que el redactor de artículos reciba el contenido completo de las fuentes correctas.
 
 ### 2. Escritura de artículo completo con fuentes verificadas
 
 Toma una propuesta específica de la pauta (1 a 5) y la expande a un artículo de **~1000 palabras** con material de origen real y verificado:
 
 1. **Parseo de la pauta** — Extrae título, enfoque editorial, puntos clave y fuentes sugeridas desde el archivo markdown generado.
-2. **Emparejamiento determinista de fuentes** — En lugar de depender de números de artículo auto-reportados por el LLM (poco fiables), el sistema:
-   - Extrae los nombres de medios y descripciones temáticas de la sección «Fuentes Sugeridas para Ampliar» de cada propuesta.
-   - Empareja cada fuente con los artículos del pipeline por **nombre del medio** (comparación flexible: case-insensitive, parcial, por primera palabra) y **similitud temática** (solapamiento de keywords entre la descripción de la fuente y el título + contenido del artículo, usando índice Jaccard con bonus por keywords en el título).
+2. **Emparejamiento de fuentes** — Prioriza las referencias `[art. N]` que el modelo escribe en la pauta y usa el matching por medio + keywords como respaldo:
+   - Extrae las referencias `[art. N]` de cada propuesta y las resuelve directamente contra los artículos filtrados del pipeline. Las referencias fuera de rango se ignoran.
+   - Si una propuesta no trae referencias válidas, extrae los nombres de medios y descripciones temáticas de la sección «Fuentes Sugeridas para Ampliar» y las empareja por **nombre del medio** (comparación flexible: case-insensitive, parcial, por primera palabra) y **similitud temática** (solapamiento de keywords entre la descripción de la fuente y el título + contenido del artículo, usando índice Jaccard con bonus por keywords en el título).
    - Enriquece los artículos emparejados con contenido completo forzando extracción vía `trafilatura` si es necesario.
    - Guarda un archivo **companion JSON** (`pauta_semanal_AAAA_MM_DD_companion.json`) con el contenido completo de cada artículo fuente.
 3. **Prompt enriquecido** — El redactor recibe una sección `## Material de origen disponible` con el contenido completo de los artículos fuente correctos para su propuesta, permitiéndole escribir con datos verificables en lugar de inventar o depender de memoria.
 4. **Redacción del artículo** — Usa un system prompt de redactor periodístico (identidad La Chispa Sur) que exige trazabilidad de cada dato a las fuentes proporcionadas.
-5. **Editor de portada** — Una segunda llamada, con rol de editor de portada, devuelve **tres propuestas diferenciadas** de titular y bajada: denuncia/tesis política, narrativo/humano y analítico/geopolítico. Los largos se validan en código (12-16 palabras el titular, 25-45 la bajada): si el modelo se desvía se reintenta una vez y, si vuelve a fallar, se recorta por código con aviso. La **propuesta 1 se aplica** como titular y bajada del artículo; las tres quedan en un apéndice `## 📰 Propuestas de portada` al final del archivo para cambiarlas sin repetir la generación. Si esta etapa falla, la nota se guarda igual con el titular del redactor.
+5. **Editor de portada** — Una segunda llamada, con rol de editor de portada, devuelve **tres propuestas diferenciadas** de titular y bajada: denuncia/tesis política, narrativo/humano y analítico/geopolítico. Los largos se validan en código (12-16 palabras el titular, 25-45 la bajada): si el modelo se desvía se reintenta una vez y, si vuelve a fallar, solo se recortan los textos que exceden el máximo; los que quedan cortos se conservan con una advertencia en el log. La **propuesta 1 se aplica** como titular y bajada del artículo; las tres quedan en un apéndice `## 📰 Propuestas de portada` al final del archivo para cambiarlas sin repetir la generación. Si esta etapa falla, la nota se guarda igual con el titular del redactor.
 6. **Artículo final** — Titular y bajada de portada, lead, desarrollo por secciones con subtítulos, fuentes citadas y el apéndice de propuestas. Guardado como `articulo_N_slug-del-titulo.md`. El apéndice está marcado como no publicable y el parser de RRSS lo excluye del material de origen.
 
-> **¿Por qué matching determinista y no números de artículo?** En pruebas reales, el LLM que genera la pauta frecuentemente asigna números de artículo incorrectos en el bloque de referencias (ej: mapear una propuesta sobre tala de bosque nativo en Villarrica a artículos sobre salmonicultura o conflictos en Líbano). El matching por nombre de medio + keywords extrae las fuentes directamente del texto de la pauta —que el LLM escribe de forma natural y confiable— y las cruza con los artículos del pipeline sin depender del auto-reporte del modelo.
+> **¿Por qué referencias primero y matching por medio como respaldo?** El prompt exige que el modelo cite cada artículo con `[art. N]`, y el sistema resuelve esa referencia de forma determinista contra los artículos del pipeline. Las referencias fuera de rango se descartan. Cuando la pauta no trae referencias utilizables —pautas antiguas o respuestas que ignoran la instrucción—, entra el matching por nombre de medio + keywords. Si el modelo inventa un número, la referencia puede apuntar al artículo equivocado: el sistema solo valida el rango, así que conviene revisar el companion antes de redactar una nota sensible.
 
 ### 3. Repurposing de artículos para redes sociales (RRSS)
 
@@ -113,7 +113,7 @@ python -m news_agent social --all
 python -m news_agent clean --days 90
 ```
 
-**Entradas implícitas:** si no se indica la pauta o el artículo, el CLI toma el más reciente del directorio correspondiente (`reportes/` o `articulos/`). Cuando `article` o `all` no reciben `--number`, preguntan por la terminal qué propuesta desarrollar, mostrando los cinco titulares; en un cron hay que pasar el número siempre, porque no hay terminal. `social` sigue la misma regla solo con `--select`: sin esa bandera toma el artículo más reciente y funciona igual en un cron.
+**Entradas implícitas:** si no se indica la pauta o el artículo, el CLI toma el más reciente del directorio correspondiente (`reportes/` o `articulos/`). Cuando `article` o `all` no reciben `--number`, preguntan por la terminal qué propuesta desarrollar, mostrando los cinco titulares; en un cron hay que pasar el número siempre, porque no hay terminal. `social` sigue la misma regla solo con `--select`: sin esa bandera ni `--all`, toma el artículo más reciente y funciona igual en un cron.
 
 **Sin argumentos no se ejecuta nada:** `python -m news_agent` a secas muestra la ayuda y sale con código 2. Antes arrancaba la generación de pauta completa —consumiendo tokens de la API— y escribía el resultado en el directorio actual.
 
@@ -127,20 +127,20 @@ python -m news_agent clean --days 90
 |--------|----------|-------------|
 | `--feeds RUTA` | `report`, `all` | JSON de configuración de feeds RSS (por defecto `rss_feeds.json`). |
 | `--output DIR` | `report`, `article`, `social`, `print` | Directorio de salida (por defecto `reportes/`, `articulos/`, `social/` o `impresos/`). |
-| `--base DIR` | `all`, `clean` | Directorio base del proyecto, del que se derivan `reportes/`, `articulos/`, `social/` e `impresos/` (por defecto `.`). |
+| `--base DIR` | `all`, `clean` | Directorio base del proyecto. En `all` se derivan `reportes/`, `articulos/`, `social/` e `impresos/`; en `clean` solo se usan `reportes/`, `articulos/` y `social/` (por defecto `.`). |
 | `--pauta RUTA` | `article`, `print` | Pauta a usar (por defecto, la más reciente de `reportes/`). |
 | `--article RUTA` | `social` | Artículo de origen (por defecto, el más reciente de `articulos/`). Excluyente con `--all` y `--select`. |
-| `--all` | `social` | Genera un bundle por cada artículo del directorio de origen. Si uno falla, continúa con los demás y termina con código 1. |
+| `--all` | `social` | Genera un bundle por cada artículo del directorio de origen. Si un artículo termina con un error controlado, continúa con los demás y termina con código 1. |
 | `--select` | `social` | Pregunta por la terminal cuál artículo procesar (requiere TTY). |
-| `--articles-dir DIR` | `social` | Directorio de artículos de origen para `--all` y `--select` (por defecto `articulos/`). |
+| `--articles-dir DIR` | `social` | Directorio de artículos de origen para `--all` y `--select`, y también para el artículo implícito cuando no se pasa `--article` (por defecto `articulos/`). |
 | `-n`, `--number N` | `article`, `all` | Propuesta a desarrollar (1 a 5). Si se omite, se pregunta por la terminal. |
 | `--platforms LISTA` | `social`, `all` | Plataformas separadas por comas (`x,facebook,instagram`). Por defecto, todas. |
 | `--social-config RUTA` | `social`, `all` | JSON de marca y plantillas (por defecto `social_config.json`). |
 | `--triptych-config RUTA` | `print`, `all` | JSON de geometría, tipografía y estilo del tríptico (por defecto `triptych_config.json`). |
-| `--skip-banners` / `--skip-prompts` | `social`, `all` | Omite los banners o el prompt visual, y con ellos la llamada al modelo que los genera. |
+| `--skip-banners` / `--skip-prompts` | `social`, `all` | Omite el renderizado local de banners con Pillow o la llamada al modelo que genera el prompt visual. Ninguna de las dos evita la llamada que produce los copys. |
 | `--days N` / `--target` / `--dry-run` / `-y` | `clean` | Antigüedad mínima, alcance, simulación y omisión de la confirmación. |
 | `--debug` | `report`, `all` | Guarda el JSON intermedio de artículos procesados para ajustar el prompt. |
-| `--verbose` | todos | Activa logging nivel DEBUG para diagnóstico detallado. |
+| `--verbose` | `report`, `article`, `social`, `print`, `all` | Activa logging nivel DEBUG para diagnóstico detallado. `clean` acepta la bandera por uniformidad del parser, pero todavía no la aplica. |
 
 #### Modos clásicos por banderas
 
@@ -156,8 +156,8 @@ Se mantienen por compatibilidad con los scripts y los cron ya desplegados:
 Flags de los modos clásicos:
 
 - `--verbose`: Activa logging nivel DEBUG para diagnóstico detallado.
-- `--output`: Directorio donde guardar los archivos generados. Si se omite se usa `reportes/`, `articulos/` o `social/` según el modo, y una ruta que apunte al directorio actual se rechaza: los modos clásicos tampoco escriben en el directorio actual. El tríptico impreso solo se genera desde el subcomando `print` (usa `impresos/` por defecto).
-- `--debug`: Guarda un archivo JSON intermedio en `debug/articulos_procesados_YYYY_MM_DD.json` con los datos completos de cada artículo (resumen RSS, contenido extraído y resumen final enviado al LLM) para depuración y ajuste de prompts.
+- `--output`: Directorio donde guardar los archivos generados. Si se omite se usa `reportes/`, `articulos/` o `social/` según el modo, y una ruta que apunte al directorio actual se rechaza: los modos clásicos tampoco escriben en el directorio actual. El tríptico impreso se genera desde `print` o desde el paso 4 de `all`; los modos clásicos no lo generan (usa `impresos/` por defecto).
+- `--debug`: Guarda un archivo JSON intermedio en `<directorio_de_salida>/debug/articulos_procesados_YYYY_MM_DD.json` con los datos completos de cada artículo (resumen RSS, contenido extraído y resumen final enviado al LLM) para depuración y ajuste de prompts. Con la salida por defecto queda en `reportes/debug/`.
 - `--socialize RUTA_ARTICULO`: Activa el modo de repurposing para redes sociales. No se puede combinar con `--feeds`, `--debug`, `--write-article` ni `--article`.
 - `--platforms LISTA`: Plataformas a preparar, separadas por comas (`x,facebook,instagram`). Por defecto, todas. Filtra los Markdown y los banners generados.
 - `--social-config RUTA`: Ruta al JSON de marca y plantillas (por defecto `social_config.json`).
@@ -181,7 +181,7 @@ news_agent/
 ├── content_enricher.py    # Extracción de texto completo con trafilatura + caché
 ├── news_filter.py         # Ventana temporal (96h / 4 días), limpieza HTML, truncado
 ├── intermediate_writer.py # Escritura de archivo JSON intermedio para depuración
-├── prompt_builder.py      # Construcción de system/user prompts editoriales (~740 líneas)
+├── prompt_builder.py      # Construcción de system/user prompts editoriales (~907 líneas)
 ├── llm_client.py          # Cliente DeepSeek vía SDK OpenAI (modo compatible)
 ├── report_writer.py       # Escritura de reportes .md y artículos
 ├── article_writer.py      # Parseo de pauta + escritura de artículo completo
@@ -221,7 +221,7 @@ news_agent/
 | Renderizado de assets | `Pillow` | Generación local de banners promocionales, sin servicios externos |
 | Lenguaje | Python ≥ 3.10 | stdlib + 6 dependencias |
 | Configuración | `.env` + `rss_feeds.json` + `social_config.json` + `triptych_config.json` | Separación de credenciales, fuentes, marca y geometría de imprenta |
-| Testing | `pytest`, `pytest-mock`, `freezegun` | Tests unitarios para todos los módulos |
+| Testing | `pytest`, `pytest-mock`, `freezegun`; `pytest-cov` opcional | Tests unitarios de los módulos del pipeline, RRSS y tríptico; `__main__` y las dataclasses se cubren de forma indirecta |
 
 ### Parámetros del modelo
 
@@ -400,9 +400,10 @@ Edita `social_config.json` para ajustar la identidad visual sin tocar código:
 | Campo | Obligatorio | Descripción |
 |-------|:-----------:|-------------|
 | `brand.name` | ✅ | Nombre de la marca, usado en las etiquetas de los banners |
+| `brand.tagline` | ❌ | Texto descriptivo de la marca; se conserva en la configuración, pero los banners actuales no lo dibujan |
 | `brand.colors` | ✅ | Paleta del diseño (`background`, `surface`, `text`, `muted`, `accent`, `accent_alt`) |
 | `brand.handle`, `brand.website` | ❌ | Barra inferior de los banners |
-| `brand.logo_path` | ❌ | Ruta a un PNG con transparencia. Si es `null` o el archivo no existe, el banner se genera sin logo y se advierte en el log |
+| `brand.logo_path` | ❌ | Ruta a un PNG con transparencia. Si es una ruta no vacía y el archivo no existe o no se puede abrir, el banner se genera sin logo y se advierte en el log. Si es `null` o está ausente, se genera sin logo y sin advertencia |
 | `brand.logo_height_ratio` | ❌ | Alto del logo como fracción del ancho del lienzo (por defecto `0.11`). El ancho se limita al 22% para que no invada la etiqueta de marca |
 | `brand.fonts.*` | ❌ | Ruta a un `.ttf` por rol. Si es `null`, se resuelven fuentes del sistema (DejaVu, Liberation, Noto o Arial) y, como último recurso, la fuente por defecto de Pillow |
 | `platforms` | ❌ | Límites por plataforma. Sobrescriben los valores por defecto de `config.py` |
@@ -443,7 +444,7 @@ Las constantes principales se encuentran en [news_agent/config.py](news_agent/co
 | `FULL_CONTENT_MAX_WORKERS` | `4` | Hilos paralelos para extracción de contenido |
 | `FULL_CONTENT_CACHE_DIR` | Ruta absoluta a `cache/` | Directorio para caché de contenido extraído (resuelto relativo al paquete, cron-safe) |
 | `SOURCE_ARTICLE_MAX_CHARS` | `2000` | Caracteres máximos de contenido fuente por artículo en el prompt del redactor |
-| `COMPANION_MAX_ARTICLES_PER_SOURCE` | `3` | Máximo de artículos del mismo medio incluidos en el companion JSON de fuentes |
+| `COMPANION_MAX_ARTICLES_PER_SOURCE` | `3` | Máximo de artículos del mismo medio incluidos por el fallback de matching por medio; las referencias `[art. N]` no pasan por este tope |
 | `SOCIAL_MAX_TOKENS` | `8192` | Límite de tokens para la generación de copys de RRSS |
 | `SOCIAL_TEMPERATURE` | `0.4` | Temperatura de los copys: creativa, pero fiel a los hechos del artículo |
 | `SOCIAL_VISUAL_MAX_TOKENS` | `4096` | Límite de tokens para la generación del prompt visual |
@@ -484,7 +485,7 @@ Para ejecutar el agente de forma semanal (recomendado: domingo a las 23:00 o lun
 0 6 1 * * cd /ruta/al/news_agent && /ruta/al/.venv/bin/python -m news_agent clean --days 90 --yes
 ```
 
-> En un cron no hay terminal: `all` y `article` necesitan `--number N`, y `clean` necesita `--yes`.
+> En un cron no hay terminal: `all` y `article` necesitan `--number N`; `all` resuelve ese número y `--platforms` después del primer paso, así que conviene validarlos antes de lanzarlo. `clean` necesita `--yes` o `--dry-run`.
 
 ---
 
@@ -499,7 +500,7 @@ El agente implementa fail-safe en cada etapa del pipeline:
 - **API key ausente** → error explícito de configuración al inicio.
 - **API devuelve vacío** → se reintenta la llamada sin razonamiento y con más presupuesto. Si el reintento tampoco devuelve contenido visible, aborta con un mensaje claro; el razonamiento interno nunca se usa como resultado.
 - **Respuesta sin estructura de artículo** → si el texto no trae titular de nivel 1 y subtítulos de sección, se descarta y se aborta sin escribir archivo, para no publicar contenido inválido.
-- **Directorio de salida inexistente** → `IOError` antes de escribir.
+- **Directorio de salida inexistente** → el CLI lo crea automáticamente; si la ruta no se puede crear, la ejecución falla antes de escribir.
 - **Configuración de scraping inválida** → error descriptivo al cargar `rss_feeds.json` si faltan selectores obligatorios.
 - **Respuesta sin JSON válido en RRSS** → se reintenta la llamada con una nota de corrección, hasta `SOCIAL_JSON_MAX_RETRIES` veces; el JSON se extrae de forma defensiva (bloques de código, texto alrededor, comas finales sueltas).
 - **Copys incompletos** → se reintenta; si se agotan los intentos, aborta sin escribir un bundle a medias.
@@ -545,9 +546,9 @@ El agente implementa fail-safe en cada etapa del pipeline:
 ...
 ```
 
-### Archivo de depuración (`debug/articulos_procesados_YYYY_MM_DD.json`)
+### Archivo de depuración (`<salida>/debug/articulos_procesados_YYYY_MM_DD.json`)
 
-Al usar `--debug`, se genera un JSON con cada artículo procesado, permitiendo comparar:
+Al usar `--debug`, se genera un JSON dentro de la carpeta `debug/` del directorio de salida —con la salida por defecto, `reportes/debug/`— con cada artículo procesado, permitiendo comparar:
 
 - `summary_raw`: resumen RSS original
 - `full_content`: contenido completo extraído (si se logró enriquecer)
@@ -570,7 +571,7 @@ Se genera automáticamente junto con la pauta. Contiene, para cada propuesta, lo
         "source": "CIPER Chile",
         "link": "https://...",
         "summary": "Resumen limpio del artículo...",
-        "content": "Contenido completo extraído con trafilatura (truncado a 2000 chars)..."
+        "content": "Contenido completo extraído con trafilatura (truncado a 2000 chars); si la extracción falla, se usa el resumen limpio de 500 chars."
       }
     ]
   },
@@ -636,6 +637,7 @@ pip install -e ".[dev]"
 # Ejecutar tests
 pytest
 
-# Ejecutar tests con cobertura
+# Ejecutar tests con cobertura (el plugin no está en .[dev])
+pip install pytest-cov
 pytest --cov=news_agent
 ```
