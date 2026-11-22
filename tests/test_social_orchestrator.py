@@ -214,7 +214,7 @@ class TestRunSocialize:
 
         assert result["carousel_count"] == 5
         assert result["carousel_failed"] == 0
-        assert result["carousel_format"] == "instagram_reel"
+        assert result["carousel_format"] == "instagram_portrait"
         assert result["instagram_dir"] is not None
         assert result["instagram_dir"].name == "instagram"
         assert result["instagram_dir"].parent == result["bundle_dir"]
@@ -231,7 +231,7 @@ class TestRunSocialize:
 
         for path in result["carousel_paths"]:
             with Image.open(path) as image:
-                assert image.size == (1080, 1920)
+                assert image.size == (1080, 1440)
 
     def test_writes_the_manifest(self, run):
         runner, _ = run
@@ -245,7 +245,7 @@ class TestRunSocialize:
         assert payload["visual_prompts"]["treatment"] == "photorealistic"
         assert payload["instagram_carousel"]["status"] == "generated"
         assert payload["instagram_carousel"]["rendered"] == 5
-        assert payload["instagram_carousel"]["format"] == "instagram_reel"
+        assert payload["instagram_carousel"]["format"] == "instagram_portrait"
 
     def test_uses_both_llm_stages(self, run, llm):
         runner, _ = run

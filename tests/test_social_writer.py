@@ -219,8 +219,7 @@ class TestRenderMarkdown:
         assert "Carrusel vertical" in content
         assert "instagram/" in content
         for slide in social_copy.instagram.slides:
-            assert slide.title in content
-            assert slide.body in content
+            assert slide.text in content
 
     def test_instagram_markdown_includes_the_slide_figure(self, social_copy):
         social_copy.instagram.slides[0].figure = "44 años"
@@ -390,9 +389,9 @@ class TestSaveManifest:
         from news_agent.social.models import InstagramSlideSpec
 
         carousel = [
-            InstagramSlideSpec(1, "cover", social_copy.title, 1080, 1920, tmp_path / "01.png"),
-            InstagramSlideSpec(2, "summary", "Punto", 1080, 1920, tmp_path / "02.png"),
-            InstagramSlideSpec(5, "signature", "La Chispa Sur", 1080, 1920, None),
+            InstagramSlideSpec(1, "cover", social_copy.title, 1080, 1440, tmp_path / "01.png"),
+            InstagramSlideSpec(2, "summary", "Punto", 1080, 1440, tmp_path / "02.png"),
+            InstagramSlideSpec(5, "signature", "La Chispa Sur", 1080, 1440, None),
         ]
         directory = instagram_dir(tmp_path)
 
@@ -402,15 +401,15 @@ class TestSaveManifest:
             article,
             carousel_slides=carousel,
             carousel_dir_path=directory,
-            carousel_format="instagram_reel",
+            carousel_format="instagram_portrait",
         )
 
         assert payload["files"]["instagram_carousel"] == INSTAGRAM_DIR_NAME
         assert payload["instagram_carousel"]["status"] == "partial"
         assert payload["instagram_carousel"]["directory"] == INSTAGRAM_DIR_NAME
-        assert payload["instagram_carousel"]["format"] == "instagram_reel"
+        assert payload["instagram_carousel"]["format"] == "instagram_portrait"
         assert payload["instagram_carousel"]["width"] == 1080
-        assert payload["instagram_carousel"]["height"] == 1920
+        assert payload["instagram_carousel"]["height"] == 1440
         assert payload["instagram_carousel"]["slides"] == 3
         assert payload["instagram_carousel"]["rendered"] == 2
         assert payload["instagram_carousel"]["failed"] == 1
@@ -422,7 +421,7 @@ class TestSaveManifest:
 
         carousel = [
             InstagramSlideSpec(
-                index, "summary", "Punto", 1080, 1920, tmp_path / f"{index}.png"
+                index, "summary", "Punto", 1080, 1440, tmp_path / f"{index}.png"
             )
             for index in range(1, 4)
         ]
@@ -433,7 +432,7 @@ class TestSaveManifest:
             article,
             carousel_slides=carousel,
             carousel_dir_path=instagram_dir(tmp_path),
-            carousel_format="instagram_reel",
+            carousel_format="instagram_portrait",
         )
 
         assert payload["instagram_carousel"]["status"] == "generated"

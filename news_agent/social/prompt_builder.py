@@ -22,9 +22,8 @@ from typing import Any
 
 from ..config import (
     SOCIAL_IG_CAROUSEL_SLIDES,
-    SOCIAL_IG_SLIDE_BODY_MAX_CHARS,
     SOCIAL_IG_SLIDE_FIGURE_MAX_CHARS,
-    SOCIAL_IG_SLIDE_TITLE_MAX_CHARS,
+    SOCIAL_IG_SLIDE_TEXT_MAX_CHARS,
     SOCIAL_MAX_HOOKS,
     SOCIAL_MIN_HOOKS,
 )
@@ -111,12 +110,13 @@ Cada slide cubre un punto distinto y complementario: el primero sitúa el \
 conflicto, el segundo aporta el dato o el detalle que lo prueba, y el tercero \
 explica la consecuencia o lo que está en juego. No repitas el titular de la \
 portada ni el mismo argumento con otras palabras.
-- `title` es un titular de tres a siete palabras, sin punto final. `body` \
-explica el punto en una o dos oraciones, con máximo 240 caracteres. `figure` \
-es opcional: si lo usas, debe ser una cifra o un dato presente en el artículo, \
-no una estimación.
-- Los slides no llevan emojis, hashtags, comillas decorativas ni el prefijo \
-"Slide 1".
+- Cada slide tiene un solo campo de texto, `text`, **sin titular aparte**. El \
+texto es la idea completa y debe entenderse solo, como si fuera la única frase \
+de la pantalla. Escríbelo en una o dos oraciones, con máximo 240 caracteres.
+- `figure` es opcional: si lo usas, debe ser una cifra o un dato presente en \
+el artículo, no una estimación.
+- Los slides no llevan emojis, hashtags, comillas decorativas, números de \
+slide ni el prefijo "Slide 1".
 
 ## Prohibiciones
 
@@ -251,9 +251,8 @@ def _render_platform_limits(parts: list[str], config: dict[str, Any]) -> None:
             f"{specs['instagram']['caption_max_chars']} caracteres. Máximo "
             f"{specs['instagram']['max_hashtags']} hashtags."),
             ("- **Carrusel de Instagram**: exactamente "
-            f"{SOCIAL_IG_CAROUSEL_SLIDES} slides de resumen. Cada `title` de "
-            f"máximo {SOCIAL_IG_SLIDE_TITLE_MAX_CHARS} caracteres, cada "
-            f"`body` de máximo {SOCIAL_IG_SLIDE_BODY_MAX_CHARS} caracteres y "
+            f"{SOCIAL_IG_CAROUSEL_SLIDES} slides de resumen, sin titular. Cada "
+            f"`text` de máximo {SOCIAL_IG_SLIDE_TEXT_MAX_CHARS} caracteres y "
             f"cada `figure` de máximo {SOCIAL_IG_SLIDE_FIGURE_MAX_CHARS} "
             "caracteres."),
             (f"- **hooks**: entre {SOCIAL_MIN_HOOKS} y {SOCIAL_MAX_HOOKS} "
@@ -308,18 +307,15 @@ def _render_copy_schema(parts: list[str]) -> None:
             '    "hashtags": ["Chile", "LaAraucania"],',
             '    "slides": [',
             "      {",
-            '        "title": "Titular breve del primer punto",',
-            '        "body": "Explicación del punto en una o dos oraciones.",',
+            '        "text": "Idea principal del primer punto, en una o dos oraciones.",',
             '        "figure": "44 años"',
             "      },",
             "      {",
-            '        "title": "Titular breve del segundo punto",',
-            '        "body": "Explicación del punto en una o dos oraciones.",',
+            '        "text": "Idea principal del segundo punto, en una o dos oraciones.",',
             '        "figure": ""',
             "      },",
             "      {",
-            '        "title": "Titular breve del tercer punto",',
-            '        "body": "Explicación del punto en una o dos oraciones.",',
+            '        "text": "Idea principal del tercer punto, en una o dos oraciones.",',
             '        "figure": "más de 200"',
             "      }",
             "    ]",
@@ -332,7 +328,8 @@ def _render_copy_schema(parts: list[str]) -> None:
             "símbolo # y sin espacios internos."),
             (f"- `instagram.slides` debe traer exactamente "
             f"{SOCIAL_IG_CAROUSEL_SLIDES} objetos, en el orden en que se leerán "
-            "en el carrusel."),
+            "en el carrusel. Cada objeto lleva solo `text` y `figure`: no hay "
+            "`title` ni `body`."),
             ("- Cada `figure` puede quedar vacío; si se completa, la cifra debe "
             "existir textualmente en el artículo."),
             ("- `alt_text` describe la imagen promocional que acompañará al "

@@ -61,8 +61,7 @@ _FONT_SIZES: dict[str, tuple[int, int]] = {
     # que el carrusel comparta la tabla tipográfica y el ajuste automático de
     # los banners en lugar de duplicar tamaños.
     "deck": (34, 20),
-    "slide_title": (62, 32),
-    "slide_body": (38, 22),
+    "slide_body": (60, 32),
     "signature_name": (76, 40),
     "signature_body": (36, 20),
     "signature_web": (54, 28),
@@ -75,7 +74,6 @@ _BOLD_ROLES = frozenset(
         "kicker",
         "quote",
         "attribution",
-        "slide_title",
         "signature_name",
         "signature_web",
     }

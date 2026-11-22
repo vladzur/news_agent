@@ -295,16 +295,30 @@ class TestInstagramCarouselSlides:
 
         assert len(result.instagram.slides) == 3
 
-    def test_keeps_the_model_order_and_titles(
-        self, copy_payload, article, social_config
-    ):
+    def test_keeps_the_model_order(self, copy_payload, article, social_config):
         result = build_social_copy(copy_payload, article, social_config)
 
-        assert [slide.title for slide in result.instagram.slides] == [
-            "Un meme, una detención",
-            "El estándar del delito de amenaza",
-            "El patrón que documenta el INDH",
+        assert [slide.text for slide in result.instagram.slides] == [
+            (
+                "Un hombre de 44 años fue detenido en Cunco por difundir "
+                "imágenes editadas del ministro de Hacienda."
+            ),
+            (
+                "El delito de amenaza exige anunciar un mal futuro que "
+                "constituya delito y un análisis de proporcionalidad."
+            ),
+            (
+                "El organismo cifra en más de 200 las causas de "
+                "criminalización de la protesta registradas desde 2019."
+            ),
         ]
+
+    def test_slides_have_no_separate_title(self, copy_payload, article, social_config):
+        result = build_social_copy(copy_payload, article, social_config)
+
+        for slide in result.instagram.slides:
+            assert not hasattr(slide, "title")
+            assert not hasattr(slide, "body")
 
     def test_keeps_verified_figures_and_drops_the_empty_ones(
         self, copy_payload, article, social_config
@@ -326,7 +340,7 @@ class TestInstagramCarouselSlides:
         result = build_social_copy(payload, article, social_config)
 
         assert len(result.instagram.slides) == 3
-        assert result.instagram.slides[0].body == result.summary[0]
+        assert result.instagram.slides[0].text == result.summary[0]
 
     def test_completes_missing_slides_with_the_summary(
         self, copy_payload, article, social_config
@@ -337,20 +351,30 @@ class TestInstagramCarouselSlides:
         result = build_social_copy(payload, article, social_config)
 
         assert len(result.instagram.slides) == 3
-        assert result.instagram.slides[0].title == "Un meme, una detención"
+        assert "44 años" in result.instagram.slides[0].text
 
-    def test_caps_the_title_and_body_lengths(
+    def test_accepts_the_legacy_body_key_as_text(
         self, copy_payload, article, social_config
     ):
         payload = copy_module.deepcopy(copy_payload)
-        payload["instagram"]["slides"][0]["title"] = " ".join(["palabra"] * 40)
-        payload["instagram"]["slides"][0]["body"] = " ".join(["palabra"] * 200)
+        payload["instagram"]["slides"][0] = {
+            "body": "Una idea heredada del contrato anterior.",
+            "figure": "",
+        }
 
         result = build_social_copy(payload, article, social_config)
 
-        slide = result.instagram.slides[0]
-        assert len(slide.title) <= 70
-        assert len(slide.body) <= 240
+        assert result.instagram.slides[0].text == (
+            "Una idea heredada del contrato anterior."
+        )
+
+    def test_caps_the_text_length(self, copy_payload, article, social_config):
+        payload = copy_module.deepcopy(copy_payload)
+        payload["instagram"]["slides"][0]["text"] = " ".join(["palabra"] * 200)
+
+        result = build_social_copy(payload, article, social_config)
+
+        assert len(result.instagram.slides[0].text) <= 240
 
     def test_drops_a_figure_that_is_not_in_the_article(
         self, copy_payload, article, social_config
@@ -362,7 +386,7 @@ class TestInstagramCarouselSlides:
 
         assert result.instagram.slides[0].figure == ""
 
-    def test_discards_duplicate_bodies(
+    def test_discards_duplicate_texts(
         self, copy_payload, article, social_config
     ):
         payload = copy_module.deepcopy(copy_payload)
@@ -372,8 +396,8 @@ class TestInstagramCarouselSlides:
         result = build_social_copy(payload, article, social_config)
 
         assert len(result.instagram.slides) == 3
-        bodies = [slide.body for slide in result.instagram.slides]
-        assert len(set(bodies)) == 3
+        texts = [slide.text for slide in result.instagram.slides]
+        assert len(set(texts)) == 3
 
     def test_slides_are_serialized_in_the_copy_json(
         self, copy_payload, article, social_config
@@ -383,7 +407,8 @@ class TestInstagramCarouselSlides:
         payload = result.to_dict()
 
         assert len(payload["instagram"]["slides"]) == 3
-        assert payload["instagram"]["slides"][0]["title"]
+        assert payload["instagram"]["slides"][0]["text"]
+        assert "title" not in payload["instagram"]["slides"][0]
 
 
 # ---------------------------------------------------------------------------

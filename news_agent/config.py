@@ -127,11 +127,10 @@ SOCIAL_IG_MAX_HASHTAGS = 25
 # Carrusel vertical de Instagram: portada, tres slides de resumen y una firma
 # de marca. El formato se declara en social_config.json para poder ajustar el
 # tamaño sin tocar el código, pero debe ser siempre una pieza vertical de
-# Instagram.
+# Instagram. El carrusel usa 4:3 vertical (1080×1440), no el 9:16 de un reel.
 SOCIAL_IG_CAROUSEL_SLIDES = 3
-SOCIAL_IG_CAROUSEL_FORMAT = "instagram_reel"
-SOCIAL_IG_SLIDE_TITLE_MAX_CHARS = 70
-SOCIAL_IG_SLIDE_BODY_MAX_CHARS = 240
+SOCIAL_IG_CAROUSEL_FORMAT = "instagram_portrait"
+SOCIAL_IG_SLIDE_TEXT_MAX_CHARS = 240
 SOCIAL_IG_SLIDE_FIGURE_MAX_CHARS = 40
 
 # Cantidad de hooks alternativos y de bullets de síntesis ejecutiva.

@@ -379,7 +379,7 @@ def render_instagram_markdown(copy: SocialCopy) -> str:
                 (
                     "Los PNG están en `instagram/`, en orden de publicación: "
                     "portada, tres resúmenes y firma de marca. Todas las "
-                    "piezas son verticales de 1080×1920."
+                    "piezas son verticales de 1080×1440 (4:3)."
                 ),
                 "",
             ]
@@ -387,9 +387,9 @@ def render_instagram_markdown(copy: SocialCopy) -> str:
         for index, slide in enumerate(copy.instagram.slides, start=1):
             lines.extend(
                 [
-                    f"### Slide {index}. {slide.title}",
+                    f"### Slide {index}",
                     "",
-                    slide.body,
+                    slide.text,
                     "",
                 ]
             )

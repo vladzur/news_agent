@@ -8,7 +8,8 @@ pieza y no como cinco imágenes sueltas.
 
 El formato lo declara ``social_config.json`` en la sección
 ``instagram_carousel``. El renderizador rechaza cualquier formato que no sea
-vertical y de Instagram: la pieza se publica siempre en 9:16, como un reel.
+vertical y de Instagram. La configuración del repositorio usa 4:3 vertical
+(1080×1440), más legible en el feed que el 9:16 de un reel.
 """
 
 import logging
@@ -54,11 +55,6 @@ SUMMARY_FILE_TEMPLATE = "{position:02d}_point_{number}.png"
 # Tope de ancho de lectura del texto. En 1080 px deja márgenes generosos para
 # que las líneas no se estiren y el slide se lea en el móvil.
 _MAX_TEXT_WIDTH_RATIO = 0.86
-
-# Alto reservado al bloque de titular de los slides de resumen. Se fija para
-# que el cuerpo empiece siempre a la misma altura, aunque un título ocupe dos
-# líneas y otro tres: así los tres slides se perciben como una serie.
-_SUMMARY_TITLE_BOX_RATIO = 0.17
 
 # Geometría de la firma: logo, nombre y datos de contacto.
 _SIGNATURE_LOGO_HEIGHT_RATIO = 0.24
@@ -540,90 +536,64 @@ def render_summary_slide(
     footer_font = load_font("body", base_size("body", scale), config)
     footer_y = bottom - line_height(footer_font)
 
-    # Fila de identificación del punto: número en acento + etiqueta
-    number_font = load_font("attribution", base_size("attribution", scale) + 8, config)
+    # Número del punto: identifica la serie sin ocupar el lugar de un titular.
+    number_font = load_font(
+        "attribution", base_size("attribution", scale) + 12, config
+    )
     number_text = f"{number:02d}"
     number_width = draw.textlength(number_text, font=number_font)
-    badge_padding = max(round(20 * scale), 4)
-    badge_width = max(round(number_width + 2 * badge_padding), 1)
-    badge_height = max(round(line_height(number_font) + 2 * badge_padding), 1)
-    radius = max(round(10 * scale), 3)
-    draw.rounded_rectangle(
-        (margin, content_top, margin + badge_width, content_top + badge_height),
-        radius=radius,
-        fill=palette["accent"],
-    )
+    number_height = line_height(number_font)
     draw.text(
-        (margin + badge_padding, content_top + badge_padding),
+        (margin, content_top),
         number_text,
         font=number_font,
-        fill=palette["text"],
+        fill=palette["accent"],
     )
 
-    label_font = load_font("kicker", base_size("kicker", scale), config)
-    label_x = margin + badge_width + max(round(18 * scale), 4)
-    label_y = content_top + (badge_height - line_height(label_font)) // 2
-    draw.text(
-        (label_x, label_y),
-        letter_space("PUNTO CLAVE"),
-        font=label_font,
+    rule_y = content_top + number_height // 2
+    rule_x = margin + number_width + max(round(20 * scale), 6)
+    draw.rectangle(
+        (
+            rule_x,
+            rule_y,
+            rule_x + max(round(56 * scale), 8),
+            rule_y + max(round(3 * scale), 2),
+        ),
         fill=palette["accent_alt"],
     )
 
-    title_top = content_top + badge_height + max(round(32 * scale), 6)
-    title_box_height = max(round(height * _SUMMARY_TITLE_BOX_RATIO), 1)
+    text_top = content_top + number_height + max(round(28 * scale), 6)
 
-    # Tarjeta de dato: se reserva antes del cuerpo para que el texto no invada
+    # Tarjeta de dato: se reserva antes del texto para que no invada el cuerpo
     figure_font = load_font("deck", base_size("deck", scale) + 8, config)
     figure_label_font = load_font("kicker", base_size("kicker", scale), config)
     figure_card_height = 0
     figure_card_y = 0
     if slide.figure:
-        figure_card_height = max(round(180 * scale), 40)
-        figure_card_y = footer_y - max(round(52 * scale), 8) - figure_card_height
+        figure_card_height = max(round(150 * scale), 40)
+        figure_card_y = footer_y - max(round(48 * scale), 8) - figure_card_height
 
-    body_top = title_top + title_box_height + max(round(18 * scale), 4)
     body_bottom = (
-        figure_card_y - max(round(30 * scale), 6)
+        figure_card_y - max(round(24 * scale), 6)
         if slide.figure
-        else footer_y - max(round(44 * scale), 8)
+        else footer_y - max(round(40 * scale), 8)
     )
-
-    title_font, title_lines, title_gap = fit_text(
-        slide.title,
-        "slide_title",
-        config,
-        draw,
-        text_width,
-        title_box_height,
-        scale,
-        max_lines=3,
-    )
-    title_block_height = block_height(title_lines, title_font, title_gap)
-    title_y = title_top + max((title_box_height - title_block_height) // 2, 0)
-    draw_lines(
-        draw, title_lines, title_font, palette["text"], margin, title_y, title_gap
-    )
-
-    # Regla de acento bajo el titular, para separar título y cuerpo
-    rule_y = title_top + title_box_height - max(round(8 * scale), 2)
-    draw.rectangle(
-        (margin, rule_y, margin + max(round(72 * scale), 8), rule_y + max(round(5 * scale), 2)),
-        fill=palette["accent"],
-    )
+    body_height = max(body_bottom - text_top, 1)
 
     body_font, body_lines, body_gap = fit_text(
-        slide.body,
+        slide.text,
         "slide_body",
         config,
         draw,
         text_width,
-        max(body_bottom - body_top, 1),
+        body_height,
         scale,
-        max_lines=9,
+        max_lines=8,
     )
+    block = block_height(body_lines, body_font, body_gap)
+    body_y = text_top + max((body_height - block) // 2, 0)
     draw_lines(
-        draw, body_lines, body_font, palette["text"], margin, body_top, body_gap
+        draw, body_lines, body_font, palette["text"], margin, body_y, body_gap
     )
 
     if slide.figure:
@@ -955,7 +925,7 @@ def render_instagram_carousel(
     def _render(
         index: int,
         kind: str,
-        title: str,
+        text: str,
         file_name: str,
         renderer: Any,
     ) -> None:
@@ -964,7 +934,7 @@ def render_instagram_carousel(
         Args:
             index: Posición en el carrusel.
             kind: Tipo de slide.
-            title: Texto principal del slide.
+            text: Texto principal del slide.
             file_name: Nombre del archivo PNG.
             renderer: Callable que devuelve la imagen.
         """
@@ -984,7 +954,7 @@ def render_instagram_carousel(
                 InstagramSlideSpec(
                     index=index,
                     kind=kind,
-                    title=title,
+                    text=text,
                     width=width,
                     height=height,
                     path=None,
@@ -1003,7 +973,7 @@ def render_instagram_carousel(
             InstagramSlideSpec(
                 index=index,
                 kind=kind,
-                title=title,
+                text=text,
                 width=width,
                 height=height,
                 path=destination.resolve(),
@@ -1022,7 +992,7 @@ def render_instagram_carousel(
         _render(
             number + 1,
             "summary",
-            slide.title,
+            slide.text,
             SUMMARY_FILE_TEMPLATE.format(position=number + 1, number=number),
             lambda slide=slide, number=number: render_summary_slide(
                 width,

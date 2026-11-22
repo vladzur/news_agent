@@ -19,7 +19,7 @@ from news_agent.social.instagram_renderer import (
 )
 
 # Formato vertical declarado en la configuración del repositorio
-REEL_SIZE = (1080, 1920)
+CAROUSEL_SIZE = (1080, 1440)
 
 # Índices de los slides en el carrusel completo: portada, tres resúmenes y firma
 EXPECTED_FILES = [
@@ -40,7 +40,7 @@ def reel_safe_zone(config: dict) -> dict:
     Returns:
         dict: Zonas seguras superior e inferior del reel.
     """
-    return config["banners"]["safe_zone"]["instagram_reel"]
+    return config["banners"]["safe_zone"]["instagram_portrait"]
 
 
 @pytest.fixture
@@ -71,8 +71,8 @@ class TestResolveCarouselLayout:
             social_config
         )
 
-        assert format_name == "instagram_reel"
-        assert (width, height) == REEL_SIZE
+        assert format_name == "instagram_portrait"
+        assert (width, height) == CAROUSEL_SIZE
         assert safe_zone is not None
 
     def test_falls_back_to_the_reel_format_when_the_section_is_missing(
@@ -86,8 +86,8 @@ class TestResolveCarouselLayout:
 
         format_name, width, height, _ = resolve_carousel_layout(config)
 
-        assert format_name == "instagram_reel"
-        assert (width, height) == REEL_SIZE
+        assert format_name == "instagram_portrait"
+        assert (width, height) == CAROUSEL_SIZE
 
     def test_rejects_a_format_that_is_not_instagram(self, social_config):
         config = {
@@ -134,18 +134,18 @@ class TestRenderSlides:
 
     def test_cover_has_the_vertical_size(self, social_copy, social_config):
         image = render_cover_slide(
-            *REEL_SIZE,
+            *CAROUSEL_SIZE,
             social_copy,
             social_config,
             safe_zone=reel_safe_zone(social_config),
         )
 
-        assert image.size == REEL_SIZE
+        assert image.size == CAROUSEL_SIZE
         assert image.mode == "RGB"
 
     def test_cover_is_not_a_blank_canvas(self, social_copy, social_config):
         image = render_cover_slide(
-            *REEL_SIZE,
+            *CAROUSEL_SIZE,
             social_copy,
             social_config,
             safe_zone=reel_safe_zone(social_config),
@@ -160,7 +160,7 @@ class TestRenderSlides:
         slide = social_copy.instagram.slides[number - 1]
 
         image = render_summary_slide(
-            *REEL_SIZE,
+            *CAROUSEL_SIZE,
             social_copy,
             slide,
             number,
@@ -168,7 +168,7 @@ class TestRenderSlides:
             safe_zone=reel_safe_zone(social_config),
         )
 
-        assert image.size == REEL_SIZE
+        assert image.size == CAROUSEL_SIZE
         assert image.mode == "RGB"
 
     @pytest.mark.parametrize("number", [1, 2, 3])
@@ -178,7 +178,7 @@ class TestRenderSlides:
         slide = social_copy.instagram.slides[number - 1]
 
         image = render_summary_slide(
-            *REEL_SIZE,
+            *CAROUSEL_SIZE,
             social_copy,
             slide,
             number,
@@ -190,18 +190,18 @@ class TestRenderSlides:
 
     def test_signature_has_the_vertical_size(self, social_copy, social_config):
         image = render_signature_slide(
-            *REEL_SIZE,
+            *CAROUSEL_SIZE,
             social_copy,
             social_config,
             safe_zone=reel_safe_zone(social_config),
         )
 
-        assert image.size == REEL_SIZE
+        assert image.size == CAROUSEL_SIZE
         assert image.mode == "RGB"
 
     def test_signature_is_not_a_blank_canvas(self, social_copy, social_config):
         image = render_signature_slide(
-            *REEL_SIZE,
+            *CAROUSEL_SIZE,
             social_copy,
             social_config,
             safe_zone=reel_safe_zone(social_config),
@@ -213,13 +213,13 @@ class TestRenderSlides:
         self, social_copy, social_config
     ):
         cover = render_cover_slide(
-            *REEL_SIZE,
+            *CAROUSEL_SIZE,
             social_copy,
             social_config,
             safe_zone=reel_safe_zone(social_config),
         )
         summary = render_summary_slide(
-            *REEL_SIZE,
+            *CAROUSEL_SIZE,
             social_copy,
             social_copy.instagram.slides[0],
             1,
@@ -227,7 +227,7 @@ class TestRenderSlides:
             safe_zone=reel_safe_zone(social_config),
         )
         signature = render_signature_slide(
-            *REEL_SIZE,
+            *CAROUSEL_SIZE,
             social_copy,
             social_config,
             safe_zone=reel_safe_zone(social_config),
@@ -235,15 +235,15 @@ class TestRenderSlides:
 
         # La regla de acento del encabezado está en la misma coordenada en las
         # tres plantillas: la retícula es compartida.
-        assert cover.getpixel((66, 206)) == summary.getpixel((66, 206))
-        assert cover.getpixel((66, 206)) == signature.getpixel((66, 206))
-        assert cover.getpixel((66, 206)) == (0xDF, 0x32, 0x24)
+        assert cover.getpixel((66, 146)) == summary.getpixel((66, 146))
+        assert cover.getpixel((66, 146)) == signature.getpixel((66, 146))
+        assert cover.getpixel((66, 146)) == (0xDF, 0x32, 0x24)
 
     def test_every_slide_shares_the_same_footer(
         self, social_copy, social_config
     ):
         summary_one = render_summary_slide(
-            *REEL_SIZE,
+            *CAROUSEL_SIZE,
             social_copy,
             social_copy.instagram.slides[0],
             1,
@@ -251,7 +251,7 @@ class TestRenderSlides:
             safe_zone=reel_safe_zone(social_config),
         )
         summary_two = render_summary_slide(
-            *REEL_SIZE,
+            *CAROUSEL_SIZE,
             social_copy,
             social_copy.instagram.slides[1],
             2,
@@ -261,39 +261,9 @@ class TestRenderSlides:
 
         # El pie de marca (handle y sitio) no cambia entre resúmenes; solo
         # cambia el contador de la derecha.
-        assert summary_one.getpixel((70, 1622)) == summary_two.getpixel((70, 1622))
-        assert summary_one.getpixel((70, 1622)) == (0xDF, 0x32, 0x24)
+        assert summary_one.getpixel((70, 1262)) == summary_two.getpixel((70, 1262))
+        assert summary_one.getpixel((70, 1262)) == (0xDF, 0x32, 0x24)
 
-    def test_summary_slides_keep_the_text_area_aligned(
-        self, social_copy, social_config
-    ):
-        first = render_summary_slide(
-            *REEL_SIZE,
-            social_copy,
-            social_copy.instagram.slides[0],
-            1,
-            social_config,
-            safe_zone=reel_safe_zone(social_config),
-        )
-        second = render_summary_slide(
-            *REEL_SIZE,
-            social_copy,
-            social_copy.instagram.slides[1],
-            2,
-            social_config,
-            safe_zone=reel_safe_zone(social_config),
-        )
-
-        # La regla bajo el titular está a la misma altura en los tres slides,
-        # porque el bloque de título tiene un alto fijo.
-        rule_pixels_first = [
-            y for y in range(400, 900) if first.getpixel((66, y)) == (0xDF, 0x32, 0x24)
-        ]
-        rule_pixels_second = [
-            y for y in range(400, 900) if second.getpixel((66, y)) == (0xDF, 0x32, 0x24)
-        ]
-        assert rule_pixels_first == rule_pixels_second
-        assert rule_pixels_first
 
 
 # ---------------------------------------------------------------------------
@@ -323,7 +293,7 @@ class TestRenderInstagramCarousel:
 
         for path in carousel_dir.iterdir():
             with Image.open(path) as image:
-                assert image.size == REEL_SIZE
+                assert image.size == CAROUSEL_SIZE
                 assert image.format == "PNG"
 
     def test_returns_absolute_paths(self, carousel_dir, social_copy, social_config):
@@ -346,8 +316,8 @@ class TestRenderInstagramCarousel:
             "summary",
             "signature",
         ]
-        assert specs[0].title == social_copy.title
-        assert specs[4].title == social_config["brand"]["name"]
+        assert specs[0].text == social_copy.title
+        assert specs[4].text == social_config["brand"]["name"]
 
     def test_raises_when_the_output_directory_does_not_exist(
         self, tmp_path, social_copy, social_config
@@ -401,13 +371,13 @@ class TestSlideSpec:
         payload = specs[0].to_dict()
 
         assert isinstance(payload["path"], str)
-        assert payload["width"] == REEL_SIZE[0]
-        assert payload["height"] == REEL_SIZE[1]
+        assert payload["width"] == CAROUSEL_SIZE[0]
+        assert payload["height"] == CAROUSEL_SIZE[1]
         assert payload["kind"] == "cover"
 
     def test_serializes_a_failed_slide_as_null(self):
         from news_agent.social.models import InstagramSlideSpec
 
-        spec = InstagramSlideSpec(1, "cover", "Titular", 1080, 1920)
+        spec = InstagramSlideSpec(1, "cover", "Titular", 1080, 1440)
 
         assert spec.to_dict()["path"] is None

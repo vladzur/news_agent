@@ -407,7 +407,7 @@ class TestRepositoryConfigCoherence:
             "facebook",
             "instagram_feed",
             "instagram_story",
-            "instagram_reel",
+            "instagram_portrait",
         }
 
     def test_declares_a_vertical_instagram_carousel_format(self, social_config):
@@ -416,6 +416,13 @@ class TestRepositoryConfigCoherence:
 
         assert carousel["format"].startswith("instagram_")
         assert size[1] > size[0]
+
+    def test_the_carousel_uses_a_four_by_three_vertical_format(self, social_config):
+        carousel = social_config["instagram_carousel"]
+        width, height = social_config["banners"]["sizes"][carousel["format"]]
+
+        assert (width, height) == (1080, 1440)
+        assert height * 3 == width * 4
 
     def test_declares_the_headline_and_quote_templates(self, social_config):
         templates = social_config["banners"]["templates"]

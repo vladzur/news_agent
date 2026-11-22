@@ -159,8 +159,8 @@ El único origen admitido es un **artículo Markdown ya publicado** (`articulos/
 | Cita literal | Se verifica palabra por palabra; si no proviene del artículo, se reemplaza por una oración candidata verificada o por el lead |
 | Cifras verificables | Se descartan las cifras que no aparecen en el texto; si ninguna se verifica, se usan las detectadas en el artículo |
 | Textos alternativos | Se completan y se recortan al límite de cada plataforma (X 300, Facebook 200, Instagram 100 caracteres) |
-| Slides del carrusel de Instagram | Se exigen exactamente 3; título ≤ 70, cuerpo ≤ 240 y cifra ≤ 40 caracteres. Las cifras se verifican contra el artículo. Si faltan slides, se completan con la síntesis ejecutiva y material del artículo. |
-| Coherencia de los slides | Se descartan cuerpos duplicados, se conserva el orden y, si un titular falta, se deriva de su propio cuerpo. La retícula gráfica y los topes son idénticos en los tres slides. |
+| Slides del carrusel de Instagram | Se exigen exactamente 3; cada slide tiene solo `text` (≤ 240 caracteres) y un `figure` opcional (≤ 40). No hay titular. Las cifras se verifican contra el artículo. Si faltan slides, se completan con la síntesis ejecutiva y material del artículo. |
+| Coherencia de los slides | Se descartan textos duplicados, se conserva el orden y se usa la misma retícula, el mismo tamaño de lectura y los mismos topes en los tres slides. |
 
 ### 6.4. Capa del prompt visual
 
@@ -201,23 +201,23 @@ Dos plantillas declaradas en la configuración, renderizadas en los formatos ped
 
 #### 6.5.1. Carrusel vertical de Instagram
 
-Cuando la plataforma `instagram` está habilitada, el subsistema suma un carrusel de **cinco piezas verticales de 1080×1920**, todas con la misma retícula y la misma identidad visual del banner:
+Cuando la plataforma `instagram` está habilitada, el subsistema suma un carrusel de **cinco piezas verticales de 1080×1440 (4:3 vertical)**, todas con la misma retícula y la misma identidad visual del banner:
 
 | Orden | Pieza | Contenido |
 |:-----:|-------|-----------|
 | 1 | Portada | Barra de acento, etiqueta de marca, logo, titular, bajada, llamado a deslizar y contador `01 / 05` |
-| 2–4 | Tres slides de resumen | Número de punto, etiqueta «PUNTO CLAVE», titular, cuerpo breve, tarjeta opcional de dato duro, puntos de progreso y contador |
+| 2–4 | Tres slides de resumen | Número de punto discreto, idea principal en tipografía grande, tarjeta opcional de dato duro, puntos de progreso y contador. Sin titular. |
 | 5 | Firma | Logo centrado, nombre de la marca, tagline, sitio, handle y llamado a leer la nota completa |
 
-- **Estética compartida:** las cinco piezas reutilizan la paleta, las fuentes, el logo, la barra de acento y el pie de marca de `banner_renderer.py`. El encabezado y el pie están en la misma coordenada en todas, y los tres resúmenes reservan el mismo alto para el titular, de modo que el cuerpo empiece a la misma altura.
-- **Formato obligatorio:** `instagram_carousel.format` debe apuntar a un `instagram_*` declarado en `banners.sizes` y con alto mayor que ancho. Cualquier otra combinación se rechaza al cargar la configuración y, si se construye el renderizador directamente, lanza `InstagramRenderError`.
-- **Contenido de los resúmenes:** sale de `instagram.slides` del contrato de copys. La portada y la firma se componen siempre con datos de la marca, no con texto del modelo.
+- **Estética compartida:** las cinco piezas reutilizan la paleta, las fuentes, el logo, la barra de acento y el pie de marca de `banner_renderer.py`. El encabezado y el pie están en la misma coordenada en todas, y los tres resúmenes usan el mismo bloque de texto y el mismo tamaño de lectura.
+- **Formato obligatorio:** `instagram_carousel.format` debe apuntar a un `instagram_*` declarado en `banners.sizes` y con alto mayor que ancho. El formato del repositorio es `instagram_portrait`, de 1080×1440, para que la pieza sea 4:3 vertical y no el 9:16 de un reel. Cualquier otra combinación se rechaza al cargar la configuración y, si se construye el renderizador directamente, lanza `InstagramRenderError`.
+- **Contenido de los resúmenes:** sale de `instagram.slides` del contrato de copys. Cada slide trae `text` y `figure`; no existe un titular separado. La portada y la firma se componen siempre con datos de la marca, no con texto del modelo.
 - **Tolerancia a fallos:** un slide que falla no interrumpe los otros cuatro; queda con `path: null` en el manifiesto.
 - **Salida:** los cinco PNG se escriben juntos en el subdirectorio exclusivo `instagram/` del bundle.
 
 ### 6.6. Formato de salida (bundle)
 
-Cada ejecución escribe una carpeta autocontenida `social/AAAA_MM_DD_slug-del-titulo/` con los copys en JSON, el comando de Midjourney en `visual_prompt.txt`, los metadatos del prompt en `visual_prompts.json`, un Markdown listo para copiar y pegar por plataforma, los PNG de los banners en `assets/`, el carrusel vertical en el subdirectorio exclusivo `instagram/` (`01_cover.png`, `02_point_1.png`, `03_point_2.png`, `04_point_3.png` y `05_signature.png`) y un `manifest.json` que registra qué se generó, qué falló y con qué artículo se produjo. El bloque `visual_prompts` del manifiesto incluye `status` (`generated`, `skipped` o `failed`) y `error` cuando la generación falló, de modo que omitir el prompt con `--skip-prompts` no se confunde con un fallo. El bloque `instagram_carousel` registra `status` (`generated`, `partial`, `failed` o `skipped`), formato, dimensiones, cantidad de slides y la ruta de cada pieza.
+Cada ejecución escribe una carpeta autocontenida `social/AAAA_MM_DD_slug-del-titulo/` con los copys en JSON, el comando de Midjourney en `visual_prompt.txt`, los metadatos del prompt en `visual_prompts.json`, un Markdown listo para copiar y pegar por plataforma, los PNG de los banners en `assets/`, el carrusel vertical 4:3 (1080×1440) en el subdirectorio exclusivo `instagram/` (`01_cover.png`, `02_point_1.png`, `03_point_2.png`, `04_point_3.png` y `05_signature.png`) y un `manifest.json` que registra qué se generó, qué falló y con qué artículo se produjo. El bloque `visual_prompts` del manifiesto incluye `status` (`generated`, `skipped` o `failed`) y `error` cuando la generación falló, de modo que omitir el prompt con `--skip-prompts` no se confunde con un fallo. El bloque `instagram_carousel` registra `status` (`generated`, `partial`, `failed` o `skipped`), formato, dimensiones, cantidad de slides y la ruta de cada pieza.
 
 El campo `quote_card.verbatim` del JSON de copys —repetido como `verified_quote` en el manifiesto— indica si la cita destacada se verificó palabra por palabra contra el artículo de origen.
 
@@ -230,8 +230,8 @@ La identidad visual y los límites viven en `social_config.json`, versionado en 
 | `brand` | Nombre, handle, sitio, logo opcional, paleta de colores y tipografías por rol | ✅ |
 | `platforms` | Límite de caracteres, largo del hilo y tope de hashtags por plataforma. Sobrescriben los valores por defecto de `config.py` y se validan al cargar | ❌ |
 | `banners.templates` / `banners.sizes` | Matriz plantilla → formatos y tamaño de cada formato | ✅ |
-| `banners.safe_zone` | Bandas no utilizables de los formatos verticales, incluido `instagram_reel` | ❌ |
-| `instagram_carousel` | Formato del carrusel vertical; debe ser un `instagram_*` vertical declarado en `banners.sizes`. Por defecto, `instagram_reel` | ❌ |
+| `banners.safe_zone` | Bandas no utilizables de los formatos verticales, incluido `instagram_portrait` | ❌ |
+| `instagram_carousel` | Formato del carrusel vertical; debe ser un `instagram_*` vertical declarado en `banners.sizes`. Por defecto, `instagram_portrait` (1080×1440) | ❌ |
 | `visual_prompts` | Tratamientos, reglas de decisión, prompt negativo, proporción única y sufijo de Midjourney | ✅ |
 
 Un color mal escrito, una clave de color faltante, un tamaño inválido, una sección `visual_prompts` incompleta, una plataforma con límites inválidos, una plantilla que apunte a un formato inexistente, o un carrusel que apunte a un formato no vertical o de otra plataforma se detectan al cargar el archivo, con un mensaje que indica el campo culpable.

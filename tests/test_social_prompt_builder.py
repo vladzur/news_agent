@@ -146,8 +146,8 @@ class TestCopyUserPrompt:
     def test_states_the_instagram_slide_limits(self, article, social_config):
         prompt = build_copy_user_prompt(article, social_config)
 
-        assert "70 caracteres" in prompt
         assert "240 caracteres" in prompt
+        assert "sin titular" in prompt
 
     def test_forbids_markdown_fences_in_the_response(self, article, social_config):
         prompt = build_copy_user_prompt(article, social_config)

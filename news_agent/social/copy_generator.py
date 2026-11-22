@@ -14,9 +14,8 @@ from typing import Any
 
 from ..config import (
     SOCIAL_IG_CAROUSEL_SLIDES,
-    SOCIAL_IG_SLIDE_BODY_MAX_CHARS,
     SOCIAL_IG_SLIDE_FIGURE_MAX_CHARS,
-    SOCIAL_IG_SLIDE_TITLE_MAX_CHARS,
+    SOCIAL_IG_SLIDE_TEXT_MAX_CHARS,
     SOCIAL_JSON_MAX_RETRIES,
     SOCIAL_MAX_HOOKS,
     SOCIAL_MAX_SUMMARY_BULLETS,
@@ -370,34 +369,6 @@ def _build_facebook_copy(raw: object, spec: dict[str, Any]) -> FacebookCopy:
 
 _SLIDE_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?…])\s+")
 
-# Titular de último recurso cuando ni el modelo ni el material de origen
-# alcanzan para derivar uno.
-_DEFAULT_SLIDE_TITLE = "Punto clave"
-
-
-def _slide_title_from_text(text: str) -> str:
-    """Deriva un titular breve de un texto cuando el modelo no lo entrega.
-
-    Se usa solo como respaldo: el contrato pide un ``title`` propio por slide.
-    La función toma la primera oración y la recorta en un límite de palabras,
-    de modo que el slide nunca quede sin encabezado.
-
-    Args:
-        text: Texto del que derivar el titular.
-
-    Returns:
-        str: Titular breve, sin puntuación de cierre.
-    """
-    first = _SLIDE_SENTENCE_SPLIT_RE.split((text or "").strip(), maxsplit=1)[0]
-    first = first.strip().rstrip(" .;:!?…,")
-    if not first:
-        return ""
-
-    fitted, trimmed = fit_char_limit(first, SOCIAL_IG_SLIDE_TITLE_MAX_CHARS)
-    if trimmed and " " in fitted:
-        fitted = fitted.rsplit(" ", 1)[0]
-    return fitted.rstrip(" ,;:—-").strip()
-
 
 def _verified_slide_figure(figure: str, article: ArticleSource) -> str:
     """Conserva una cifra del slide solo si aparece en el artículo.
@@ -425,49 +396,45 @@ def _verified_slide_figure(figure: str, article: ArticleSource) -> str:
 def _fallback_slide_material(
     article: ArticleSource,
     summary: list[str],
-    used_bodies: set[str],
+    used_texts: set[str],
 ) -> list[InstagramSlide]:
     """Construye slides de respaldo con material verificado del artículo.
 
     El contrato pide tres slides al modelo, pero una respuesta incompleta no
     debe dejar el carrusel sin contenido. Se usan primero los bullets de la
-    síntesis ejecutiva y, si no alcanzan, los subtítulos y el lead del artículo.
+    síntesis ejecutiva y, si no alcanzan, el cuerpo de las secciones y el lead
+    del artículo.
 
     Args:
         article: Artículo de origen.
         summary: Bullets de síntesis ya validados.
-        used_bodies: Cuerpos ya usados, normalizados, para no repetir slides.
+        used_texts: Textos ya usados, normalizados, para no repetir slides.
 
     Returns:
         list[InstagramSlide]: Slides de respaldo, sin cifras inventadas.
     """
-    candidates: list[tuple[str, str]] = []
-    candidates.extend((_slide_title_from_text(bullet), bullet) for bullet in summary)
-
-    for section in article.sections:
-        if section.body:
-            candidates.append((_slide_title_from_text(section.heading), section.body))
+    candidates: list[str] = list(summary)
+    candidates.extend(
+        section.body for section in article.sections if section.body
+    )
 
     if article.lead:
-        for sentence in _SLIDE_SENTENCE_SPLIT_RE.split(article.lead):
-            cleaned = sentence.strip()
-            if len(cleaned) >= 40:
-                candidates.append((_slide_title_from_text(cleaned), cleaned))
+        candidates.extend(
+            sentence.strip()
+            for sentence in _SLIDE_SENTENCE_SPLIT_RE.split(article.lead)
+            if len(sentence.strip()) >= 40
+        )
 
     slides: list[InstagramSlide] = []
-    for title, body in candidates:
+    for body in candidates:
         normalized = normalize_for_match(body)
-        if not normalized or normalized in used_bodies:
+        if not normalized or normalized in used_texts:
             continue
-        used_bodies.add(normalized)
+        used_texts.add(normalized)
         slides.append(
             InstagramSlide(
-                title=fit_char_limit(
-                    _collapse_whitespace(title) or _DEFAULT_SLIDE_TITLE,
-                    SOCIAL_IG_SLIDE_TITLE_MAX_CHARS,
-                )[0],
-                body=fit_char_limit(
-                    _collapse_whitespace(body), SOCIAL_IG_SLIDE_BODY_MAX_CHARS
+                text=fit_char_limit(
+                    _collapse_whitespace(body), SOCIAL_IG_SLIDE_TEXT_MAX_CHARS
                 )[0],
                 figure="",
             )
@@ -483,8 +450,9 @@ def _build_instagram_slides(
 ) -> list[InstagramSlide]:
     """Normaliza los tres slides de resumen del carrusel de Instagram.
 
-    El orden se conserva: los slides cuentan una progresión (contexto, datos,
-    consecuencia). Si el modelo entrega menos de tres, se completan con la
+    El slide no lleva titular: el texto es la idea completa y se renderiza a
+    un tamaño de lectura grande. El orden se conserva —contexto, datos y
+    consecuencia—. Si el modelo entrega menos de tres, se completan con la
     síntesis ejecutiva y material del artículo antes que publicar un carrusel
     incompleto. Si entrega más, se usan los tres primeros.
 
@@ -502,36 +470,31 @@ def _build_instagram_slides(
     """
     entries = raw if isinstance(raw, (list, tuple)) else []
     slides: list[InstagramSlide] = []
-    used_bodies: set[str] = set()
+    used_texts: set[str] = set()
 
     for entry in entries:
         if len(slides) >= SOCIAL_IG_CAROUSEL_SLIDES:
             break
         data = entry if isinstance(entry, dict) else {}
-        body = _collapse_whitespace(data.get("body"))
+        # ``body`` se acepta como respaldo para respuestas de una versión
+        # anterior del contrato; la clave vigente es ``text``.
+        body = _collapse_whitespace(data.get("text") or data.get("body"))
         if not body:
             continue
 
         normalized_body = normalize_for_match(body)
-        if normalized_body in used_bodies:
+        if normalized_body in used_texts:
             logger.warning("Slide duplicado descartado en el carrusel.")
             continue
-
-        title = _collapse_whitespace(data.get("title"))
-        if not title:
-            title = _slide_title_from_text(body)
-        if not title:
-            title = _DEFAULT_SLIDE_TITLE
 
         figure = _verified_slide_figure(
             _collapse_whitespace(data.get("figure")), article
         )
 
-        used_bodies.add(normalized_body)
+        used_texts.add(normalized_body)
         slides.append(
             InstagramSlide(
-                title=fit_char_limit(title, SOCIAL_IG_SLIDE_TITLE_MAX_CHARS)[0],
-                body=fit_char_limit(body, SOCIAL_IG_SLIDE_BODY_MAX_CHARS)[0],
+                text=fit_char_limit(body, SOCIAL_IG_SLIDE_TEXT_MAX_CHARS)[0],
                 figure=fit_char_limit(figure, SOCIAL_IG_SLIDE_FIGURE_MAX_CHARS)[0],
             )
         )
@@ -543,7 +506,7 @@ def _build_instagram_slides(
             len(slides),
         )
         slides.extend(
-            _fallback_slide_material(article, summary, used_bodies)[
+            _fallback_slide_material(article, summary, used_texts)[
                 : SOCIAL_IG_CAROUSEL_SLIDES - len(slides)
             ]
         )

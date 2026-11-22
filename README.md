@@ -63,12 +63,12 @@ Toma un artículo ya publicado (`articulos/articulo_N_slug.md`) y produce un **b
    | `quote_card` | Comilla destacada + cita + atribución | IG feed 1080×1080, IG story 1080×1920 |
 
    El diseño se parametriza por un factor de escala respecto de un ancho de referencia, así que una sola implementación sirve para los cuatro tamaños. En el formato vertical respeta las **zonas seguras** superior e inferior (la interfaz de la plataforma las tapa). Si la marca define un logo, se recorta su padding transparente, se escala según `logo_height_ratio` y se pega en la esquina superior derecha; el titular se desplaza hacia abajo si el logo es más alto que la etiqueta de marca.
-5. **Carrusel vertical de Instagram (Pillow)** — Cuando Instagram está entre las plataformas pedidas, el bundle suma un subdirectorio **exclusivo** `instagram/` con cinco PNG verticales de **1080×1920**, en orden de publicación:
+5. **Carrusel vertical de Instagram (Pillow)** — Cuando Instagram está entre las plataformas pedidas, el bundle suma un subdirectorio **exclusivo** `instagram/` con cinco PNG verticales de **1080×1440 (4:3 vertical)**, en orden de publicación:
    - **Portada**, con la estética del `headline_card`: barra de acento, etiqueta de marca, logo, titular, bajada y contador `01 / 05`.
-   - **Tres slides de resumen**, con una retícula compartida: número de punto, etiqueta «PUNTO CLAVE», titular, cuerpo breve, tarjeta opcional de dato duro y puntos de progreso.
+   - **Tres slides de resumen**, sin titular: un número de punto discreto, la idea principal en tipografía grande, tarjeta opcional de dato duro y puntos de progreso.
    - **Firma de La Chispa Sur**, con el logo centrado, nombre, tagline, sitio, handle y llamado a leer la nota completa.
 
-   El modelo entrega los tres resúmenes dentro del contrato de copys (`instagram.slides`). El código exige **exactamente tres**, limpia largos (70 caracteres de titular, 240 de cuerpo, 40 de cifra), descarta cifras que no aparezcan en el artículo y, si la respuesta llega incompleta, completa los slides con la síntesis ejecutiva y material verificado del propio artículo. La portada y la firma no los redacta el modelo: se componen siempre con la identidad de la marca.
+   El modelo entrega los tres resúmenes dentro del contrato de copys (`instagram.slides`). Cada slide tiene un único campo `text` con la idea completa y un `figure` opcional; no hay `title` ni `body`. El código exige **exactamente tres**, limpia largos (240 caracteres de texto, 40 de cifra), descarta cifras que no aparezcan en el artículo y, si la respuesta llega incompleta, completa los slides con la síntesis ejecutiva y material verificado del propio artículo. La portada y la firma no las redacta el modelo: se componen siempre con la identidad de la marca.
 
 > **¿Por qué se valida todo en código y no se confía en el LLM?** Las reglas duras de cada plataforma se aplican de forma determinista: recorte al límite de caracteres, largo del hilo, topes de hashtags, normalización de hashtags (`#La Araucania` → `#LaAraucania`) y retiro de los que el modelo haya dejado dentro del cuerpo del texto para no duplicarlos en el tweet de cierre, verificación de que cada cifra exista en el artículo y de que la cita sea **literal**. Si el modelo entrega una cita inventada, el sistema la reemplaza por una oración verificada del propio artículo. El guardarraíl es también editorial: el prompt visual debe nombrar una paleta de color, usar el tratamiento declarado —fotorrealista con lenguaje fotográfico, caricatura con técnica de ilustración— y queda acotado a **rótulos breves y cifras** —los párrafos de texto se rechazan en código, porque los modelos de difusión los convierten en ruido—. El código rechaza además la violencia explícita y las escenas fabricadas o suplantaciones de identidad. El prompt pide que el fotorrealismo sea el camino por defecto y que las figuras públicas solo aparezcan dentro de una escena documental, sin gestos o escenarios inventados; las víctimas, menores y personas privadas se representan de forma anónima. La caricatura queda reservada para columnas abstractas.
 
@@ -425,9 +425,9 @@ Edita `social_config.json` para ajustar la identidad visual sin tocar código:
 | `brand.logo_height_ratio` | ❌ | Alto del logo como fracción del ancho del lienzo (por defecto `0.11`). El ancho se limita al 22% para que no invada la etiqueta de marca |
 | `brand.fonts.*` | ❌ | Ruta a un `.ttf` por rol. Si es `null`, se resuelven fuentes del sistema (DejaVu, Liberation, Noto o Arial) y, como último recurso, la fuente por defecto de Pillow |
 | `platforms` | ❌ | Límites por plataforma. Sobrescriben los valores por defecto de `config.py` y se validan al cargar |
-| `banners.templates`, `banners.sizes` | ✅ | Matriz plantilla → formatos y tamaño de cada formato. El carrusel usa el formato vertical `instagram_reel` (1080×1920) |
-| `banners.safe_zone` | ❌ | Zonas seguras superior e inferior para los formatos verticales, incluido `instagram_reel` |
-| `instagram_carousel.format` | ❌ | Formato del carrusel; debe apuntar a un `instagram_*` vertical declarado en `banners.sizes`. Por defecto, `instagram_reel` |
+| `banners.templates`, `banners.sizes` | ✅ | Matriz plantilla → formatos y tamaño de cada formato. El carrusel usa el formato vertical `instagram_portrait` (1080×1440, 4:3) |
+| `banners.safe_zone` | ❌ | Zonas seguras superior e inferior para los formatos verticales, incluido `instagram_portrait` |
+| `instagram_carousel.format` | ❌ | Formato del carrusel; debe apuntar a un `instagram_*` vertical declarado en `banners.sizes`. Por defecto, `instagram_portrait` |
 | `visual_prompts.*` | ✅ | Tratamientos, reglas de decisión, prompt negativo, proporción y sufijo de Midjourney; se validan al cargar |
 
 Los formatos de banner se nombran con el prefijo de su plataforma (`instagram_feed`, `instagram_story`), lo que permite filtrar por `--platforms` sin mantener un mapa adicional. Además, la variable de entorno `SOCIAL_FONT_DIR` permite apuntar a un directorio propio de fuentes.
@@ -474,7 +474,7 @@ Las constantes principales se encuentran en [news_agent/config.py](news_agent/co
 | `SOCIAL_X_THREAD_MIN_TWEETS` / `_MAX_TWEETS` | `5` / `7` | Largo del hilo de X |
 | `SOCIAL_IG_MAX_HASHTAGS` | `25` | Tope de hashtags de Instagram |
 | `SOCIAL_IG_CAROUSEL_SLIDES` | `3` | Slides de resumen del carrusel vertical; el carrusel completo suma portada y firma |
-| `SOCIAL_IG_SLIDE_TITLE_MAX_CHARS` / `_BODY_MAX_CHARS` / `_FIGURE_MAX_CHARS` | `70` / `240` / `40` | Topes de texto de cada slide de resumen |
+| `SOCIAL_IG_SLIDE_TEXT_MAX_CHARS` / `_FIGURE_MAX_CHARS` | `240` / `40` | Topes de texto y cifra de cada slide de resumen; el slide no tiene titular |
 | `SOCIAL_MIN_ARTICLE_WORDS` | `150` | Por debajo de esto el artículo no da material suficiente: aborta antes de llamar a la API |
 | `SOCIAL_BANNER_BASE_WIDTH` | `1080` | Ancho de referencia del diseño de banners |
 | `TRIPTYCH_MAX_TOKENS` | `8192` | Presupuesto de la generación del tríptico (portada + cinco notas en un solo JSON) |
@@ -635,7 +635,7 @@ social/2026_09_14_criminalizacion-de-la-disidencia/
 │   ├── quote_card_instagram_feed.png       # 1080×1080
 │   └── quote_card_instagram_story.png      # 1080×1920
 └── instagram/                  # Carrusel vertical exclusivo, en orden de publicación
-    ├── 01_cover.png            # Portada 1080×1920
+    ├── 01_cover.png            # Portada 1080×1440
     ├── 02_point_1.png          # Resumen del punto 1
     ├── 03_point_2.png          # Resumen del punto 2
     ├── 04_point_3.png          # Resumen del punto 3

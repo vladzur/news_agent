@@ -162,14 +162,15 @@ class FacebookCopy:
 class InstagramSlide:
     """Slide de resumen de un carrusel vertical de Instagram.
 
+    El slide no lleva titular separado: el texto es la idea completa y se
+    dibuja con una tipografía grande para que se lea de un vistazo.
+
     Attributes:
-        title: Titular breve del punto, pensado para leerse de un vistazo.
-        body: Explicación del punto en una o dos oraciones.
+        text: Idea principal del artículo, en una o dos oraciones.
         figure: Cifra o dato duro opcional, verificado contra el artículo.
     """
 
-    title: str
-    body: str
+    text: str
     figure: str = ""
 
 
@@ -333,8 +334,8 @@ class InstagramSlideSpec:
     Attributes:
         index: Posición del slide dentro del carrusel, desde 1.
         kind: Tipo de pieza: ``cover``, ``summary`` o ``signature``.
-        title: Texto principal del slide, útil para revisar la pieza sin abrir
-               el PNG.
+        text: Texto principal del slide, útil para revisar la pieza sin abrir
+              el PNG.
         width: Ancho en píxeles.
         height: Alto en píxeles.
         path: Ruta del PNG generado. None si el render falló.
@@ -342,7 +343,7 @@ class InstagramSlideSpec:
 
     index: int
     kind: str
-    title: str
+    text: str
     width: int
     height: int
     path: Path | None = None
