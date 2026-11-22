@@ -111,6 +111,73 @@ def article(article_file: Path):
 
 
 @pytest.fixture
+def political_article_markdown() -> str:
+    """Columna de ejemplo centrada en una figura pública política.
+
+    Returns:
+        str: Contenido Markdown del artículo.
+    """
+    return """\
+# Boric y la reforma que se hunde en el Congreso
+
+**Por La Chispa Sur**
+
+---
+
+El presidente Gabriel Boric volvió a La Moneda con una reforma tributaria que \
+no logra avanzar en el Congreso. La oposición bloquea el debate mientras las \
+cuentas fiscales se deterioran y los municipios de Chile, desde La Araucanía \
+hasta Los Lagos, esperan recursos que nunca llegan. La pregunta es si el \
+Gobierno insistirá en el acuerdo o dejará caer la reforma.
+
+## La reunión en La Moneda
+
+La ministra de Hacienda reconoció que el Ejecutivo no tiene los votos para \
+aprobar el proyecto en el Senado. Según el último informe, el déficit fiscal \
+alcanzó el 3,2% del producto y la recaudación cayó un 8% respecto del año \
+anterior.
+
+## El Congreso sin mayoría
+
+El oficialismo necesita convencer a los independientes y a una parte de la \
+oposición. Boric insistió en que la reforma es indispensable para financiar \
+pensiones y salud, pero los senadores piden cambios en el gasto y en la \
+administración tributaria.
+
+---
+
+*Artículo generado a partir de la pauta editorial de La Chispa Sur. Las fuentes \
+utilizadas se listan a continuación.*
+
+**Fuentes consultadas / sugeridas:**
+- La Tercera: cobertura de la tramitación de la reforma tributaria.
+- Radio Universidad de Chile: declaraciones desde La Moneda.
+"""
+
+
+@pytest.fixture
+def political_article_file(tmp_path: Path, political_article_markdown: str) -> Path:
+    """Escribe la columna política de ejemplo en un archivo temporal.
+
+    Returns:
+        Path: Ruta al archivo Markdown escrito.
+    """
+    path = tmp_path / "articulo_2_reforma-tributaria-boric.md"
+    path.write_text(political_article_markdown, encoding="utf-8")
+    return path
+
+
+@pytest.fixture
+def political_article(political_article_file: Path):
+    """Columna política de ejemplo ya parseada.
+
+    Returns:
+        ArticleSource: Artículo con figuras públicas y anclas concretas.
+    """
+    return parse_article_file(political_article_file)
+
+
+@pytest.fixture
 def copy_payload() -> dict:
     """Respuesta JSON de ejemplo del modelo para los copys.
 
@@ -232,6 +299,7 @@ def visual_payload() -> dict:
     """
     return {
         "treatment": "photorealistic",
+        "political_figures": [],
         "rationale": (
             "La columna narra una detención concreta en Cunco, con lugar, "
             "fecha y actuación policial documentables."
@@ -240,10 +308,41 @@ def visual_payload() -> dict:
             "Documentary photograph of a police van parked on a wet gravel "
             "street in southern Chile at dusk, two investigating officers in "
             "plain clothes walking towards a modest wooden house, a neighbour "
-            "watching from a doorway, 35mm lens at eye level, natural "
-            "available light, shallow depth of field, film grain, reportage "
-            "palette of crimson red, warm amber and deep teal, wide "
-            "composition with generous negative space, magazine cover quality"
+            "watching from a doorway, a hand-painted sign reading CUNCO, 35mm "
+            "lens at eye level, natural available light, shallow depth of "
+            "field, film grain, reportage palette of crimson red, warm amber "
+            "and deep teal, wide composition with generous negative space, "
+            "magazine cover quality"
+        ),
+        "extra_negative": "",
+    }
+
+
+@pytest.fixture
+def representative_payload() -> dict:
+    """Respuesta JSON de ejemplo con el tratamiento representativo.
+
+    Returns:
+        dict: Payload para una columna centrada en una figura pública política.
+    """
+    return {
+        "treatment": "representative",
+        "political_figures": ["Gabriel Boric"],
+        "rationale": (
+            "La columna gira en torno al presidente Gabriel Boric y su reforma "
+            "tributaria, así que la imagen debe mostrarlo con un parecido "
+            "reconocible dentro de una composición editorial que no pueda "
+            "confundirse con una fotografía real."
+        ),
+        "prompt": (
+            "Editorial representative composition, cut-paper collage with "
+            "halftone screen print and painted poster panels, the clearly "
+            "recognizable likeness of Gabriel Boric at the centre in flat "
+            "posterised crimson red and warm amber blocks, bold ink outlines, "
+            "a torn-paper facade of La Moneda behind him, a newspaper front "
+            "page reading PENSIONES, deep teal background, visible paper "
+            "grain, layered graphic panels, poster composition, magazine "
+            "cover quality"
         ),
         "extra_negative": "",
     }
@@ -258,6 +357,7 @@ def caricature_payload() -> dict:
     """
     return {
         "treatment": "caricature",
+        "political_figures": [],
         "rationale": (
             "La columna es un ensayo sobre la erosión institucional, sin una "
             "escena concreta que pueda fotografiarse."
@@ -265,10 +365,10 @@ def caricature_payload() -> dict:
         "prompt": (
             "Bold editorial illustration of a colossal cracked marble column "
             "held up by a single matchstick, tiny suited figures pushing from "
-            "opposite sides, flat vector infographics mixed with textured "
-            "digital painting, saturated teal and warm amber palette against "
-            "crimson red, dramatic rim light, poster composition, magazine "
-            "cover quality"
+            "opposite sides inside a Chilean public building, flat vector "
+            "infographics mixed with textured digital painting, saturated "
+            "teal and warm amber palette against crimson red, dramatic rim "
+            "light, poster composition, magazine cover quality"
         ),
         "extra_negative": "crowds, banners",
     }

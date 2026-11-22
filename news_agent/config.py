@@ -105,6 +105,11 @@ SOCIAL_TEMPERATURE = 0.4
 # Presupuesto propio para la generación de prompts visuales en inglés.
 SOCIAL_VISUAL_MAX_TOKENS = 4096
 SOCIAL_VISUAL_REASONING_EFFORT = "high"
+# Tratamientos visuales admitidos. La precedencia editorial no depende de
+# este orden: las figuras públicas políticas exigen una composición
+# representativa, el fotorrealismo es el camino por defecto cuando no las hay
+# y la caricatura queda reservada para columnas abstractas.
+SOCIAL_VISUAL_TREATMENTS = ("photorealistic", "representative", "caricature")
 # Reintentos de la llamada al LLM cuando la respuesta no es JSON válido.
 SOCIAL_JSON_MAX_RETRIES = 2
 
@@ -639,7 +644,7 @@ def _validate_banners_section(banners: dict) -> None:
 def _validate_visual_prompts_section(visual: dict) -> None:
     """Valida la sección ``visual_prompts`` de la configuración RRSS.
 
-    El prompt visual necesita los dos tratamientos, las reglas que los eligen,
+    El prompt visual necesita los tres tratamientos, las reglas que los eligen,
     el negativo de marca, el sufijo de versión y una proporción única. Sin
     estos campos el comando de Midjourney se genera incompleto, así que se
     rechazan al cargar en lugar de producir un prompt parcial.
@@ -657,13 +662,33 @@ def _validate_visual_prompts_section(visual: dict) -> None:
             "no vacío."
         )
 
-    for name in ("photorealistic", "caricature"):
+    for name in SOCIAL_VISUAL_TREATMENTS:
         value = treatments.get(name)
         if not isinstance(value, str) or not value.strip():
             raise ConfigurationError(
                 "La sección 'visual_prompts.treatments' requiere el "
                 f"tratamiento '{name}' como texto no vacío."
             )
+
+    treatment_negatives = visual.get("treatment_negatives")
+    if treatment_negatives is not None:
+        if not isinstance(treatment_negatives, dict):
+            raise ConfigurationError(
+                "La sección 'visual_prompts.treatment_negatives' debe ser un "
+                "objeto que asocie tratamiento y términos negativos."
+            )
+        for name, terms in treatment_negatives.items():
+            if name not in SOCIAL_VISUAL_TREATMENTS:
+                raise ConfigurationError(
+                    "La sección 'visual_prompts.treatment_negatives' tiene un "
+                    f"tratamiento desconocido: {name!r}. Se esperaba uno de: "
+                    f"{', '.join(SOCIAL_VISUAL_TREATMENTS)}."
+                )
+            if not isinstance(terms, str) or not terms.strip():
+                raise ConfigurationError(
+                    "Los términos negativos del tratamiento "
+                    f"'{name}' deben ser texto no vacío."
+                )
 
     for field in ("treatment_rules", "negative_prompt", "midjourney_suffix"):
         value = visual.get(field)

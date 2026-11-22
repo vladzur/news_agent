@@ -4,7 +4,14 @@ from pathlib import Path
 
 import pytest
 
-from news_agent.social.article_source import ArticleParseError, parse_article_file
+from news_agent.social.article_source import (
+    ArticleParseError,
+    anchor_in_text,
+    article_mentions,
+    extract_concrete_anchors,
+    normalize_for_anchor_match,
+    parse_article_file,
+)
 from news_agent.social.models import ArticleSource, normalize_for_match
 
 # ---------------------------------------------------------------------------
@@ -220,3 +227,55 @@ class TestNormalizeForMatch:
 
     def test_handles_none_as_empty(self):
         assert normalize_for_match(None) == ""
+
+
+# ---------------------------------------------------------------------------
+# Anclas concretas del artículo
+# ---------------------------------------------------------------------------
+
+
+class TestConcreteAnchors:
+    """Anclas que el prompt visual debe nombrar para representar el contenido."""
+
+    def test_extracts_places_people_and_figures(self, article):
+        anchors = extract_concrete_anchors(article)
+
+        assert "Cunco" in anchors
+        assert "Temuco" in anchors
+        assert "44" in anchors
+
+    def test_does_not_include_function_words(self, article):
+        anchors = [anchor.lower() for anchor in extract_concrete_anchors(article)]
+
+        assert "la" not in anchors
+        assert "el" not in anchors
+        assert "para" not in anchors
+
+    def test_excludes_sources_and_the_byline(self, article):
+        anchors = extract_concrete_anchors(article)
+        joined = " ".join(anchors)
+
+        assert "La Chispa Sur" not in joined
+        assert "INDH" not in joined
+
+    def test_limits_the_anchors_offered_to_the_model(self, article):
+        anchors = extract_concrete_anchors(article, limit=3)
+
+        assert len(anchors) == 3
+
+    def test_matches_anchors_ignoring_case_and_accents(self, article):
+        assert anchor_in_text("A map of LA ARAUCANIA", "Araucanía") is True
+        assert anchor_in_text("a street in CUNCO", "Cunco") is True
+
+    def test_matches_a_figure_by_its_number_without_the_unit(self, article):
+        assert anchor_in_text("more than 200 cases", "más de 200") is True
+
+    def test_article_mentions_a_named_person(self, political_article):
+        assert article_mentions(political_article, "Gabriel Boric") is True
+        assert article_mentions(political_article, "Boric") is True
+
+    def test_article_does_not_mention_an_invented_person(self, political_article):
+        assert article_mentions(political_article, "Michelle Bachelet") is False
+
+    def test_normalizes_accents_for_comparisons(self):
+        assert normalize_for_anchor_match("Araucanía") == "araucania"

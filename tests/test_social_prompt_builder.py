@@ -186,6 +186,22 @@ class TestVisualSystemPrompt:
         for treatment in social_config["visual_prompts"]["treatments"]:
             assert treatment in prompt
 
+    def test_requires_a_representative_composition_for_public_figures(
+        self, social_config
+    ):
+        prompt = build_visual_prompt_system_prompt(social_config).lower()
+
+        assert "political public figures" in prompt
+        assert "recognizable likeness" in prompt
+        assert "never a plausible documentary scene" in prompt
+        assert "named political public figure" in prompt
+
+    def test_forbids_hiding_named_public_figures(self, social_config):
+        prompt = build_visual_prompt_system_prompt(social_config).lower()
+
+        assert "never omit, hide, crop, turn away" in prompt
+        assert "recognizable politicians" in prompt
+
 
 class TestVisualUserPrompt:
     """Contenido del prompt de usuario para el prompt visual."""
@@ -222,12 +238,34 @@ class TestVisualUserPrompt:
         rules = social_config["visual_prompts"]["treatment_rules"]
         assert rules[:40] in prompt
 
-    def test_includes_both_treatment_styles(self, article, social_copy, social_config):
+    def test_includes_every_treatment_style(
+        self, article, social_copy, social_config
+    ):
         prompt = build_visual_prompt_user_prompt(article, social_copy, social_config)
 
         treatments = social_config["visual_prompts"]["treatments"]
-        assert treatments["photorealistic"][:40] in prompt
-        assert treatments["caricature"][:40] in prompt
+        for name, style in treatments.items():
+            assert name in prompt
+            assert style[:40] in prompt
+
+    def test_includes_the_concrete_anchors_of_the_column(
+        self, article, social_copy, social_config
+    ):
+        prompt = build_visual_prompt_user_prompt(article, social_copy, social_config)
+
+        assert "## Concrete anchors from the column" in prompt
+        assert "Cunco" in prompt
+        assert "at least two" in prompt
+
+    def test_includes_the_public_figure_rule(
+        self, article, social_copy, social_config
+    ):
+        prompt = build_visual_prompt_user_prompt(article, social_copy, social_config)
+
+        assert "## Political public figures" in prompt
+        assert "recognizable likeness" in prompt
+        assert "political_figures" in prompt
+        assert "never put terms such as recognizable politicians" in prompt
 
     def test_includes_the_negative_prompt(self, article, social_copy, social_config):
         prompt = build_visual_prompt_user_prompt(article, social_copy, social_config)
@@ -256,7 +294,13 @@ class TestVisualUserPrompt:
     ):
         prompt = build_visual_prompt_user_prompt(article, social_copy, social_config)
 
-        for key in ("treatment", "rationale", "prompt", "extra_negative"):
+        for key in (
+            "treatment",
+            "political_figures",
+            "rationale",
+            "prompt",
+            "extra_negative",
+        ):
             assert f'"{key}"' in prompt
 
     def test_forbids_markdown_fences(self, article, social_copy, social_config):

@@ -193,6 +193,39 @@ class TestLoadSocialConfig:
         with pytest.raises(ConfigurationError, match="--v"):
             load_social_config(path)
 
+    def test_visual_prompts_without_the_representative_treatment_raises(
+        self, tmp_path, social_config
+    ):
+        payload = copy.deepcopy(social_config)
+        payload["visual_prompts"]["treatments"].pop("representative")
+        path = tmp_path / "sin-representativo.json"
+        path.write_text(json.dumps(payload), encoding="utf-8")
+
+        with pytest.raises(ConfigurationError, match="representative"):
+            load_social_config(path)
+
+    def test_treatment_negatives_with_an_unknown_treatment_raises(
+        self, tmp_path, social_config
+    ):
+        payload = copy.deepcopy(social_config)
+        payload["visual_prompts"]["treatment_negatives"]["inventado"] = "photographic"
+        path = tmp_path / "negativo-desconocido.json"
+        path.write_text(json.dumps(payload), encoding="utf-8")
+
+        with pytest.raises(ConfigurationError, match="inventado"):
+            load_social_config(path)
+
+    def test_treatment_negatives_with_a_non_text_value_raises(
+        self, tmp_path, social_config
+    ):
+        payload = copy.deepcopy(social_config)
+        payload["visual_prompts"]["treatment_negatives"]["representative"] = []
+        path = tmp_path / "negativo-invalido.json"
+        path.write_text(json.dumps(payload), encoding="utf-8")
+
+        with pytest.raises(ConfigurationError, match="texto no vacío"):
+            load_social_config(path)
+
     def test_platforms_with_an_unknown_platform_raises(
         self, tmp_path, social_config
     ):
@@ -455,10 +488,14 @@ class TestRepositoryConfigCoherence:
         ):
             assert key in visual
 
-    def test_declares_both_visual_treatments(self, social_config):
+    def test_declares_the_three_visual_treatments(self, social_config):
         treatments = social_config["visual_prompts"]["treatments"]
 
-        assert set(treatments) == {"photorealistic", "caricature"}
+        assert set(treatments) == {
+            "photorealistic",
+            "representative",
+            "caricature",
+        }
         assert all(isinstance(value, str) and value for value in treatments.values())
 
     def test_treatment_rules_name_every_configured_treatment(self, social_config):
@@ -496,6 +533,35 @@ class TestRepositoryConfigCoherence:
         assert "illustration" in style
         assert "infographic" in style
         assert "saturated" in style
+
+    def test_representative_style_is_an_editorial_composition(
+        self, social_config
+    ):
+        style = social_config["visual_prompts"]["treatments"][
+            "representative"
+        ].lower()
+
+        assert "collage" in style
+        assert "halftone" in style
+        assert "recognizable likeness" in style
+        assert "editorial artefact" in style
+
+    def test_representative_style_avoids_photographic_language(
+        self, social_config
+    ):
+        style = social_config["visual_prompts"]["treatments"][
+            "representative"
+        ].lower()
+
+        assert "documentary" not in style
+        assert "35mm" not in style
+        assert "photojournalism" not in style
+
+    def test_declares_the_representative_treatment_negative(self, social_config):
+        negatives = social_config["visual_prompts"]["treatment_negatives"]
+
+        assert "photographic realism" in negatives["representative"]
+        assert "paparazzi" in negatives["representative"]
 
     def test_negative_prompt_excludes_dull_results(self, social_config):
         negative = social_config["visual_prompts"]["negative_prompt"].lower()

@@ -544,6 +544,9 @@ def save_manifest(
             "count": 1 if prompt else 0,
             "treatment": prompt.treatment if prompt else None,
             "aspect_ratio": prompt.aspect_ratio if prompt else None,
+            "political_figures": (
+                list(prompt.political_figures) if prompt else []
+            ),
         },
         "banners": {
             "rendered": len(rendered),

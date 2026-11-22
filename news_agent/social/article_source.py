@@ -10,6 +10,7 @@ crudo.
 
 import logging
 import re
+import unicodedata
 from pathlib import Path
 
 from .models import ArticleSection, ArticleSource
@@ -370,3 +371,203 @@ def parse_article_file(filepath: str | Path) -> ArticleSource:
         word_count=word_count,
         raw_text=text,
     )
+
+
+# ---------------------------------------------------------------------------
+# Anclas concretas del artículo
+# ---------------------------------------------------------------------------
+
+# El prompt visual debe representar el contenido real de la columna, no una
+# escena genérica. Estas anclas —nombres propios, acrónimos y cifras— son la
+# materia concreta que el prompt tiene que nombrar.
+_ANCHOR_TOKEN_RE = re.compile(
+    r"\b[A-ZÁÉÍÓÚÑÜ][\wÁÉÍÓÚÑÜáéíóúñü'’-]{2,}\b",
+    re.UNICODE,
+)
+_NUMBER_TOKEN_RE = re.compile(r"\d[\d.,]*\s*%?")
+
+# Palabras capitalizadas que no son anclas: artículos, pronombres,
+# preposiciones, conjunciones y adverbios que suelen abrir una oración.
+_ANCHOR_STOPWORDS = frozenset(
+    {
+        "aunque", "además", "ahora", "antes", "aquel", "aquella", "aquellas",
+        "aquellos", "así", "aun", "aún", "bajo", "cada", "como", "contra",
+        "cuando", "debe", "deben", "desde", "después", "dicha", "dichas",
+        "dicho", "dichos", "donde", "durante", "el", "ella", "ellas", "ello",
+        "ellos", "entre", "esa", "esas", "ese", "eso", "esos", "esta",
+        "estamos", "estas", "este", "esto", "estos", "está", "están", "fue",
+        "gran", "grandes", "ha", "hace", "han", "hay", "hacia", "hasta", "hoy",
+        "la", "las", "luego", "los", "mañana", "más", "mediante", "menos",
+        "mientras", "mismo", "misma", "mismos", "mismas", "muy", "nada",
+        "ni", "no", "nuevo", "nueva", "nuevos", "nuevas", "nunca", "otra",
+        "otras", "otro", "otros", "para", "pero", "poco", "por", "porque",
+        "primer", "primera", "primero", "puede", "pueden", "quizá", "quizás",
+        "segunda", "segundo", "según", "ser", "si", "sí", "siempre", "sin",
+        "sobre", "solo", "sólo", "son", "tal", "tales", "tan", "tiene",
+        "tienen", "todo", "toda", "todas", "todos", "tras", "un", "una",
+        "unas", "uno", "unos", "ya",
+    }
+)
+
+
+def _fold_accents(text: str) -> str:
+    """Retira los acentos de un texto para comparaciones tolerantes.
+
+    Args:
+        text: Texto original.
+
+    Returns:
+        str: Texto sin diacríticos.
+    """
+    decomposed = unicodedata.normalize("NFKD", text or "")
+    return "".join(char for char in decomposed if not unicodedata.combining(char))
+
+
+def normalize_for_anchor_match(text: str) -> str:
+    """Normaliza un texto para comparar anclas sin distinguir caja ni acentos.
+
+    Args:
+        text: Texto original.
+
+    Returns:
+        str: Texto en minúsculas, sin acentos y con espacios colapsados.
+    """
+    return " ".join(_fold_accents(text).lower().split())
+
+
+def anchor_in_text(text: str, anchor: str) -> bool:
+    """Indica si un ancla aparece en un texto.
+
+    La comparación ignora mayúsculas y acentos. Cuando el ancla contiene una
+    cifra, también se acepta la cifra sin su unidad: el prompt en inglés puede
+    escribir "200" aunque el artículo diga "más de 200".
+
+    Args:
+        text: Texto donde se busca el ancla (por ejemplo, el prompt visual).
+        anchor: Ancla concreta extraída del artículo.
+
+    Returns:
+        bool: True si el ancla está representada en el texto.
+    """
+    normalized_anchor = normalize_for_anchor_match(anchor)
+    if not normalized_anchor:
+        return False
+
+    haystack = normalize_for_anchor_match(text)
+    if normalized_anchor in haystack:
+        return True
+
+    numbers = [
+        number
+        for number in re.findall(r"\d[\d.,]*", anchor or "")
+        if len(number) >= 2
+    ]
+    return any(number in haystack for number in numbers)
+
+
+def _anchor_source_texts(article: ArticleSource) -> list[str]:
+    """Devuelve los textos del artículo que pueden aportar anclas concretas.
+
+    Se excluyen la firma, las fuentes y el apéndice de portada: no son el
+    contenido publicable que la imagen debe representar.
+
+    Args:
+        article: Artículo de origen ya parseado.
+
+    Returns:
+        list[str]: Titular, lead, subtítulos y cuerpos de sección.
+    """
+    texts = [article.title, article.lead]
+    for section in article.sections:
+        texts.append(section.heading)
+        texts.append(section.body)
+    return texts
+
+
+def extract_concrete_anchors(
+    article: ArticleSource, limit: int | None = None
+) -> list[str]:
+    """Extrae las anclas concretas que un prompt debe nombrar.
+
+    Las anclas son las cifras detectadas por el parser, los nombres propios y
+    los acrónimos del titular, el lead y las secciones. Se filtran las palabras
+    funcionales capitalizadas para no ofrecer ruido al modelo. Las anclas se
+    ordenan por peso editorial —presencia en el titular, el lead y las
+    cabeceras, más la frecuencia en el cuerpo— para que el recorte no deje
+    fuera a los protagonistas de la columna.
+
+    Args:
+        article: Artículo de origen ya parseado.
+        limit: Cantidad máxima de anclas a devolver. Si se omite, se devuelven
+               todas las encontradas.
+
+    Returns:
+        list[str]: Anclas ordenadas por relevancia, sin duplicados.
+    """
+    # Cada candidato guarda su etiqueta visible, su peso y el orden de primera
+    # aparición, que desempata sin volver aleatorio el resultado.
+    candidates: dict[str, tuple[str, int, int]] = {}
+
+    def add(candidate: str, weight: int = 1) -> None:
+        cleaned = " ".join((candidate or "").split())
+        key = normalize_for_anchor_match(cleaned)
+        if not cleaned or not key:
+            return
+        entry = candidates.get(key)
+        if entry is None:
+            candidates[key] = (cleaned, weight, len(candidates))
+        else:
+            label, score, order = entry
+            candidates[key] = (label, score + weight, order)
+
+    for figure in article.key_figures:
+        add(figure, weight=5)
+        for number in _NUMBER_TOKEN_RE.findall(figure):
+            add(number, weight=5)
+
+    weighted_texts: list[tuple[str, int]] = [
+        (article.title, 4),
+        (article.lead, 2),
+    ]
+    for section in article.sections:
+        weighted_texts.append((section.heading, 2))
+        weighted_texts.append((section.body, 1))
+
+    for text, weight in weighted_texts:
+        for match in _ANCHOR_TOKEN_RE.finditer(text or ""):
+            token = match.group(0)
+            if token.lower() in _ANCHOR_STOPWORDS:
+                continue
+            add(token, weight)
+
+    ranked = sorted(
+        candidates.values(), key=lambda entry: (-entry[1], entry[2])
+    )
+    anchors = [label for label, _, _ in ranked]
+
+    if limit is not None:
+        return anchors[:limit]
+    return anchors
+
+
+def article_mentions(article: ArticleSource, name: str) -> bool:
+    """Comprueba si un nombre aparece en el material publicable del artículo.
+
+    Se tolera que el modelo use solo una parte del nombre: si el nombre
+    completo no aparece, se prueban sus tokens de cuatro letras o más. Así
+    "Gabriel Boric" se valida aunque el artículo diga solo "Boric", pero no se
+    acepta una figura inventada.
+
+    Args:
+        article: Artículo de origen ya parseado.
+        name: Nombre declarado por el modelo.
+
+    Returns:
+        bool: True si el nombre proviene del artículo.
+    """
+    reference = " ".join(_anchor_source_texts(article))
+    if anchor_in_text(reference, name):
+        return True
+
+    tokens = [token for token in re.split(r"\s+", name or "") if len(token) >= 4]
+    return any(anchor_in_text(reference, token) for token in tokens)
