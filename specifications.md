@@ -155,12 +155,13 @@ El único origen admitido es un **artículo Markdown ya publicado** (`articulos/
 - **Textos breves dentro de la escena**: rótulos de tres o cuatro palabras en español, integrados como letreros, pancartas, carteles, pantallas o precios, **en mayúsculas y sin comillas** (`PENSIONES`, `-10,39%`). El material de origen entrega las cifras de la columna para que el modelo las use cuando aporten.
 - **Restricciones verificadas en código**:
   - Se rechazan los **bloques de texto**: párrafos, letra pequeña y titulares largos, porque los modelos de difusión los renderizan como ruido. Los rótulos breves y las cifras no se marcan como infracción.
-  - En el tratamiento fotorrealista, las **figuras públicas nombradas** aparecen solo dentro de una escena documental: prohibidos el *deepfake*, el gesto inventado y el escenario inventado. Las víctimas, menores y personas privadas se representan de forma no identificable.
-  - En el tratamiento de caricatura, las figuras públicas nombradas pueden aparecer como personajes estilizados; las víctimas, menores y personas privadas, como figuras anónimas.
   - Obligatorio nombrar una **paleta de color**: un prompt sin señales cromáticas se rechaza, porque devuelve imágenes planas y sin contraste.
-  - Prohibida la **violencia explícita**.
+  - Se rechaza la **violencia explícita** (`blood`, `gore`, `corpse`, `massacre`, entre otros) y las **escenas fabricadas o suplantaciones de identidad** (`deepfake`, `face swap`, `staged reenactment`, `fabricated scene`).
   - Los rótulos dentro de la imagen —en mayúsculas o entre comillas— quedan excluidos de la heurística que detecta prompts escritos en español, de modo que un prompt en inglés puede incluir etiquetas en español. Además, el código retira las comillas y las barras invertidas del prompt: Midjourney recibe texto plano, no JSON.
   - Prompt positivo entre 25 y 200 palabras, en inglés.
+- **Reglas editoriales del prompt**, no verificables de forma determinista:
+  - En el tratamiento fotorrealista, las **figuras públicas nombradas** aparecen solo dentro de una escena documental: se prohíben el gesto inventado y el escenario inventado. Las víctimas, menores y personas privadas se representan de forma no identificable.
+  - En el tratamiento de caricatura, las figuras públicas nombradas pueden aparecer como personajes estilizados; las víctimas, menores y personas privadas, como figuras anónimas.
 - **Salida:** tratamiento, su justificación en español, prompt positivo, prompt negativo (el de marca más los agregados específicos de la columna, sin duplicar términos) y comando completo de Midjourney (`--ar`, flag de estilo, `--v` y `--no`).
 - **Dos archivos por bundle:** `visual_prompt.txt` contiene únicamente el comando en texto plano —sin JSON, sin comillas escapadas— para pegarlo en Midjourney; `visual_prompts.json` conserva los metadatos (tratamiento, justificación, prompt, negativo y proporción).
 
@@ -198,7 +199,7 @@ La identidad visual y los límites viven en `social_config.json`, versionado en 
 | `banners.safe_zone` | Bandas no utilizables de los formatos verticales | ❌ |
 | `visual_prompts` | Tratamientos, reglas de decisión, prompt negativo, proporción única y sufijo de Midjourney | ✅ |
 
-Un color mal escrito, un tamaño inválido o una plantilla que apunte a un formato inexistente se detectan al cargar el archivo, con un mensaje que indica el campo culpable.
+Un color mal escrito, una clave de color faltante, un tamaño inválido, una sección `visual_prompts` incompleta o una plantilla que apunte a un formato inexistente se detectan al cargar el archivo, con un mensaje que indica el campo culpable.
 
 ### 6.8. Estructura del subsistema
 
@@ -266,8 +267,8 @@ Ejecuta, en orden y dentro de una misma invocación: la generación de la pauta,
 - **Nunca se elimina** la caché de contenido (`cache/`) ni los recursos de la marca (`assets/`): ninguna entrada fuera de los patrones declarados se considera, aunque sea antigua.
 - **Fecha de referencia:** la fecha codificada en el nombre cuando existe (pautas y bundles) y, cuando no (las notas), la fecha de modificación. La fecha del nombre es la fuente fiable: al clonar o copiar el repositorio, todos los archivos quedan con la fecha de la copia.
 - **Umbral:** `--days N` (por defecto `DEFAULT_CLEAN_MAX_AGE_DAYS`, 30). Se elimina lo que supere ese corte; un valor menor que 1 es un error de uso.
-- **Confirmación:** el comando lista lo que va a eliminar, con antigüedad y tamaño, y pide confirmación. `--dry-run` muestra el listado sin borrar nada y `--yes` omite la confirmación para automatizar.
-- **Aislamiento de fallos:** si un artefacto no se puede eliminar, se registra en el log, el resto del lote continúa y el resumen final informa cuántos fallaron.
+- **Confirmación:** el comando lista lo que va a eliminar, con antigüedad y tamaño, y pide confirmación. `--dry-run` muestra el listado sin borrar nada y `--yes` omite la confirmación para automatizar. Sin una terminal interactiva, `clean` sin `--yes` no puede confirmar y termina con error de uso.
+- **Aislamiento de fallos:** si un artefacto no se puede eliminar, se registra en el log, el resto del lote continúa y el resumen final informa cuántos fallaron. Si hubo fallos parciales, el comando termina con código 1.
 
 ### 7.6. Estructura
 
@@ -285,8 +286,8 @@ Ejecuta, en orden y dentro de una misma invocación: la generación de la pauta,
 | Código | Significado |
 |:------:|-------------|
 | `0` | Ejecución exitosa (o nada que procesar, sin invocar a la API) |
-| `1` | Error de ejecución: configuración, API, pauta imposible de parsear, artefacto de entrada inexistente |
-| `2` | Error de uso: comando desconocido, opción inválida, plataforma desconocida, falta `--number` sin terminal o `--days` no positivo |
+| `1` | Error de ejecución: configuración, API, pauta imposible de parsear, artefacto de entrada inexistente o fallos parciales al eliminar artefactos |
+| `2` | Error de uso: comando desconocido, opción inválida, plataforma desconocida, falta `--number` sin terminal, `--article` sin `--write-article`, `clean` sin terminal para confirmar o `--days` no positivo |
 | `130` | Interrupción con Ctrl+C |
 
 ## 8. Subsistema de Tríptico Impreso
@@ -336,20 +337,20 @@ Como el subsistema de RRSS, pide al modelo un **objeto JSON** en lugar de Markdo
 
 | Campo | Contenido |
 |-------|-----------|
-| `cover.hook` | Gancho de portada, en una línea |
+| `cover.hook` | Gancho de portada (el prompt reserva hasta tres líneas) |
 | `cover.title` | Título de la edición semanal |
-| `notes[]` | Exactamente una nota por propuesta, en orden |
-| `notes[].proposal_number` | Número de la propuesta de la pauta |
+| `notes[]` | Una nota por cada propuesta seleccionada, en orden; `layout.notes` fija la cantidad (5 por defecto) y no puede superar los paneles disponibles |
+| `notes[].proposal_number` | Número declarado por el modelo; si no coincide con la propuesta se advierte y la nota se maqueta por posición |
 | `notes[].title` | Título en lenguaje llano |
 | `notes[].body` | Qué pasó, en dos o tres párrafos cortos |
 | `notes[].key_data` | Los datos que lo prueban: tres elementos |
 | `notes[].why_it_matters` | Por qué le importa a quien lee |
 
-El panel 1 queda reservado para la portada; las cinco notas ocupan los paneles 2 a 6. Las fuentes de cada nota no las escribe el modelo: se toman de las fuentes sugeridas de su propia propuesta.
+El panel 1 queda reservado para la portada; con el valor por defecto, las cinco notas ocupan los paneles 2 a 6. Las fuentes de cada nota no las escribe el modelo: se toman de las fuentes sugeridas de su propia propuesta.
 
 ### 8.5. Reglas de lenguaje simple
 
-Las cuatro reglas duras del tono se declaran en el system prompt y se verifican después en código:
+Las cuatro reglas duras del tono se declaran en el system prompt y se verifican después en código sobre el cuerpo y el bloque «por qué te importa»:
 
 | Regla | Verificación |
 |-------|--------------|
@@ -362,9 +363,9 @@ Las cuatro reglas duras del tono se declaran en el system prompt y se verifican 
 
 | Situación | Respuesta |
 |-----------|-----------|
-| JSON imposible de extraer | Reintento con nota de corrección; agotados los intentos, error |
+| JSON inválido o contrato incumplido | Reintento con nota de corrección; agotados los intentos, error |
 | Cantidad de notas distinta de la cantidad de propuestas | Error: no se escribe nada |
-| Nota sin título o sin cuerpo | Error: no se escribe nada |
+| Nota sin título, sin cuerpo o sin «por qué te importa» | Error: no se escribe nada |
 | Cuerpo por debajo de `TRIPTYCH_NOTE_MIN_CHARS` | Error: la respuesta no es una nota publicable |
 | Bloque que supera una columna y media | **Advertencia.** Nunca se recorta: el texto se escribe completo y el aviso viaja al Markdown y al manifiesto |
 | Oración larga, sigla sin explicar o término a evitar | **Advertencia**, con el texto culpable citado |
@@ -395,9 +396,11 @@ La geometría, la tipografía y las reglas de estilo viven en `triptych_config.j
 | `limits` | Tope en columnas del bloque y objetivo de caracteres del cuerpo | ✅ |
 | `style` | Máximo de palabras por oración, siglas permitidas y términos a evitar | ✅ |
 | `layout` | Cantidad de notas y de datos clave por nota | ✅ |
-| `brand` | Nombre, handle, sitio y logo | ❌ |
+| `brand` | Nombre de la marca; el tríptico usa `name` como respaldo de la portada | ❌ |
 
-Una medida negativa, un margen que se coma la hoja, un pliegue desconocido o una lista de siglas declarada como texto se detectan al cargar, con un mensaje que nombra el campo culpable. Cambiar la medida del papel o el cuerpo de la tipografía no requiere tocar código: el presupuesto de caracteres se recalcula solo.
+El tríptico solo consume `brand.name`; `handle`, `website` y `logo_path` se aceptan en el archivo de configuración pero no se dibujan en esta pieza.
+
+Una medida negativa, un margen que se coma la hoja, un pliegue desconocido, una cantidad de notas que no quepa en los paneles o una lista de siglas declarada como texto se detectan al cargar, con un mensaje que nombra el campo culpable. La portada ocupa un panel: una hoja de `sides × columns_per_side` paneles solo admite `sides × columns_per_side − 1` notas. Cambiar la medida del papel o el cuerpo de la tipografía no requiere tocar código: el presupuesto de caracteres se recalcula solo y el Markdown usa el `preset` declarado en la configuración.
 
 ### 8.9. Estructura del subsistema
 
