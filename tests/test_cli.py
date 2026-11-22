@@ -275,8 +275,23 @@ class TestParser:
 
         assert args.base == "."
         assert args.number is None
+        assert args.all_articles is False
         assert args.platforms is None
         assert args.debug is False
+
+    def test_all_accepts_the_full_edition_flag(self):
+        args = build_cli_parser().parse_args(["all", "--all-articles"])
+
+        assert args.all_articles is True
+        assert args.number is None
+
+    def test_all_views_number_and_all_articles_as_exclusive(self):
+        with pytest.raises(SystemExit) as excinfo:
+            build_cli_parser().parse_args(
+                ["all", "--all-articles", "--number", "1"]
+            )
+
+        assert excinfo.value.code == 2
 
     def test_clean_defaults(self):
         args = build_cli_parser().parse_args(["clean"])
@@ -925,9 +940,13 @@ class TestAllCommand:
         Returns:
             dict[str, Any]: Registro de llamadas y resultados simulados.
         """
-        calls: dict[str, Any] = {"order": []}
+        calls: dict[str, Any] = {
+            "order": [],
+            "article_calls": [],
+            "article_results": [],
+            "social_calls": [],
+        }
         report = _report_result(tmp_path)
-        article = _article_result(tmp_path)
 
         def _fake_pipeline(**kwargs: Any) -> dict[str, Any]:
             calls["order"].append("report")
@@ -935,13 +954,25 @@ class TestAllCommand:
             return report
 
         def _fake_write(**kwargs: Any) -> dict[str, Any]:
+            number = int(kwargs["article_number"])
+            article = {
+                **_article_result(tmp_path),
+                "article_path": (
+                    tmp_path / "articulos" / f"articulo_{number}_titular.md"
+                ),
+                "proposal_number": number,
+            }
             calls["order"].append("article")
             calls["article"] = kwargs
+            calls["article_calls"].append(kwargs)
+            calls["article_results"].append(article)
+            calls["article_result"] = article
             return article
 
         def _fake_socialize(**kwargs: Any) -> dict[str, Any]:
             calls["order"].append("social")
             calls["social"] = kwargs
+            calls["social_calls"].append(kwargs)
             return _social_result(tmp_path)
 
         def _fake_print(**kwargs: Any) -> dict[str, Any]:
@@ -957,7 +988,8 @@ class TestAllCommand:
         monkeypatch.setattr(cli, "run_print", _fake_print)
 
         calls["report_result"] = report
-        calls["article_result"] = article
+        calls["write_article"] = _fake_write
+        calls["socialize"] = _fake_socialize
         return calls
 
     def test_runs_the_four_steps_in_order(self, tmp_path, steps, capsys):
@@ -1050,6 +1082,103 @@ class TestAllCommand:
         assert excinfo.value.code == 2
         assert "tiktok" in capsys.readouterr().err
         assert steps["order"] == []
+
+    def test_all_articles_writes_every_proposal_and_its_social_bundle(
+        self, tmp_path, steps, capsys
+    ):
+        main(["all", "--base", str(tmp_path), "--all-articles"])
+
+        assert [
+            call["article_number"] for call in steps["article_calls"]
+        ] == [1, 2, 3, 4, 5]
+        assert len(steps["social_calls"]) == 5
+        assert [
+            call["article_path"] for call in steps["social_calls"]
+        ] == [
+            result["article_path"] for result in steps["article_results"]
+        ]
+        assert steps["order"].count("print") == 1
+
+        output = capsys.readouterr().out
+        assert "Paso 2/4" in output
+        assert "Resumen de la edición completa" in output
+        assert "Notas escritas: 5/5" in output
+        assert "Bundles de RRSS: 5/5" in output
+        assert "Edición completa finalizada" in output
+
+    def test_all_articles_needs_no_terminal(
+        self, tmp_path, steps, monkeypatch
+    ):
+        monkeypatch.setattr("sys.stdin", _NonTtyStdin())
+
+        main(["all", "--base", str(tmp_path), "--all-articles"])
+
+        assert len(steps["article_calls"]) == 5
+
+    def test_all_articles_continues_after_a_failed_article(
+        self, tmp_path, steps, monkeypatch, capsys
+    ):
+        original = steps["write_article"]
+
+        def _flaky(**kwargs: Any) -> dict[str, Any]:
+            if int(kwargs["article_number"]) == 3:
+                raise SystemExit(1)
+            return original(**kwargs)
+
+        monkeypatch.setattr(cli, "write_article", _flaky)
+
+        with pytest.raises(SystemExit) as excinfo:
+            main(["all", "--base", str(tmp_path), "--all-articles"])
+
+        assert excinfo.value.code == 1
+        assert [
+            call["article_number"] for call in steps["article_calls"]
+        ] == [1, 2, 4, 5]
+        assert len(steps["social_calls"]) == 4
+        assert steps["order"].count("print") == 1
+        assert "incidencias" in capsys.readouterr().err
+
+    def test_all_articles_continues_after_a_failed_social_bundle(
+        self, tmp_path, steps, monkeypatch, capsys
+    ):
+        original = steps["socialize"]
+        failed_path = tmp_path / "articulos" / "articulo_2_titular.md"
+
+        def _flaky(**kwargs: Any) -> dict[str, Any]:
+            if kwargs["article_path"] == failed_path:
+                raise SystemExit(1)
+            return original(**kwargs)
+
+        monkeypatch.setattr(
+            "news_agent.social.orchestrator.run_socialize", _flaky
+        )
+
+        with pytest.raises(SystemExit) as excinfo:
+            main(["all", "--base", str(tmp_path), "--all-articles"])
+
+        assert excinfo.value.code == 1
+        assert len(steps["article_calls"]) == 5
+        assert len(steps["social_calls"]) == 4
+        assert steps["order"].count("print") == 1
+        assert "incidencias" in capsys.readouterr().err
+
+    def test_all_articles_skips_social_when_no_article_can_be_written(
+        self, tmp_path, steps, monkeypatch, capsys
+    ):
+        def _broken(**kwargs: Any) -> dict[str, Any]:
+            raise SystemExit(1)
+
+        monkeypatch.setattr(cli, "write_article", _broken)
+
+        with pytest.raises(SystemExit) as excinfo:
+            main(["all", "--base", str(tmp_path), "--all-articles"])
+
+        assert excinfo.value.code == 1
+        assert steps["social_calls"] == []
+        assert steps["order"].count("print") == 1
+        err = capsys.readouterr().err
+        assert "No se escribió ninguna nota" in err
+        assert "incidencias" in err
 
 
 # ---------------------------------------------------------------------------

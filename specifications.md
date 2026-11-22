@@ -270,7 +270,7 @@ Un color mal escrito, una clave de color faltante, un tamaño inválido, una sec
 
 ### 7.1. Objetivo
 
-El motor se opera desde un CLI por subcomandos que reduce la ejecución de cada flujo a un solo comando y encadena los cuatro pasos del proceso editorial cuando se quiere de punta a punta: pauta, nota, redes sociales y tríptico impreso. Los modos clásicos por banderas se conservan para los scripts y cron ya desplegados.
+El motor se opera desde un CLI por subcomandos que reduce la ejecución de cada flujo a un solo comando y encadena los cuatro pasos del proceso editorial cuando se quiere de punta a punta: pauta, una o todas las notas, redes sociales de cada nota y tríptico impreso. Los modos clásicos por banderas se conservan para los scripts y cron ya desplegados.
 
 ### 7.2. Subcomandos
 
@@ -280,20 +280,24 @@ El motor se opera desde un CLI por subcomandos que reduce la ejecución de cada 
 | `article` | Escribe una nota desde una propuesta | `--pauta`, `-n/--number`, `--output` | `articulos/articulo_N_slug.md` |
 | `social` | Repurposing para redes sociales | `--article`, `--articles-dir`, `--all`, `--select`, `--output`, `--platforms`, `--social-config`, `--skip-banners`, `--skip-prompts` | `social/AAAA_MM_DD_slug/` con copys, prompts, Markdown y banners |
 | `print` | Tríptico impreso de la semana | `--pauta`, `--output`, `--triptych-config` | `impresos/AAAA_MM_DD_pauta-semanal/` con el tríptico en JSON, el Markdown panel por panel y el manifiesto |
-| `all` | Secuencia completa | `--feeds`, `--base`, `-n/--number`, opciones sociales, `--triptych-config` y `--debug` | Los cuatro anteriores |
+| `all` | Secuencia completa, con una nota o la edición entera | `--feeds`, `--base`, `-n/--number`, `--all-articles`, opciones sociales, `--triptych-config` y `--debug` | Los cuatro anteriores; con `--all-articles`, una nota y un bundle de RRSS por propuesta |
 | `clean` | Limpieza de artefactos antiguos | `--base`, `--target`, `--days`, `--dry-run`, `--yes` | Elimina archivos y bundles |
 
 Todos los comandos aceptan `--verbose`. En `clean` la bandera se acepta por uniformidad del parser, pero todavía no cambia el nivel de logging.
 
 ### 7.3. Comando secuencial `all`
 
-Ejecuta, en orden y dentro de una misma invocación: la generación de la pauta, la escritura de la nota elegida, el bundle de redes sociales y el tríptico impreso. La pauta y el artículo recién generados se pasan como entrada al paso siguiente, sin intervención manual. El tríptico se arma desde la pauta del primer paso, así que no depende de la nota elegida. Si un paso falla, la ejecución se detiene con su código de error y no se ejecutan los pasos posteriores.
+Ejecuta, en orden y dentro de una misma invocación: la generación de la pauta, la escritura de una nota o de todas las propuestas, el bundle de redes sociales de cada nota y el tríptico impreso. La pauta y las notas recién generadas se pasan como entrada al paso siguiente, sin intervención manual.
+
+- **Modo de una nota** (`--number N`): escribe esa propuesta, genera su bundle de RRSS y arma el tríptico. Un fallo en cualquiera de las etapas detiene la ejecución con su código de error.
+- **Edición completa** (`--all-articles`): lee las propuestas reales de la pauta, escribe una nota por cada una y genera un bundle de RRSS por nota. Si una nota o un bundle social falla, se informa y se continúa con los demás; el tríptico se arma igualmente desde la pauta. Al final se muestra un resumen y se sale con código 1 si hubo incidencias. No pregunta por la terminal, así que es el modo recomendado para cron.
+- El tríptico se arma desde la pauta del primer paso, así que no depende de las notas generadas.
 
 ### 7.4. Entradas implícitas y directorio de salida
 
 - **Pauta:** si `article` no recibe `--pauta`, toma la más reciente de `reportes/`. El orden lo da el nombre, que incluye la fecha (`AAAA_MM_DD`).
 - **Artículo:** si `social` no recibe `--article` ni usa `--all`/`--select`, toma el de fecha de modificación más reciente del directorio indicado por `--articles-dir` (`articulos/` por defecto), porque las notas no llevan fecha en el nombre.
-- **Propuesta:** si `article` o `all` no reciben `-n/--number`, muestran los cinco titulares y preguntan cuál desarrollar. Sin terminal interactiva (por ejemplo en un cron) la ejecución falla con código 2 y un mensaje que pide `--number`, en lugar de quedar esperando una respuesta que nunca llegará. En `all`, esa comprobación y la de `--platforms` ocurren después de generar la pauta y la nota: conviene validar ambos valores antes de lanzarlo en un cron.
+- **Propuesta:** si `article` o `all` no reciben `-n/--number`, muestran los cinco titulares y preguntan cuál desarrollar. Sin terminal interactiva (por ejemplo en un cron) la ejecución falla con código 2 y un mensaje que pide `--number` o `--all-articles`, en lugar de quedar esperando una respuesta que nunca llegará. `all` valida el modo de edición y `--platforms` antes de generar la pauta. `--all-articles` es excluyente con `--number` y no requiere terminal.
 - **Pauta del tríptico:** si `print` no recibe `--pauta`, toma la más reciente de `reportes/`. El tríptico no pide número de propuesta: cubre las cinco, así que `-n` no aplica.
 - **Directorio de salida:** si no se indica `--output`, cada flujo usa su carpeta por defecto (`reportes/`, `articulos/`, `social/` o `impresos/`) y la crea si no existe. Una ruta que apunte al directorio actual se rechaza con error de uso, en los subcomandos y también en los modos clásicos.
 - **Sin argumentos:** `python -m news_agent` no ejecuta ningún flujo. Muestra la ayuda y sale con código 2, porque el modo clásico por defecto consumiría tokens de la API y escribiría en el directorio actual sin que el usuario lo haya pedido. Los cron deben indicar el flujo y la salida explícitamente.
@@ -324,8 +328,8 @@ Ejecuta, en orden y dentro de una misma invocación: la generación de la pauta,
 | Código | Significado |
 |:------:|-------------|
 | `0` | Ejecución exitosa (o nada que procesar, sin invocar a la API) |
-| `1` | Error de ejecución: configuración, API, pauta imposible de parsear, artefacto de entrada inexistente o fallos parciales al eliminar artefactos |
-| `2` | Error de uso: comando desconocido, opción inválida, plataforma desconocida, `--select` sin terminal interactiva, falta `--number` sin terminal, combinación inválida de `--write-article`/`--article`, `clean` sin terminal para confirmar o `--days` no positivo |
+| `1` | Error de ejecución: configuración, API, pauta imposible de parsear, artefacto de entrada inexistente, fallos parciales de la edición completa o fallos parciales al eliminar artefactos |
+| `2` | Error de uso: comando desconocido, opción inválida, plataforma desconocida, `--select` sin terminal interactiva, falta `--number` sin terminal y sin `--all-articles`, combinación inválida de `--number` con `--all-articles`, combinación inválida de `--write-article`/`--article`, `clean` sin terminal para confirmar o `--days` no positivo |
 | `130` | Interrupción con Ctrl+C |
 
 ## 8. Subsistema de Tríptico Impreso

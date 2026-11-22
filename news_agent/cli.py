@@ -23,6 +23,7 @@ Uso:
     python -m news_agent social --select
     python -m news_agent print
     python -m news_agent all --number 1
+    python -m news_agent all --all-articles
     python -m news_agent clean --days 30 --dry-run
 """
 
@@ -75,7 +76,7 @@ COMMAND_DESCRIPTIONS: dict[str, str] = {
     "article": "Escribe una nota completa desde una propuesta de la pauta.",
     "social": "Genera los bundles de RRSS de los artículos publicados.",
     "print": "Genera el tríptico impreso desde la pauta semanal.",
-    "all": "Ejecuta la secuencia completa: pauta, nota, RRSS y tríptico.",
+    "all": "Ejecuta la secuencia completa: pauta, notas, RRSS y tríptico.",
     "clean": "Elimina los artefactos generados con más de N días.",
 }
 
@@ -120,6 +121,7 @@ def _build_epilog() -> str:
             f"  {PROGRAM_NAME} social --platforms x,instagram",
             f"  {PROGRAM_NAME} print --pauta reportes/pauta_semanal_2026_09_24.md",
             f"  {PROGRAM_NAME} all --number 1",
+            f"  {PROGRAM_NAME} all --all-articles",
             f"  {PROGRAM_NAME} clean --days 30 --dry-run",
         ]
     )
@@ -348,9 +350,9 @@ def _add_all_parser(
         "all",
         help=COMMAND_DESCRIPTIONS["all"],
         description=(
-            "Ejecuta la secuencia completa: genera la pauta, escribe la nota "
-            "elegida, produce el bundle de redes sociales y arma el tríptico "
-            "impreso, todo de una vez."
+            "Ejecuta la secuencia completa: genera la pauta, escribe una nota "
+            "o todas las propuestas, produce el bundle de redes sociales de "
+            "cada nota y arma el tríptico impreso, todo de una vez."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -372,7 +374,8 @@ def _add_all_parser(
         f"<DIR>/{DEFAULT_SOCIAL_OUTPUT_DIR} y "
         f"<DIR>/{DEFAULT_PRINT_OUTPUT_DIR} (por defecto: .).",
     )
-    parser.add_argument(
+    article_source = parser.add_mutually_exclusive_group()
+    article_source.add_argument(
         "-n",
         "--number",
         type=int,
@@ -381,6 +384,14 @@ def _add_all_parser(
         metavar="N",
         help=f"Número de propuesta a desarrollar (1 a {NUM_PROPOSALS}). "
         "Si se omite, se pregunta por la terminal.",
+    )
+    article_source.add_argument(
+        "--all-articles",
+        action="store_true",
+        help=(
+            "Desarrolla todas las propuestas de la pauta y genera las piezas "
+            "de redes sociales de cada nota."
+        ),
     )
     parser.add_argument(
         "--debug",
@@ -1224,19 +1235,152 @@ def _handle_print(args: argparse.Namespace) -> None:
     print_triptych_summary(result)
 
 
+def _proposal_numbers(pauta_path: Path) -> list[int]:
+    """Devuelve los números de las propuestas que contiene la pauta.
+
+    Args:
+        pauta_path: Ruta de la pauta semanal ya generada.
+
+    Returns:
+        list[int]: Números de propuesta en el orden en que aparecen.
+
+    Raises:
+        SystemExit: Si la pauta no se puede parsear.
+    """
+    try:
+        proposals = parse_pauta_file(pauta_path)
+    except PautaParseError as exc:
+        print(f"Error al leer la pauta: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+    return [int(proposal["number"]) for proposal in proposals]
+
+
+def _write_edition_articles(
+    pauta_path: Path,
+    numbers: list[int],
+    output_dir: Path,
+    verbose: bool,
+) -> tuple[list[dict[str, Any]], list[int]]:
+    """Escribe todas las notas de una edición, aislando los fallos.
+
+    Un artículo que falla no interrumpe los demás: se informa y se continúa,
+    de modo que la edición completa pueda producir el resto de las piezas. El
+    llamador decide el código de salida final según la cantidad de fallos.
+
+    Args:
+        pauta_path: Ruta de la pauta.
+        numbers: Números de propuesta a desarrollar.
+        output_dir: Directorio donde guardar las notas.
+        verbose: Si es True, activa logging DEBUG.
+
+    Returns:
+        tuple[list[dict], list[int]]: Resultados de las notas escritas y
+        números de propuesta que fallaron.
+    """
+    results: list[dict[str, Any]] = []
+    failed: list[int] = []
+    total = len(numbers)
+
+    for index, number in enumerate(numbers, start=1):
+        print(
+            f"\n▶️  Artículo {index}/{total} "
+            f"(propuesta {number})..."
+        )
+        try:
+            result = _write_article_step(
+                pauta_path, number, output_dir, verbose
+            )
+        except SystemExit as exc:
+            if exc.code in (None, 0):
+                raise
+            failed.append(number)
+            print(
+                f"⚠️  Se omitió la propuesta {number} por un error "
+                f"(código {exc.code}).",
+                file=sys.stderr,
+            )
+            continue
+
+        results.append(result)
+        print_article_summary(result)
+
+    return results, failed
+
+
+def _socialize_edition(
+    article_results: list[dict[str, Any]],
+    output_dir: Path,
+    platforms: str | None,
+    config_path: str | None,
+    verbose: bool,
+    skip_banners: bool,
+    skip_prompts: bool,
+) -> tuple[list[dict[str, Any]], list[Path]]:
+    """Genera las piezas de RRSS de cada nota de la edición.
+
+    Args:
+        article_results: Resultados de las notas escritas.
+        output_dir: Directorio base de los bundles sociales.
+        platforms: Plataformas pedidas separadas por comas, o None.
+        config_path: Ruta a la configuración de marca, o None.
+        verbose: Si es True, activa logging DEBUG.
+        skip_banners: Si es True, omite banners y carrusel.
+        skip_prompts: Si es True, omite el prompt visual.
+
+    Returns:
+        tuple[list[dict], list[Path]]: Resultados de los bundles generados y
+        rutas de las notas cuyo bundle falló.
+    """
+    results: list[dict[str, Any]] = []
+    failed: list[Path] = []
+    total = len(article_results)
+
+    for index, article_result in enumerate(article_results, start=1):
+        article_path = Path(article_result["article_path"])
+        print(f"\n▶️  RRSS {index}/{total}: {article_path.name}...")
+        try:
+            result = run_socialize_step(
+                article_path=article_path,
+                output_dir=output_dir,
+                platforms=platforms,
+                config_path=config_path,
+                verbose=verbose,
+                skip_banners=skip_banners,
+                skip_prompts=skip_prompts,
+            )
+        except SystemExit as exc:
+            if exc.code in (None, 0):
+                raise
+            failed.append(article_path)
+            print(
+                f"⚠️  Se omitieron las piezas de RRSS de {article_path.name} "
+                f"por un error (código {exc.code}).",
+                file=sys.stderr,
+            )
+            continue
+
+        results.append(result)
+        print_social_summary(result)
+
+    return results, failed
+
+
 def _handle_all(args: argparse.Namespace) -> None:
-    """Ejecuta el subcomando ``all`` (pauta, nota, RRSS y tríptico).
+    """Ejecuta el subcomando ``all`` (pauta, notas, RRSS y tríptico).
 
     Args:
         args: Argumentos ya parseados.
     """
+    full_edition = bool(args.all_articles)
+
     # Validar las entradas que no dependen de la pauta antes de gastar tokens
     # en el primer paso. Sin esta guarda, un cron sin --number generaba la
     # pauta y la nota antes de fallar con código 2.
-    if args.number is None and not sys.stdin.isatty():
+    if not full_edition and args.number is None and not sys.stdin.isatty():
         print(
             "Error: la selección interactiva necesita una terminal. "
-            "Indica la propuesta con --number N.",
+            "Indica la propuesta con --number N o usa --all-articles.",
             file=sys.stderr,
         )
         sys.exit(2)
@@ -1259,27 +1403,63 @@ def _handle_all(args: argparse.Namespace) -> None:
     print_report_summary(pipeline_result)
 
     pauta_path = Path(pipeline_result["report_path"])
-    number = resolve_article_number(args.number, pauta_path)
-
-    print("\n▶️  Paso 2/4: escribiendo la nota...")
     articles_dir = resolve_output_dir(base / DEFAULT_ARTICLES_DIR)
-    article_result = _write_article_step(
-        pauta_path, number, articles_dir, args.verbose
-    )
-    print_article_summary(article_result)
-
-    print("\n▶️  Paso 3/4: generando las piezas para redes sociales...")
     social_dir = resolve_output_dir(base / DEFAULT_SOCIAL_OUTPUT_DIR)
-    social_result = run_socialize_step(
-        article_path=article_result["article_path"],
-        output_dir=social_dir,
-        platforms=args.platforms,
-        config_path=args.social_config,
-        verbose=args.verbose,
-        skip_banners=args.skip_banners,
-        skip_prompts=args.skip_prompts,
-    )
-    print_social_summary(social_result)
+    failed_articles: list[int] = []
+    failed_social: list[Path] = []
+
+    if full_edition:
+        numbers = _proposal_numbers(pauta_path)
+        print(
+            f"\n▶️  Paso 2/4: escribiendo {len(numbers)} notas "
+            "(una por propuesta)..."
+        )
+        article_results, failed_articles = _write_edition_articles(
+            pauta_path, numbers, articles_dir, args.verbose
+        )
+
+        if article_results:
+            print(
+                "\n▶️  Paso 3/4: generando las piezas de RRSS de cada nota..."
+            )
+            social_results, failed_social = _socialize_edition(
+                article_results=article_results,
+                output_dir=social_dir,
+                platforms=args.platforms,
+                config_path=args.social_config,
+                verbose=args.verbose,
+                skip_banners=args.skip_banners,
+                skip_prompts=args.skip_prompts,
+            )
+        else:
+            print(
+                "\n⚠️  No se escribió ninguna nota: se omiten las piezas "
+                "de RRSS.",
+                file=sys.stderr,
+            )
+            social_results = []
+    else:
+        number = resolve_article_number(args.number, pauta_path)
+
+        print("\n▶️  Paso 2/4: escribiendo la nota...")
+        article_result = _write_article_step(
+            pauta_path, number, articles_dir, args.verbose
+        )
+        print_article_summary(article_result)
+        article_results = [article_result]
+
+        print("\n▶️  Paso 3/4: generando las piezas para redes sociales...")
+        social_result = run_socialize_step(
+            article_path=article_result["article_path"],
+            output_dir=social_dir,
+            platforms=args.platforms,
+            config_path=args.social_config,
+            verbose=args.verbose,
+            skip_banners=args.skip_banners,
+            skip_prompts=args.skip_prompts,
+        )
+        print_social_summary(social_result)
+        social_results = [social_result]
 
     print("\n▶️  Paso 4/4: armando el tríptico impreso...")
     print_dir = resolve_output_dir(base / DEFAULT_PRINT_OUTPUT_DIR)
@@ -1291,7 +1471,23 @@ def _handle_all(args: argparse.Namespace) -> None:
     )
     print_triptych_summary(print_result)
 
-    print("\n✅ Secuencia completa finalizada.")
+    if full_edition:
+        print("\n📊 Resumen de la edición completa:")
+        print(f"   📄 Notas escritas: {len(article_results)}/{len(numbers)}")
+        print(
+            f"   📱 Bundles de RRSS: "
+            f"{len(social_results)}/{len(article_results)}"
+        )
+        if failed_articles or failed_social:
+            print(
+                "\n⚠️  La edición terminó con incidencias; revisa los "
+                "errores anteriores.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        print("\n✅ Edición completa finalizada.")
+    else:
+        print("\n✅ Secuencia completa finalizada.")
 
 
 def _confirm(question: str, ask: Callable[[str], str] | None = None) -> bool:

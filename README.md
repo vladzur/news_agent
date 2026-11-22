@@ -2,7 +2,7 @@
 
 **Curador automatizado de pauta periodística para La Chispa Sur**, medio digital independiente de izquierda, crítico del modelo neoliberal.
 
-El agente recolecta noticias desde canales RSS y scraping web, las filtra por una ventana temporal de 4 días (96 horas), enriquece los resúmenes cortos extrayendo el contenido completo de los artículos con trafilatura, y utiliza el modelo **DeepSeek-Flash** (vía API compatible con OpenAI SDK) para sintetizar **cinco propuestas de pauta editorial semanal (tres de foco nacional y dos de foco internacional)** con profundidad analítica, tono incisivo y narrativa ágil. Las propuestas internacionales priorizan hechos que conmocionan al mundo, pueblos oprimidos y políticas imperialistas que afectan la estabilidad mundial, con mirada antiimperialista desde el sur global. También permite **escribir artículos completos (~1000 palabras)** a partir de cualquiera de las propuestas generadas, con un sistema de **referencias deterministas a fuentes** que asegura que el redactor reciba el contenido completo de los artículos fuente correctos para cada propuesta.
+El agente recolecta noticias desde canales RSS y scraping web, las filtra por una ventana temporal de 4 días (96 horas), enriquece los resúmenes cortos extrayendo el contenido completo de los artículos con trafilatura, y utiliza el modelo **DeepSeek-Flash** (vía API compatible con OpenAI SDK) para sintetizar **cinco propuestas de pauta editorial semanal (tres de foco nacional y dos de foco internacional)** con profundidad analítica, tono incisivo y narrativa ágil. Las propuestas internacionales priorizan hechos que conmocionan al mundo, pueblos oprimidos y políticas imperialistas que afectan la estabilidad mundial, con mirada antiimperialista desde el sur global. También permite **escribir artículos completos (~1000 palabras)** a partir de cualquiera de las propuestas generadas, con un sistema de **referencias deterministas a fuentes** que asegura que el redactor reciba el contenido completo de los artículos fuente correctos para cada propuesta. Con `python -m news_agent all --all-articles`, una sola invocación genera la pauta, las cinco notas y las piezas de redes sociales de cada nota.
 
 ---
 
@@ -96,12 +96,15 @@ El punto de entrada `python -m news_agent` ofrece un CLI de subcomandos pensado 
 | `article` | Escribe una nota completa desde una propuesta de la pauta. |
 | `social` | Genera los bundles de redes sociales de uno o varios artículos publicados. |
 | `print` | Genera el tríptico impreso desde la pauta semanal. |
-| `all` | Ejecuta la secuencia completa: pauta → nota → redes sociales → tríptico. |
+| `all` | Ejecuta la secuencia completa: pauta → una nota o todas las propuestas → redes sociales de cada nota → tríptico. |
 | `clean` | Elimina los artefactos generados con más de N días. |
 
 ```bash
-# Secuencia completa: pauta, nota, redes sociales y tríptico de una sola vez
+# Secuencia completa: pauta, una nota, redes sociales y tríptico de una sola vez
 python -m news_agent all --number 1
+
+# Edición completa: las cinco propuestas, cada una con sus piezas de RRSS
+python -m news_agent all --all-articles
 
 # O cada paso por separado
 python -m news_agent report
@@ -119,9 +122,11 @@ python -m news_agent social --all
 python -m news_agent clean --days 90
 ```
 
-**Entradas implícitas:** si no se indica la pauta o el artículo, el CLI toma el más reciente del directorio correspondiente (`reportes/` o `articulos/`). Cuando `article` o `all` no reciben `--number`, preguntan por la terminal qué propuesta desarrollar, mostrando los cinco titulares; en un cron hay que pasar el número siempre, porque no hay terminal. `social` sigue la misma regla solo con `--select`: sin esa bandera ni `--all`, toma el artículo más reciente y funciona igual en un cron.
+**Entradas implícitas:** si no se indica la pauta o el artículo, el CLI toma el más reciente del directorio correspondiente (`reportes/` o `articulos/`). Cuando `article` o `all` no reciben `--number`, preguntan por la terminal qué propuesta desarrollar, mostrando los cinco titulares; en un cron hay que pasar el número o usar `all --all-articles`, que no pregunta. `social` sigue la misma regla solo con `--select`: sin esa bandera ni `--all`, toma el artículo más reciente y funciona igual en un cron.
 
 **Sin argumentos no se ejecuta nada:** `python -m news_agent` a secas muestra la ayuda y sale con código 2. Antes arrancaba la generación de pauta completa —consumiendo tokens de la API— y escribía el resultado en el directorio actual.
+
+**Edición completa:** `all --all-articles` lee las cinco propuestas de la pauta recién generada, escribe una nota por propuesta, genera las piezas de RRSS de cada nota y arma un único tríptico. Si una nota o un bundle social falla, continúa con los demás, muestra el resumen de la edición y termina con código 1. No pregunta por la terminal.
 
 **Nunca escribe en el directorio actual:** cuando se omite `--output`, cada flujo usa su carpeta por defecto (`reportes/`, `articulos/`, `social/` o `impresos/`) y la crea si no existe; una ruta que apunte al directorio actual se rechaza con un error de uso. Así la raíz del proyecto no se llena de pautas ni de bundles sueltos.
 
@@ -139,7 +144,8 @@ python -m news_agent clean --days 90
 | `--all` | `social` | Genera un bundle por cada artículo del directorio de origen. Si un artículo termina con un error controlado, continúa con los demás y termina con código 1. |
 | `--select` | `social` | Pregunta por la terminal cuál artículo procesar (requiere TTY). |
 | `--articles-dir DIR` | `social` | Directorio de artículos de origen para `--all` y `--select`, y también para el artículo implícito cuando no se pasa `--article` (por defecto `articulos/`). |
-| `-n`, `--number N` | `article`, `all` | Propuesta a desarrollar (1 a 5). Si se omite, se pregunta por la terminal. |
+| `-n`, `--number N` | `article`, `all` | Propuesta a desarrollar (1 a 5). Si se omite, se pregunta por la terminal. Excluyente con `--all-articles`. |
+| `--all-articles` | `all` | Desarrolla las cinco propuestas y genera las piezas de RRSS de cada nota, sin preguntar por la terminal. |
 | `--platforms LISTA` | `social`, `all` | Plataformas separadas por comas (`x,facebook,instagram`). Por defecto, todas. |
 | `--social-config RUTA` | `social`, `all` | JSON de marca y plantillas (por defecto `social_config.json`). |
 | `--triptych-config RUTA` | `print`, `all` | JSON de geometría, tipografía y estilo del tríptico (por defecto `triptych_config.json`). |
@@ -360,11 +366,14 @@ Para medios que no disponen de feed RSS, usa `"method": "scraping"` con selector
 ### 5. Ejecutar
 
 ```bash
-# Secuencia completa: pauta + nota + redes sociales (pregunta qué propuesta desarrollar)
+# Secuencia completa: pauta + una nota + redes sociales (pregunta qué propuesta desarrollar)
 python -m news_agent all
 
-# Secuencia completa sin preguntas, para automatizar
+# Secuencia completa sin preguntas, para automatizar una sola nota
 python -m news_agent all --number 1 --platforms x,instagram
+
+# Edición completa: las cinco propuestas y las redes sociales de cada nota
+python -m news_agent all --all-articles --platforms x,facebook,instagram
 
 # Paso a paso
 python -m news_agent report --feeds rss_feeds.json
@@ -487,7 +496,10 @@ Las constantes principales se encuentran en [news_agent/config.py](news_agent/co
 Para ejecutar el agente de forma semanal (recomendado: domingo a las 23:00 o lunes a las 07:00):
 
 ```bash
-# Ejemplo: todos los lunes a las 07:00 hrs, con la secuencia completa
+# Ejemplo: todos los lunes a las 07:00 hrs con la edición completa
+0 7 * * 1 cd /ruta/al/news_agent && /ruta/al/.venv/bin/python -m news_agent all --all-articles
+
+# Variante de una sola nota: pauta, nota elegida, RRSS y tríptico
 0 7 * * 1 cd /ruta/al/news_agent && /ruta/al/.venv/bin/python -m news_agent all --number 1
 
 # Equivalente con los modos clásicos (solo la pauta)
@@ -497,7 +509,7 @@ Para ejecutar el agente de forma semanal (recomendado: domingo a las 23:00 o lun
 0 6 1 * * cd /ruta/al/news_agent && /ruta/al/.venv/bin/python -m news_agent clean --days 90 --yes
 ```
 
-> En un cron no hay terminal: `all` y `article` necesitan `--number N`; `all` valida ese número y `--platforms` antes del primer paso. `clean` necesita `--yes` o `--dry-run` (sin terminal, sin `--yes` el comando sale con error de uso).
+> En un cron no hay terminal: `all` necesita `--number N` o `--all-articles`; `article` siempre necesita `--number N`. `all` valida la plataforma y el modo de edición antes de generar la pauta. `clean` necesita `--yes` o `--dry-run` (sin terminal, sin `--yes` el comando sale con error de uso).
 
 ---
 
