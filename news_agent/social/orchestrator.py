@@ -190,7 +190,7 @@ def _generate_prompt_stage(
     copy: SocialCopy,
     config: dict[str, Any],
     client: LLMClient,
-) -> VisualPrompt | None:
+) -> tuple[VisualPrompt | None, str | None]:
     """Genera el prompt visual, sin abortar el bundle si falla.
 
     Args:
@@ -200,17 +200,18 @@ def _generate_prompt_stage(
         client: Cliente LLM configurado para el prompt visual.
 
     Returns:
-        VisualPrompt | None: Prompt generado, o None si falló.
+        tuple[VisualPrompt | None, str | None]: Prompt generado y motivo del
+        fallo, o ``(None, error)`` si no se pudo generar.
     """
     try:
-        return generate_visual_prompt(article, copy, config, client)
+        return generate_visual_prompt(article, copy, config, client), None
     except (VisualPromptGenerationError, LLMClientError) as exc:
         logger.error(
             "No se pudo generar el prompt visual: %s. "
             "El bundle se escribirá sin él.",
             exc,
         )
-        return None
+        return None, str(exc)
 
 
 def _render_banner_stage(
@@ -347,6 +348,8 @@ def run_socialize(
     logger.info("Bundle de salida: %s", bundle_dir)
 
     prompt: VisualPrompt | None = None
+    prompt_status = "skipped"
+    prompt_error: str | None = None
     if skip_prompts:
         logger.info("Prompt visual omitido por flag de línea de comandos.")
     else:
@@ -358,7 +361,10 @@ def run_socialize(
             reasoning_effort=SOCIAL_VISUAL_REASONING_EFFORT,
             response_format=copy_client.response_format,
         )
-        prompt = _generate_prompt_stage(article, copy, config, prompt_client)
+        prompt, prompt_error = _generate_prompt_stage(
+            article, copy, config, prompt_client
+        )
+        prompt_status = "generated" if prompt else "failed"
         if prompt:
             logger.info("Prompt visual generado (tratamiento %s).", prompt.treatment)
 
@@ -394,6 +400,8 @@ def run_socialize(
         markdown_files=markdown_paths,
         platforms=selected_platforms,
         article=article,
+        prompt_status=prompt_status,
+        prompt_error=prompt_error,
     )
 
     asset_paths = [banner.path for banner in banners if banner.path is not None]

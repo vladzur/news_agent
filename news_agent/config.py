@@ -499,6 +499,22 @@ _REQUIRED_BRAND_COLORS = (
 _HEX_COLOR_RE = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
 _ASPECT_RATIO_RE = re.compile(r"^\d+:\d+$")
 
+# Campos admitidos en la sección opcional ``platforms`` de la configuración
+# RRSS. Cualquier otra clave se rechaza para detectar erratas al cargar.
+_PLATFORM_SPEC_FIELDS: dict[str, frozenset[str]] = {
+    "x": frozenset(
+        {
+            "label",
+            "max_chars",
+            "thread_min_tweets",
+            "thread_max_tweets",
+            "max_hashtags",
+        }
+    ),
+    "facebook": frozenset({"label", "max_chars", "max_hashtags"}),
+    "instagram": frozenset({"label", "caption_max_chars", "max_hashtags"}),
+}
+
 
 def _validate_brand_section(brand: dict) -> None:
     """Valida que la sección de marca tenga lo mínimo para dibujar banners.
@@ -665,6 +681,75 @@ def _validate_visual_prompts_section(visual: dict) -> None:
         )
 
 
+def _validate_platforms_section(platforms: object) -> None:
+    """Valida la sección opcional ``platforms`` de la configuración RRSS.
+
+    Cada plataforma admite solo las claves conocidas por ``platform_specs``.
+    Los límites deben ser enteros positivos y, en X, el mínimo del hilo no
+    puede superar al máximo.
+
+    Args:
+        platforms: Valor crudo de la sección 'platforms', o None si no existe.
+
+    Raises:
+        ConfigurationError: Si la sección o alguno de sus límites no es válido.
+    """
+    if platforms is None:
+        return
+    if not isinstance(platforms, dict):
+        raise ConfigurationError(
+            "La sección 'platforms' de la configuración de RRSS debe ser un "
+            f"objeto JSON, pero es {type(platforms).__name__}."
+        )
+
+    for name, spec in platforms.items():
+        if name not in _PLATFORM_SPEC_FIELDS:
+            raise ConfigurationError(
+                f"La sección 'platforms' tiene una plataforma desconocida: "
+                f"'{name}'. Opciones válidas: "
+                f"{', '.join(sorted(_PLATFORM_SPEC_FIELDS))}."
+            )
+        if not isinstance(spec, dict):
+            raise ConfigurationError(
+                f"Los límites de la plataforma '{name}' deben ser un objeto "
+                f"JSON, pero son {type(spec).__name__}."
+            )
+
+        unknown = set(spec) - _PLATFORM_SPEC_FIELDS[name]
+        if unknown:
+            raise ConfigurationError(
+                f"La plataforma '{name}' tiene campos desconocidos: "
+                f"{', '.join(sorted(unknown))}."
+            )
+
+        for field, value in spec.items():
+            if field == "label":
+                if not isinstance(value, str) or not value.strip():
+                    raise ConfigurationError(
+                        f"El campo 'label' de la plataforma '{name}' debe ser "
+                        f"un texto no vacío, pero es {value!r}."
+                    )
+            elif (
+                isinstance(value, bool)
+                or not isinstance(value, int)
+                or value <= 0
+            ):
+                raise ConfigurationError(
+                    f"El campo '{field}' de la plataforma '{name}' debe ser "
+                    f"un entero mayor que cero, pero es {value!r}."
+                )
+
+    x_spec = platforms.get("x")
+    if isinstance(x_spec, dict):
+        minimum = x_spec.get("thread_min_tweets", SOCIAL_X_THREAD_MIN_TWEETS)
+        maximum = x_spec.get("thread_max_tweets", SOCIAL_X_THREAD_MAX_TWEETS)
+        if minimum > maximum:
+            raise ConfigurationError(
+                "El campo 'thread_min_tweets' de la plataforma 'x' no puede "
+                f"superar a 'thread_max_tweets' ({minimum} > {maximum})."
+            )
+
+
 def load_social_config(path: str | Path | None = None) -> dict:
     """Carga la configuración de marca y plantillas del subsistema RRSS.
 
@@ -691,6 +776,7 @@ def load_social_config(path: str | Path | None = None) -> dict:
     _validate_brand_section(data["brand"])
     _validate_banners_section(data["banners"])
     _validate_visual_prompts_section(data["visual_prompts"])
+    _validate_platforms_section(data.get("platforms"))
 
     return data
 

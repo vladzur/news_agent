@@ -209,6 +209,7 @@ class TestRunSocialize:
 
         payload = json.loads(result["manifest_path"].read_text(encoding="utf-8"))
         assert payload["banners"]["rendered"] == 6
+        assert payload["visual_prompts"]["status"] == "generated"
         assert payload["visual_prompts"]["count"] == 1
         assert payload["visual_prompts"]["treatment"] == "photorealistic"
 
@@ -253,6 +254,11 @@ class TestRunSocialize:
         assert result["prompts_path"] is None
         assert result["prompt_count"] == 0
         assert result["copy_path"].is_file()
+        manifest = json.loads(
+            result["manifest_path"].read_text(encoding="utf-8")
+        )
+        assert manifest["visual_prompts"]["status"] == "skipped"
+        assert manifest["visual_prompts"]["error"] is None
 
     def test_reuses_the_same_bundle_for_the_same_article(self, run):
         runner, _ = run
@@ -372,6 +378,11 @@ class TestRunSocializeFailSafe:
         assert result["prompts_path"] is None
         assert result["copy_path"].is_file()
         assert result["manifest_path"].is_file()
+        manifest = json.loads(
+            result["manifest_path"].read_text(encoding="utf-8")
+        )
+        assert manifest["visual_prompts"]["status"] == "failed"
+        assert manifest["visual_prompts"]["error"]
 
     def test_keeps_the_bundle_when_the_banners_fail(self, run, monkeypatch):
         runner, _ = run

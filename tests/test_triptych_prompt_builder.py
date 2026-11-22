@@ -123,6 +123,11 @@ class TestUserPrompt:
         assert f"{block_max_chars(specs)} caracteres en total" in prompt
         assert "1.5 columnas" in prompt
 
+    def test_uses_the_exact_page_measurements(self, triptych_source, config):
+        prompt = build_triptych_user_prompt(triptych_source, config)
+
+        assert "Hoja de 215.9 x 330.2 mm" in prompt
+
     def test_states_the_body_target(self, triptych_source, config):
         prompt = build_triptych_user_prompt(triptych_source, config)
 

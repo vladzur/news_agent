@@ -293,8 +293,23 @@ class TestSaveManifest:
 
         assert payload["files"]["visual_prompts"] is None
         assert payload["files"]["visual_prompt_text"] is None
+        assert payload["visual_prompts"]["status"] == "skipped"
+        assert payload["visual_prompts"]["error"] is None
         assert payload["visual_prompts"]["count"] == 0
         assert payload["visual_prompts"]["treatment"] is None
+
+    def test_records_a_failed_prompt_status(self, tmp_path, social_copy, article):
+        payload = self._manifest(
+            tmp_path,
+            social_copy,
+            article,
+            prompt_status="failed",
+            prompt_error="no es json",
+        )
+
+        assert payload["visual_prompts"]["status"] == "failed"
+        assert payload["visual_prompts"]["error"] == "no es json"
+        assert payload["visual_prompts"]["count"] == 0
 
     def test_records_the_visual_treatment(
         self, tmp_path, social_copy, article, visual_payload, social_config
@@ -307,6 +322,8 @@ class TestSaveManifest:
 
         assert payload["files"]["visual_prompts"] == PROMPTS_FILE_NAME
         assert payload["files"]["visual_prompt_text"] == PROMPT_TEXT_FILE_NAME
+        assert payload["visual_prompts"]["status"] == "generated"
+        assert payload["visual_prompts"]["error"] is None
         assert payload["visual_prompts"]["count"] == 1
         assert payload["visual_prompts"]["treatment"] == "photorealistic"
         assert payload["visual_prompts"]["aspect_ratio"] == prompt.aspect_ratio
