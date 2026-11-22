@@ -8,10 +8,15 @@ contrato.
 """
 
 import logging
+import re
 from datetime import datetime, timezone
 from typing import Any
 
 from ..config import (
+    SOCIAL_IG_CAROUSEL_SLIDES,
+    SOCIAL_IG_SLIDE_BODY_MAX_CHARS,
+    SOCIAL_IG_SLIDE_FIGURE_MAX_CHARS,
+    SOCIAL_IG_SLIDE_TITLE_MAX_CHARS,
     SOCIAL_JSON_MAX_RETRIES,
     SOCIAL_MAX_HOOKS,
     SOCIAL_MAX_SUMMARY_BULLETS,
@@ -24,6 +29,7 @@ from .models import (
     ArticleSource,
     FacebookCopy,
     InstagramCopy,
+    InstagramSlide,
     QuoteCard,
     SocialCopy,
     XCopy,
@@ -362,15 +368,211 @@ def _build_facebook_copy(raw: object, spec: dict[str, Any]) -> FacebookCopy:
     return FacebookCopy(post=post, hashtags=hashtags)
 
 
-def _build_instagram_copy(raw: object, spec: dict[str, Any]) -> InstagramCopy:
+_SLIDE_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?…])\s+")
+
+# Titular de último recurso cuando ni el modelo ni el material de origen
+# alcanzan para derivar uno.
+_DEFAULT_SLIDE_TITLE = "Punto clave"
+
+
+def _slide_title_from_text(text: str) -> str:
+    """Deriva un titular breve de un texto cuando el modelo no lo entrega.
+
+    Se usa solo como respaldo: el contrato pide un ``title`` propio por slide.
+    La función toma la primera oración y la recorta en un límite de palabras,
+    de modo que el slide nunca quede sin encabezado.
+
+    Args:
+        text: Texto del que derivar el titular.
+
+    Returns:
+        str: Titular breve, sin puntuación de cierre.
+    """
+    first = _SLIDE_SENTENCE_SPLIT_RE.split((text or "").strip(), maxsplit=1)[0]
+    first = first.strip().rstrip(" .;:!?…,")
+    if not first:
+        return ""
+
+    fitted, trimmed = fit_char_limit(first, SOCIAL_IG_SLIDE_TITLE_MAX_CHARS)
+    if trimmed and " " in fitted:
+        fitted = fitted.rsplit(" ", 1)[0]
+    return fitted.rstrip(" ,;:—-").strip()
+
+
+def _verified_slide_figure(figure: str, article: ArticleSource) -> str:
+    """Conserva una cifra del slide solo si aparece en el artículo.
+
+    Args:
+        figure: Cifra propuesta por el modelo.
+        article: Artículo de origen.
+
+    Returns:
+        str: Cifra verificada, o cadena vacía si no se pudo comprobar.
+    """
+    if not figure:
+        return ""
+
+    normalized = normalize_for_match(figure)
+    if normalized and normalized in normalize_for_match(article.body_text()):
+        return figure
+
+    logger.warning(
+        "Cifra de slide descartada por no aparecer en el artículo: %s", figure
+    )
+    return ""
+
+
+def _fallback_slide_material(
+    article: ArticleSource,
+    summary: list[str],
+    used_bodies: set[str],
+) -> list[InstagramSlide]:
+    """Construye slides de respaldo con material verificado del artículo.
+
+    El contrato pide tres slides al modelo, pero una respuesta incompleta no
+    debe dejar el carrusel sin contenido. Se usan primero los bullets de la
+    síntesis ejecutiva y, si no alcanzan, los subtítulos y el lead del artículo.
+
+    Args:
+        article: Artículo de origen.
+        summary: Bullets de síntesis ya validados.
+        used_bodies: Cuerpos ya usados, normalizados, para no repetir slides.
+
+    Returns:
+        list[InstagramSlide]: Slides de respaldo, sin cifras inventadas.
+    """
+    candidates: list[tuple[str, str]] = []
+    candidates.extend((_slide_title_from_text(bullet), bullet) for bullet in summary)
+
+    for section in article.sections:
+        if section.body:
+            candidates.append((_slide_title_from_text(section.heading), section.body))
+
+    if article.lead:
+        for sentence in _SLIDE_SENTENCE_SPLIT_RE.split(article.lead):
+            cleaned = sentence.strip()
+            if len(cleaned) >= 40:
+                candidates.append((_slide_title_from_text(cleaned), cleaned))
+
+    slides: list[InstagramSlide] = []
+    for title, body in candidates:
+        normalized = normalize_for_match(body)
+        if not normalized or normalized in used_bodies:
+            continue
+        used_bodies.add(normalized)
+        slides.append(
+            InstagramSlide(
+                title=fit_char_limit(
+                    _collapse_whitespace(title) or _DEFAULT_SLIDE_TITLE,
+                    SOCIAL_IG_SLIDE_TITLE_MAX_CHARS,
+                )[0],
+                body=fit_char_limit(
+                    _collapse_whitespace(body), SOCIAL_IG_SLIDE_BODY_MAX_CHARS
+                )[0],
+                figure="",
+            )
+        )
+
+    return slides
+
+
+def _build_instagram_slides(
+    raw: object,
+    article: ArticleSource,
+    summary: list[str],
+) -> list[InstagramSlide]:
+    """Normaliza los tres slides de resumen del carrusel de Instagram.
+
+    El orden se conserva: los slides cuentan una progresión (contexto, datos,
+    consecuencia). Si el modelo entrega menos de tres, se completan con la
+    síntesis ejecutiva y material del artículo antes que publicar un carrusel
+    incompleto. Si entrega más, se usan los tres primeros.
+
+    Args:
+        raw: Valor crudo del campo ``instagram.slides``.
+        article: Artículo de origen.
+        summary: Bullets de síntesis ejecutiva ya validados.
+
+    Returns:
+        list[InstagramSlide]: Exactamente ``SOCIAL_IG_CAROUSEL_SLIDES`` slides.
+
+    Raises:
+        SocialCopyValidationError: Si no hay material suficiente para tres
+                                   slides.
+    """
+    entries = raw if isinstance(raw, (list, tuple)) else []
+    slides: list[InstagramSlide] = []
+    used_bodies: set[str] = set()
+
+    for entry in entries:
+        if len(slides) >= SOCIAL_IG_CAROUSEL_SLIDES:
+            break
+        data = entry if isinstance(entry, dict) else {}
+        body = _collapse_whitespace(data.get("body"))
+        if not body:
+            continue
+
+        normalized_body = normalize_for_match(body)
+        if normalized_body in used_bodies:
+            logger.warning("Slide duplicado descartado en el carrusel.")
+            continue
+
+        title = _collapse_whitespace(data.get("title"))
+        if not title:
+            title = _slide_title_from_text(body)
+        if not title:
+            title = _DEFAULT_SLIDE_TITLE
+
+        figure = _verified_slide_figure(
+            _collapse_whitespace(data.get("figure")), article
+        )
+
+        used_bodies.add(normalized_body)
+        slides.append(
+            InstagramSlide(
+                title=fit_char_limit(title, SOCIAL_IG_SLIDE_TITLE_MAX_CHARS)[0],
+                body=fit_char_limit(body, SOCIAL_IG_SLIDE_BODY_MAX_CHARS)[0],
+                figure=fit_char_limit(figure, SOCIAL_IG_SLIDE_FIGURE_MAX_CHARS)[0],
+            )
+        )
+
+    if len(slides) < SOCIAL_IG_CAROUSEL_SLIDES:
+        logger.warning(
+            "El carrusel llegó con %d slide(s) utilizables; se completa con "
+            "la síntesis ejecutiva y el artículo.",
+            len(slides),
+        )
+        slides.extend(
+            _fallback_slide_material(article, summary, used_bodies)[
+                : SOCIAL_IG_CAROUSEL_SLIDES - len(slides)
+            ]
+        )
+
+    if len(slides) < SOCIAL_IG_CAROUSEL_SLIDES:
+        raise SocialCopyValidationError(
+            "No hay material suficiente para los "
+            f"{SOCIAL_IG_CAROUSEL_SLIDES} slides del carrusel de Instagram."
+        )
+
+    return slides
+
+
+def _build_instagram_copy(
+    raw: object,
+    spec: dict[str, Any],
+    article: ArticleSource,
+    summary: list[str],
+) -> InstagramCopy:
     """Construye y normaliza el copy de Instagram.
 
     Args:
         raw: Valor crudo del campo ``instagram``.
         spec: Límites resueltos de la plataforma.
+        article: Artículo de origen, usado para verificar cifras.
+        summary: Síntesis ejecutiva, usada como respaldo de los slides.
 
     Returns:
-        InstagramCopy: Caption ajustada a los límites de la plataforma.
+        InstagramCopy: Caption y carrusel ajustados a la plataforma.
 
     Raises:
         SocialCopyValidationError: Si no hay texto de caption.
@@ -397,7 +599,11 @@ def _build_instagram_copy(raw: object, spec: dict[str, Any]) -> InstagramCopy:
     hashtags = sanitize_hashtags(
         data.get("hashtags"), int(spec.get("max_hashtags", 0))
     )
-    return InstagramCopy(caption=caption, hashtags=hashtags)
+    return InstagramCopy(
+        caption=caption,
+        hashtags=hashtags,
+        slides=_build_instagram_slides(data.get("slides"), article, summary),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -496,7 +702,10 @@ def build_social_copy(
             payload.get("facebook"), platform_spec(config, "facebook")
         ),
         instagram=_build_instagram_copy(
-            payload.get("instagram"), platform_spec(config, "instagram")
+            payload.get("instagram"),
+            platform_spec(config, "instagram"),
+            article,
+            summary,
         ),
     )
 

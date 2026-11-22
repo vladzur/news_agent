@@ -151,7 +151,10 @@ def _add_social_platform_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--skip-banners",
         action="store_true",
-        help="Omite el renderizado de banners con Pillow.",
+        help=(
+            "Omite el renderizado de banners y del carrusel de Instagram "
+            "con Pillow."
+        ),
     )
     parser.add_argument(
         "--skip-prompts",
@@ -929,6 +932,15 @@ def print_social_summary(result: dict[str, Any]) -> None:
     print(f"   🖼️  Banners generados: {result['banner_count']}")
     if result["banner_failed"]:
         print(f"   ⚠️  Banners fallidos: {result['banner_failed']}")
+    carousel_count = result.get("carousel_count", 0)
+    if carousel_count:
+        print(
+            f"   📱 Slides de Instagram: {carousel_count} "
+            f"({result.get('carousel_format', 'vertical')})"
+        )
+        print(f"   📂 Carrusel: {result.get('instagram_dir')}")
+    if result.get("carousel_failed"):
+        print(f"   ⚠️  Slides fallidos: {result['carousel_failed']}")
     if result.get("prompt_text_path"):
         print(f"   🎨 Prompt Midjourney: {result['prompt_text_path']}")
     if result.get("prompts_path"):
@@ -1017,7 +1029,7 @@ def run_socialize_step(
         platforms: Plataformas pedidas separadas por comas, o None para todas.
         config_path: Ruta a la configuración de marca, o None para la default.
         verbose: Si es True, activa logging DEBUG.
-        skip_banners: Si es True, omite el renderizado de banners.
+        skip_banners: Si es True, omite los banners y el carrusel de Instagram.
         skip_prompts: Si es True, omite el prompt visual.
 
     Returns:

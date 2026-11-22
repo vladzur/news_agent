@@ -196,6 +196,32 @@ def copy_payload() -> dict:
                 "Lee la investigación completa en lachispasur.cl"
             ),
             "hashtags": ["Chile", "DerechosHumanos", "LaAraucania"],
+            "slides": [
+                {
+                    "title": "Un meme, una detención",
+                    "body": (
+                        "Un hombre de 44 años fue detenido en Cunco por "
+                        "difundir imágenes editadas del ministro de Hacienda."
+                    ),
+                    "figure": "44 años",
+                },
+                {
+                    "title": "El estándar del delito de amenaza",
+                    "body": (
+                        "El delito de amenaza exige anunciar un mal futuro que "
+                        "constituya delito y un análisis de proporcionalidad."
+                    ),
+                    "figure": "",
+                },
+                {
+                    "title": "El patrón que documenta el INDH",
+                    "body": (
+                        "El organismo cifra en más de 200 las causas de "
+                        "criminalización de la protesta registradas desde 2019."
+                    ),
+                    "figure": "más de 200",
+                },
+            ],
         },
     }
 

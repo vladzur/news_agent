@@ -63,6 +63,12 @@ Toma un artículo ya publicado (`articulos/articulo_N_slug.md`) y produce un **b
    | `quote_card` | Comilla destacada + cita + atribución | IG feed 1080×1080, IG story 1080×1920 |
 
    El diseño se parametriza por un factor de escala respecto de un ancho de referencia, así que una sola implementación sirve para los cuatro tamaños. En el formato vertical respeta las **zonas seguras** superior e inferior (la interfaz de la plataforma las tapa). Si la marca define un logo, se recorta su padding transparente, se escala según `logo_height_ratio` y se pega en la esquina superior derecha; el titular se desplaza hacia abajo si el logo es más alto que la etiqueta de marca.
+5. **Carrusel vertical de Instagram (Pillow)** — Cuando Instagram está entre las plataformas pedidas, el bundle suma un subdirectorio **exclusivo** `instagram/` con cinco PNG verticales de **1080×1920**, en orden de publicación:
+   - **Portada**, con la estética del `headline_card`: barra de acento, etiqueta de marca, logo, titular, bajada y contador `01 / 05`.
+   - **Tres slides de resumen**, con una retícula compartida: número de punto, etiqueta «PUNTO CLAVE», titular, cuerpo breve, tarjeta opcional de dato duro y puntos de progreso.
+   - **Firma de La Chispa Sur**, con el logo centrado, nombre, tagline, sitio, handle y llamado a leer la nota completa.
+
+   El modelo entrega los tres resúmenes dentro del contrato de copys (`instagram.slides`). El código exige **exactamente tres**, limpia largos (70 caracteres de titular, 240 de cuerpo, 40 de cifra), descarta cifras que no aparezcan en el artículo y, si la respuesta llega incompleta, completa los slides con la síntesis ejecutiva y material verificado del propio artículo. La portada y la firma no los redacta el modelo: se componen siempre con la identidad de la marca.
 
 > **¿Por qué se valida todo en código y no se confía en el LLM?** Las reglas duras de cada plataforma se aplican de forma determinista: recorte al límite de caracteres, largo del hilo, topes de hashtags, normalización de hashtags (`#La Araucania` → `#LaAraucania`) y retiro de los que el modelo haya dejado dentro del cuerpo del texto para no duplicarlos en el tweet de cierre, verificación de que cada cifra exista en el artículo y de que la cita sea **literal**. Si el modelo entrega una cita inventada, el sistema la reemplaza por una oración verificada del propio artículo. El guardarraíl es también editorial: el prompt visual debe nombrar una paleta de color, usar el tratamiento declarado —fotorrealista con lenguaje fotográfico, caricatura con técnica de ilustración— y queda acotado a **rótulos breves y cifras** —los párrafos de texto se rechazan en código, porque los modelos de difusión los convierten en ruido—. El código rechaza además la violencia explícita y las escenas fabricadas o suplantaciones de identidad. El prompt pide que el fotorrealismo sea el camino por defecto y que las figuras públicas solo aparezcan dentro de una escena documental, sin gestos o escenarios inventados; las víctimas, menores y personas privadas se representan de forma anónima. La caricatura queda reservada para columnas abstractas.
 
@@ -137,7 +143,7 @@ python -m news_agent clean --days 90
 | `--platforms LISTA` | `social`, `all` | Plataformas separadas por comas (`x,facebook,instagram`). Por defecto, todas. |
 | `--social-config RUTA` | `social`, `all` | JSON de marca y plantillas (por defecto `social_config.json`). |
 | `--triptych-config RUTA` | `print`, `all` | JSON de geometría, tipografía y estilo del tríptico (por defecto `triptych_config.json`). |
-| `--skip-banners` / `--skip-prompts` | `social`, `all` | Omite el renderizado local de banners con Pillow o la llamada al modelo que genera el prompt visual. Ninguna de las dos evita la llamada que produce los copys. |
+| `--skip-banners` / `--skip-prompts` | `social`, `all` | Omite el renderizado local de banners y del carrusel de Instagram con Pillow, o la llamada al modelo que genera el prompt visual. Ninguna de las dos evita la llamada que produce los copys. |
 | `--days N` / `--target` / `--dry-run` / `-y` | `clean` | Antigüedad mínima, alcance, simulación y omisión de la confirmación. |
 | `--debug` | `report`, `all` | Guarda el JSON intermedio de artículos procesados para ajustar el prompt. |
 | `--verbose` | `report`, `article`, `social`, `print`, `all` | Activa logging nivel DEBUG para diagnóstico detallado. `clean` acepta la bandera por uniformidad del parser, pero todavía no la aplica. |
@@ -161,9 +167,9 @@ Flags de los modos clásicos:
 - `--article N`: Propuesta a desarrollar (1 a 5). Solo es válido junto con `--write-article`; sin él, el CLI rechaza la invocación con código 2.
 - `--debug`: Guarda un archivo JSON intermedio en `<directorio_de_salida>/debug/articulos_procesados_YYYY_MM_DD.json` con los datos completos de cada artículo (resumen RSS, contenido extraído y resumen final enviado al LLM) para depuración y ajuste de prompts. Con la salida por defecto queda en `reportes/debug/`.
 - `--socialize RUTA_ARTICULO`: Activa el modo de repurposing para redes sociales. No se puede combinar con `--feeds`, `--debug`, `--write-article` ni `--article`.
-- `--platforms LISTA`: Plataformas a preparar, separadas por comas (`x,facebook,instagram`). Por defecto, todas. Filtra los Markdown y los banners generados.
+- `--platforms LISTA`: Plataformas a preparar, separadas por comas (`x,facebook,instagram`). Por defecto, todas. Filtra los Markdown y los banners generados; el carrusel vertical solo se genera si se pide `instagram`.
 - `--social-config RUTA`: Ruta al JSON de marca y plantillas (por defecto `social_config.json`).
-- `--skip-banners`: Omite el renderizado de banners con Pillow.
+- `--skip-banners`: Omite el renderizado de banners y del carrusel vertical de Instagram con Pillow.
 - `--skip-prompts`: Omite la generación del prompt visual en inglés.
 
 ---
@@ -190,12 +196,13 @@ news_agent/
 ├── headline_editor.py     # Editor de portada: 3 propuestas de titular y bajada
 ├── source_references.py   # Emparejamiento determinista de fuentes y companion JSON
 └── social/                # Subsistema de repurposing para redes sociales (RRSS)
-    ├── orchestrator.py    # Flujo RRSS: copys → prompt visual → banners → bundle
+    ├── orchestrator.py    # Flujo RRSS: copys → prompt visual → banners → carrusel → bundle
     ├── article_source.py  # Parseo del artículo Markdown de origen
     ├── prompt_builder.py  # Prompts de copys (ES) y del prompt visual (EN)
     ├── copy_generator.py  # Copys validados contra los límites de plataforma
     ├── visual_prompts.py  # Prompt en inglés para Midjourney, con tratamiento y flags
     ├── banner_renderer.py # Renderizado local de banners con Pillow
+    ├── instagram_renderer.py # Carrusel vertical: portada, 3 resúmenes y firma
     ├── platform_specs.py  # Límites y formatos por plataforma
     ├── text_utils.py      # Recorte por caracteres y normalización de hashtags
     ├── json_utils.py      # Extracción defensiva de JSON de las respuestas del LLM
@@ -220,7 +227,7 @@ news_agent/
 | Scraping web | `requests` + `beautifulsoup4` | Extracción de artículos desde sitios sin RSS con selectores CSS configurables |
 | Enriquecimiento | `trafilatura` | Extracción del texto completo de artículos con resúmenes RSS insuficientes |
 | Cliente LLM | `openai` (SDK) | Conexión con DeepSeek API en modo compatible |
-| Renderizado de assets | `Pillow` | Generación local de banners promocionales, sin servicios externos |
+| Renderizado de assets | `Pillow` | Generación local de banners y del carrusel vertical de Instagram, sin servicios externos |
 | Lenguaje | Python ≥ 3.10 | stdlib + 6 dependencias |
 | Configuración | `.env` + `rss_feeds.json` + `social_config.json` + `triptych_config.json` | Separación de credenciales, fuentes, marca y geometría de imprenta |
 | Testing | `pytest`, `pytest-mock`, `freezegun`, `pytest-cov` | Tests unitarios de los módulos del pipeline, RRSS y tríptico; `__main__` y las dataclasses se cubren de forma indirecta |
@@ -389,7 +396,7 @@ Edita `social_config.json` para ajustar la identidad visual sin tocar código:
   "brand": {
     "name": "La Chispa Sur",
     "handle": "@lachispasur",
-    "tagline": "Periodismo crítico desde el sur",
+    "tagline": "Periodismo crítico desde La Araucanía",
     "website": "lachispasur.cl",
     "logo_path": "assets/logo_lachispasur.png",
     "logo_height_ratio": 0.11,
@@ -402,15 +409,16 @@ Edita `social_config.json` para ajustar la identidad visual sin tocar código:
 | Campo | Obligatorio | Descripción |
 |-------|:-----------:|-------------|
 | `brand.name` | ✅ | Nombre de la marca, usado en las etiquetas de los banners |
-| `brand.tagline` | ❌ | Texto descriptivo de la marca; se conserva en la configuración, pero los banners actuales no lo dibujan |
+| `brand.tagline` | ❌ | Texto descriptivo de la marca; se dibuja centrado en la firma del carrusel de Instagram |
 | `brand.colors` | ✅ | Paleta del diseño (`background`, `surface`, `text`, `muted`, `accent`, `accent_alt`); cada color debe ser hexadecimal `#RRGGBB` o `#RGB` |
-| `brand.handle`, `brand.website` | ❌ | Barra inferior de los banners |
+| `brand.handle`, `brand.website` | ❌ | Barra inferior de los banners y de los slides, y bloque de contacto de la firma |
 | `brand.logo_path` | ❌ | Ruta a un PNG con transparencia. Si es una ruta no vacía y el archivo no existe o no se puede abrir, el banner se genera sin logo y se advierte en el log. Si es `null` o está ausente, se genera sin logo y sin advertencia |
 | `brand.logo_height_ratio` | ❌ | Alto del logo como fracción del ancho del lienzo (por defecto `0.11`). El ancho se limita al 22% para que no invada la etiqueta de marca |
 | `brand.fonts.*` | ❌ | Ruta a un `.ttf` por rol. Si es `null`, se resuelven fuentes del sistema (DejaVu, Liberation, Noto o Arial) y, como último recurso, la fuente por defecto de Pillow |
 | `platforms` | ❌ | Límites por plataforma. Sobrescriben los valores por defecto de `config.py` y se validan al cargar |
-| `banners.templates`, `banners.sizes` | ✅ | Matriz plantilla → formatos y tamaño de cada formato |
-| `banners.safe_zone` | ❌ | Zonas seguras superior e inferior para los formatos verticales |
+| `banners.templates`, `banners.sizes` | ✅ | Matriz plantilla → formatos y tamaño de cada formato. El carrusel usa el formato vertical `instagram_reel` (1080×1920) |
+| `banners.safe_zone` | ❌ | Zonas seguras superior e inferior para los formatos verticales, incluido `instagram_reel` |
+| `instagram_carousel.format` | ❌ | Formato del carrusel; debe apuntar a un `instagram_*` vertical declarado en `banners.sizes`. Por defecto, `instagram_reel` |
 | `visual_prompts.*` | ✅ | Tratamientos, reglas de decisión, prompt negativo, proporción y sufijo de Midjourney; se validan al cargar |
 
 Los formatos de banner se nombran con el prefijo de su plataforma (`instagram_feed`, `instagram_story`), lo que permite filtrar por `--platforms` sin mantener un mapa adicional. Además, la variable de entorno `SOCIAL_FONT_DIR` permite apuntar a un directorio propio de fuentes.
@@ -456,6 +464,8 @@ Las constantes principales se encuentran en [news_agent/config.py](news_agent/co
 | `SOCIAL_X_MAX_CHARS` | `280` | Límite de caracteres por tweet (se verifica en código) |
 | `SOCIAL_X_THREAD_MIN_TWEETS` / `_MAX_TWEETS` | `5` / `7` | Largo del hilo de X |
 | `SOCIAL_IG_MAX_HASHTAGS` | `25` | Tope de hashtags de Instagram |
+| `SOCIAL_IG_CAROUSEL_SLIDES` | `3` | Slides de resumen del carrusel vertical; el carrusel completo suma portada y firma |
+| `SOCIAL_IG_SLIDE_TITLE_MAX_CHARS` / `_BODY_MAX_CHARS` / `_FIGURE_MAX_CHARS` | `70` / `240` / `40` | Topes de texto de cada slide de resumen |
 | `SOCIAL_MIN_ARTICLE_WORDS` | `150` | Por debajo de esto el artículo no da material suficiente: aborta antes de llamar a la API |
 | `SOCIAL_BANNER_BASE_WIDTH` | `1080` | Ancho de referencia del diseño de banners |
 | `TRIPTYCH_MAX_TOKENS` | `8192` | Presupuesto de la generación del tríptico (portada + cinco notas en un solo JSON) |
@@ -506,7 +516,7 @@ El agente implementa fail-safe en cada etapa del pipeline:
 - **Configuración de scraping inválida** → error descriptivo al cargar `rss_feeds.json` si faltan selectores obligatorios.
 - **Respuesta sin JSON válido en RRSS** → se reintenta la llamada con una nota de corrección, hasta `SOCIAL_JSON_MAX_RETRIES` veces; el JSON se extrae de forma defensiva (bloques de código, texto alrededor, comas finales sueltas).
 - **Copys incompletos** → se reintenta; si se agotan los intentos, aborta sin escribir un bundle a medias.
-- **Prompts visuales fallidos** → el bundle se escribe igualmente con los copys y los banners; el manifiesto registra `status: "failed"` y el motivo en `error` (un prompt omitido con `--skip-prompts` queda como `"skipped"`).
+- **Prompts visuales fallidos** → el bundle se escribe igualmente con los copys y los banners; el manifiesto registra `status: "failed"` y el motivo en `error` (un prompt omitido con `--skip-prompts` queda como `"skipped"`). Un slide del carrusel que falla no interrumpe los demás: el manifiesto lo registra como `failed` y deja la ruta en `null`.
 - **Banner que falla al renderizar** → se registra el error y el bucle continúa; el manifiesto guarda esa pieza como pendiente.
 - **Fuente tipográfica ausente** → se usa la fuente por defecto de Pillow y se advierte en el log.
 - **Artículo demasiado corto para RRSS** → aborta antes de llamar a la API (ahorro de tokens).
@@ -603,18 +613,24 @@ social/2026_09_14_criminalizacion-de-la-disidencia/
 ├── visual_prompts.json         # Metadatos: tratamiento, justificación, prompt y negativo
 ├── x_thread.md                 # Hilo listo para copiar, con conteo de caracteres por tweet
 ├── facebook_post.md            # Post con hashtags, texto alternativo y CTA
-├── instagram_caption.md        # Caption, hashtags, tarjeta de cita y advertencia si la cita no es literal
-├── manifest.json               # Qué se generó, qué falló (incluido el estado del prompt visual) y con qué artículo se produjo
-└── assets/
-    ├── headline_card_x.png                 # 1600×900
-    ├── headline_card_facebook.png          # 1200×630
-    ├── headline_card_instagram_feed.png    # 1080×1080
-    ├── headline_card_instagram_story.png   # 1080×1920
-    ├── quote_card_instagram_feed.png       # 1080×1080
-    └── quote_card_instagram_story.png      # 1080×1920
+├── instagram_caption.md        # Caption, hashtags, tarjeta de cita, slides del carrusel y advertencia si la cita no es literal
+├── manifest.json               # Qué se generó, qué falló (prompt visual y carrusel) y con qué artículo se produjo
+├── assets/
+│   ├── headline_card_x.png                 # 1600×900
+│   ├── headline_card_facebook.png          # 1200×630
+│   ├── headline_card_instagram_feed.png    # 1080×1080
+│   ├── headline_card_instagram_story.png   # 1080×1920
+│   ├── quote_card_instagram_feed.png       # 1080×1080
+│   └── quote_card_instagram_story.png      # 1080×1920
+└── instagram/                  # Carrusel vertical exclusivo, en orden de publicación
+    ├── 01_cover.png            # Portada 1080×1920
+    ├── 02_point_1.png          # Resumen del punto 1
+    ├── 03_point_2.png          # Resumen del punto 2
+    ├── 04_point_3.png          # Resumen del punto 3
+    └── 05_signature.png        # Firma de La Chispa Sur
 ```
 
-El campo `quote_card.verbatim` de `social_copy.json` indica si la cita se verificó palabra por palabra contra el artículo de origen; el manifiesto lo repite en `verified_quote`. El directorio `social/` está en `.gitignore`, mientras que el subsistema de código vive en `news_agent/social/`.
+El campo `quote_card.verbatim` de `social_copy.json` indica si la cita se verificó palabra por palabra contra el artículo de origen; el manifiesto lo repite en `verified_quote`. El bloque `instagram_carousel` del manifiesto registra formato, dimensiones, estado (`generated`, `partial`, `failed` o `skipped`) y la ruta de cada slide. El directorio `social/` está en `.gitignore`, mientras que el subsistema de código vive en `news_agent/social/`.
 
 ### Bundle del tríptico impreso (`impresos/AAAA_MM_DD_pauta-semanal/`)
 

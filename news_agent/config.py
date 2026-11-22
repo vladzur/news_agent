@@ -124,6 +124,16 @@ SOCIAL_FACEBOOK_MAX_HASHTAGS = 5
 SOCIAL_IG_CAPTION_MAX_CHARS = 2200
 SOCIAL_IG_MAX_HASHTAGS = 25
 
+# Carrusel vertical de Instagram: portada, tres slides de resumen y una firma
+# de marca. El formato se declara en social_config.json para poder ajustar el
+# tamaño sin tocar el código, pero debe ser siempre una pieza vertical de
+# Instagram.
+SOCIAL_IG_CAROUSEL_SLIDES = 3
+SOCIAL_IG_CAROUSEL_FORMAT = "instagram_reel"
+SOCIAL_IG_SLIDE_TITLE_MAX_CHARS = 70
+SOCIAL_IG_SLIDE_BODY_MAX_CHARS = 240
+SOCIAL_IG_SLIDE_FIGURE_MAX_CHARS = 40
+
 # Cantidad de hooks alternativos y de bullets de síntesis ejecutiva.
 SOCIAL_MIN_HOOKS = 3
 SOCIAL_MAX_HOOKS = 5
@@ -750,6 +760,68 @@ def _validate_platforms_section(platforms: object) -> None:
             )
 
 
+def _validate_instagram_carousel_section(
+    carousel: object, banners: dict
+) -> None:
+    """Valida la sección opcional ``instagram_carousel``.
+
+    El carrusel solo puede apuntar a un formato vertical de Instagram ya
+    declarado en ``banners.sizes``. Esta regla evita que una errata en el JSON
+    produzca un carrusel horizontal o de otra plataforma, que Instagram
+    recortaría o rechazaría.
+
+    Args:
+        carousel: Valor crudo de la sección 'instagram_carousel', o None.
+        banners: Sección 'banners' ya validada.
+
+    Raises:
+        ConfigurationError: Si la sección o el formato no son utilizables.
+    """
+    if carousel is None:
+        return
+    if not isinstance(carousel, dict):
+        raise ConfigurationError(
+            "La sección 'instagram_carousel' de la configuración de RRSS debe "
+            f"ser un objeto JSON, pero es {type(carousel).__name__}."
+        )
+
+    unknown = set(carousel) - {"format"}
+    if unknown:
+        raise ConfigurationError(
+            "La sección 'instagram_carousel' tiene campos desconocidos: "
+            f"{', '.join(sorted(unknown))}."
+        )
+
+    format_name = carousel.get("format", SOCIAL_IG_CAROUSEL_FORMAT)
+    if not isinstance(format_name, str) or not format_name.strip():
+        raise ConfigurationError(
+            "El campo 'format' de la sección 'instagram_carousel' debe ser un "
+            f"texto no vacío, pero es {format_name!r}."
+        )
+
+    format_name = format_name.strip()
+    sizes = banners.get("sizes", {})
+    size = sizes.get(format_name)
+    if not isinstance(size, (list, tuple)) or len(size) != 2:
+        raise ConfigurationError(
+            "El campo 'format' de la sección 'instagram_carousel' apunta al "
+            f"formato '{format_name}', que no está declarado en 'banners.sizes'."
+        )
+
+    if not format_name.startswith("instagram_"):
+        raise ConfigurationError(
+            "El carrusel de Instagram debe usar un formato de Instagram, pero "
+            f"apunta a '{format_name}'."
+        )
+
+    width, height = int(size[0]), int(size[1])
+    if height <= width:
+        raise ConfigurationError(
+            "El formato del carrusel de Instagram debe ser vertical, pero "
+            f"'{format_name}' mide {width}x{height}."
+        )
+
+
 def load_social_config(path: str | Path | None = None) -> dict:
     """Carga la configuración de marca y plantillas del subsistema RRSS.
 
@@ -777,6 +849,9 @@ def load_social_config(path: str | Path | None = None) -> dict:
     _validate_banners_section(data["banners"])
     _validate_visual_prompts_section(data["visual_prompts"])
     _validate_platforms_section(data.get("platforms"))
+    _validate_instagram_carousel_section(
+        data.get("instagram_carousel"), data["banners"]
+    )
 
     return data
 

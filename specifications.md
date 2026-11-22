@@ -130,7 +130,7 @@ python -m news_agent social --platforms x,instagram
 python -m news_agent --socialize articulos/articulo_1_slug.md --output ./social
 ```
 
-El subsistema produce tres familias de artefactos: **copys estructurados**, **prompts visuales en inglés** y **banners renderizados localmente**. No publica nada en las plataformas ni genera las imágenes finales: entrega al equipo editorial el material listo para publicar y para pegar en un generador de imágenes.
+El subsistema produce cuatro familias de artefactos: **copys estructurados**, **prompts visuales en inglés**, **banners renderizados localmente** y el **carrusel vertical de Instagram**. No publica nada en las plataformas ni genera las imágenes finales del prompt visual: entrega al equipo editorial el material listo para publicar y para pegar en un generador de imágenes.
 
 ### 6.2. Entrada
 
@@ -144,7 +144,7 @@ El único origen admitido es un **artículo Markdown ya publicado** (`articulos/
 
 - **Salida JSON, no Markdown.** A diferencia de la pauta y de los artículos, el subsistema pide al modelo un objeto JSON estructurado con el contrato completo de la pieza.
 - **Extracción defensiva.** La respuesta se parsea tolerando bloques de código Markdown, texto explicativo alrededor y comas finales sueltas. Si no se obtiene un objeto válido, se reintenta la llamada con una nota de corrección, hasta `SOCIAL_JSON_MAX_RETRIES` veces.
-- **Campos del contrato:** `hooks`, `summary`, `hook`, `quote_card`, `key_figures`, `cta`, `alt_text`, `x`, `facebook`, `instagram`.
+- **Campos del contrato:** `hooks`, `summary`, `hook`, `quote_card`, `key_figures`, `cta`, `alt_text`, `x`, `facebook`, `instagram` (con `caption`, `hashtags` y `slides`).
 
 #### Reglas aplicadas en código, no delegadas al modelo
 
@@ -159,6 +159,8 @@ El único origen admitido es un **artículo Markdown ya publicado** (`articulos/
 | Cita literal | Se verifica palabra por palabra; si no proviene del artículo, se reemplaza por una oración candidata verificada o por el lead |
 | Cifras verificables | Se descartan las cifras que no aparecen en el texto; si ninguna se verifica, se usan las detectadas en el artículo |
 | Textos alternativos | Se completan y se recortan al límite de cada plataforma (X 300, Facebook 200, Instagram 100 caracteres) |
+| Slides del carrusel de Instagram | Se exigen exactamente 3; título ≤ 70, cuerpo ≤ 240 y cifra ≤ 40 caracteres. Las cifras se verifican contra el artículo. Si faltan slides, se completan con la síntesis ejecutiva y material del artículo. |
+| Coherencia de los slides | Se descartan cuerpos duplicados, se conserva el orden y, si un titular falta, se deriva de su propio cuerpo. La retícula gráfica y los topes son idénticos en los tres slides. |
 
 ### 6.4. Capa del prompt visual
 
@@ -197,9 +199,25 @@ Dos plantillas declaradas en la configuración, renderizadas en los formatos ped
 - **Fuentes:** se resuelve primero la ruta declarada en `brand.fonts`, luego el directorio de `SOCIAL_FONT_DIR` y después las rutas habituales del sistema (DejaVu, Liberation, Noto o Arial). Si ninguna existe, se usa la fuente por defecto de Pillow y se advierte en el log.
 - **Aislamiento de fallos:** un banner que falla al renderizar no interrumpe el resto del lote; queda registrado en el manifiesto como pendiente.
 
+#### 6.5.1. Carrusel vertical de Instagram
+
+Cuando la plataforma `instagram` está habilitada, el subsistema suma un carrusel de **cinco piezas verticales de 1080×1920**, todas con la misma retícula y la misma identidad visual del banner:
+
+| Orden | Pieza | Contenido |
+|:-----:|-------|-----------|
+| 1 | Portada | Barra de acento, etiqueta de marca, logo, titular, bajada, llamado a deslizar y contador `01 / 05` |
+| 2–4 | Tres slides de resumen | Número de punto, etiqueta «PUNTO CLAVE», titular, cuerpo breve, tarjeta opcional de dato duro, puntos de progreso y contador |
+| 5 | Firma | Logo centrado, nombre de la marca, tagline, sitio, handle y llamado a leer la nota completa |
+
+- **Estética compartida:** las cinco piezas reutilizan la paleta, las fuentes, el logo, la barra de acento y el pie de marca de `banner_renderer.py`. El encabezado y el pie están en la misma coordenada en todas, y los tres resúmenes reservan el mismo alto para el titular, de modo que el cuerpo empiece a la misma altura.
+- **Formato obligatorio:** `instagram_carousel.format` debe apuntar a un `instagram_*` declarado en `banners.sizes` y con alto mayor que ancho. Cualquier otra combinación se rechaza al cargar la configuración y, si se construye el renderizador directamente, lanza `InstagramRenderError`.
+- **Contenido de los resúmenes:** sale de `instagram.slides` del contrato de copys. La portada y la firma se componen siempre con datos de la marca, no con texto del modelo.
+- **Tolerancia a fallos:** un slide que falla no interrumpe los otros cuatro; queda con `path: null` en el manifiesto.
+- **Salida:** los cinco PNG se escriben juntos en el subdirectorio exclusivo `instagram/` del bundle.
+
 ### 6.6. Formato de salida (bundle)
 
-Cada ejecución escribe una carpeta autocontenida `social/AAAA_MM_DD_slug-del-titulo/` con los copys en JSON, el comando de Midjourney en `visual_prompt.txt`, los metadatos del prompt en `visual_prompts.json`, un Markdown listo para copiar y pegar por plataforma, los PNG de los banners en `assets/` y un `manifest.json` que registra qué se generó, qué falló y con qué artículo se produjo. El bloque `visual_prompts` del manifiesto incluye `status` (`generated`, `skipped` o `failed`) y `error` cuando la generación falló, de modo que omitir el prompt con `--skip-prompts` no se confunde con un fallo.
+Cada ejecución escribe una carpeta autocontenida `social/AAAA_MM_DD_slug-del-titulo/` con los copys en JSON, el comando de Midjourney en `visual_prompt.txt`, los metadatos del prompt en `visual_prompts.json`, un Markdown listo para copiar y pegar por plataforma, los PNG de los banners en `assets/`, el carrusel vertical en el subdirectorio exclusivo `instagram/` (`01_cover.png`, `02_point_1.png`, `03_point_2.png`, `04_point_3.png` y `05_signature.png`) y un `manifest.json` que registra qué se generó, qué falló y con qué artículo se produjo. El bloque `visual_prompts` del manifiesto incluye `status` (`generated`, `skipped` o `failed`) y `error` cuando la generación falló, de modo que omitir el prompt con `--skip-prompts` no se confunde con un fallo. El bloque `instagram_carousel` registra `status` (`generated`, `partial`, `failed` o `skipped`), formato, dimensiones, cantidad de slides y la ruta de cada pieza.
 
 El campo `quote_card.verbatim` del JSON de copys —repetido como `verified_quote` en el manifiesto— indica si la cita destacada se verificó palabra por palabra contra el artículo de origen.
 
@@ -212,10 +230,11 @@ La identidad visual y los límites viven en `social_config.json`, versionado en 
 | `brand` | Nombre, handle, sitio, logo opcional, paleta de colores y tipografías por rol | ✅ |
 | `platforms` | Límite de caracteres, largo del hilo y tope de hashtags por plataforma. Sobrescriben los valores por defecto de `config.py` y se validan al cargar | ❌ |
 | `banners.templates` / `banners.sizes` | Matriz plantilla → formatos y tamaño de cada formato | ✅ |
-| `banners.safe_zone` | Bandas no utilizables de los formatos verticales | ❌ |
+| `banners.safe_zone` | Bandas no utilizables de los formatos verticales, incluido `instagram_reel` | ❌ |
+| `instagram_carousel` | Formato del carrusel vertical; debe ser un `instagram_*` vertical declarado en `banners.sizes`. Por defecto, `instagram_reel` | ❌ |
 | `visual_prompts` | Tratamientos, reglas de decisión, prompt negativo, proporción única y sufijo de Midjourney | ✅ |
 
-Un color mal escrito, una clave de color faltante, un tamaño inválido, una sección `visual_prompts` incompleta, una plataforma con límites inválidos o una plantilla que apunte a un formato inexistente se detectan al cargar el archivo, con un mensaje que indica el campo culpable.
+Un color mal escrito, una clave de color faltante, un tamaño inválido, una sección `visual_prompts` incompleta, una plataforma con límites inválidos, una plantilla que apunte a un formato inexistente, o un carrusel que apunte a un formato no vertical o de otra plataforma se detectan al cargar el archivo, con un mensaje que indica el campo culpable.
 
 ### 6.8. Estructura del subsistema
 
@@ -226,7 +245,8 @@ Un color mal escrito, una clave de color faltante, un tamaño inválido, una sec
 | `prompt_builder.py` | Construye los prompts de copys (español) y del prompt visual (inglés) |
 | `copy_generator.py` | Genera y valida los copys contra los límites de cada plataforma |
 | `visual_prompts.py` | Genera y valida el prompt visual en inglés con su tratamiento |
-| `banner_renderer.py` | Renderiza los banners con Pillow |
+| `banner_renderer.py` | Renderiza los banners con Pillow y expone las primitivas de retícula compartidas |
+| `instagram_renderer.py` | Renderiza el carrusel vertical: portada, tres resúmenes y firma |
 | `platform_specs.py` | Resuelve los límites por plataforma y filtra por formato |
 | `text_utils.py` | Recorte por caracteres y normalización de hashtags |
 | `json_utils.py` | Extracción defensiva de JSON de las respuestas del modelo |
@@ -239,6 +259,8 @@ Un color mal escrito, una clave de color faltante, un tamaño inválido, una sec
 - **Copys imposibles de validar** → se aborta sin escribir un bundle a medias.
 - **Prompt visual fallido** → el bundle se escribe igualmente con los copys y los banners; el manifiesto lo registra con `status: "failed"` y el motivo en `error`.
 - **Banner fallido** → se registra el error y el resto del lote continúa.
+- **Slide del carrusel fallido** → se registra el error, el slide queda con ruta nula y los otros cuatro se escriben igualmente.
+- **Formato de carrusel inválido** → se rechaza al cargar la configuración si no es un `instagram_*` vertical; si se construye el renderizador directamente, lanza `InstagramRenderError` y el bundle se escribe sin carrusel.
 - **Directorio de salida inexistente** → se crea automáticamente (incluidos los directorios intermedios).
 - **Artículo inexistente, vacío o sin titular** → error explícito de parseo y salida con código distinto de cero.
 - **API key ausente** → error explícito de configuración antes de cualquier llamada.

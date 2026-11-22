@@ -283,6 +283,110 @@ class TestKeyFigures:
 
 
 # ---------------------------------------------------------------------------
+# Carrusel de Instagram
+# ---------------------------------------------------------------------------
+
+
+class TestInstagramCarouselSlides:
+    """Validación de los tres slides de resumen del carrusel."""
+
+    def test_builds_exactly_three_slides(self, copy_payload, article, social_config):
+        result = build_social_copy(copy_payload, article, social_config)
+
+        assert len(result.instagram.slides) == 3
+
+    def test_keeps_the_model_order_and_titles(
+        self, copy_payload, article, social_config
+    ):
+        result = build_social_copy(copy_payload, article, social_config)
+
+        assert [slide.title for slide in result.instagram.slides] == [
+            "Un meme, una detención",
+            "El estándar del delito de amenaza",
+            "El patrón que documenta el INDH",
+        ]
+
+    def test_keeps_verified_figures_and_drops_the_empty_ones(
+        self, copy_payload, article, social_config
+    ):
+        result = build_social_copy(copy_payload, article, social_config)
+
+        assert [slide.figure for slide in result.instagram.slides] == [
+            "44 años",
+            "",
+            "más de 200",
+        ]
+
+    def test_derives_the_slides_from_the_summary_when_missing(
+        self, copy_payload, article, social_config
+    ):
+        payload = copy_module.deepcopy(copy_payload)
+        payload["instagram"].pop("slides")
+
+        result = build_social_copy(payload, article, social_config)
+
+        assert len(result.instagram.slides) == 3
+        assert result.instagram.slides[0].body == result.summary[0]
+
+    def test_completes_missing_slides_with_the_summary(
+        self, copy_payload, article, social_config
+    ):
+        payload = copy_module.deepcopy(copy_payload)
+        payload["instagram"]["slides"] = payload["instagram"]["slides"][:1]
+
+        result = build_social_copy(payload, article, social_config)
+
+        assert len(result.instagram.slides) == 3
+        assert result.instagram.slides[0].title == "Un meme, una detención"
+
+    def test_caps_the_title_and_body_lengths(
+        self, copy_payload, article, social_config
+    ):
+        payload = copy_module.deepcopy(copy_payload)
+        payload["instagram"]["slides"][0]["title"] = " ".join(["palabra"] * 40)
+        payload["instagram"]["slides"][0]["body"] = " ".join(["palabra"] * 200)
+
+        result = build_social_copy(payload, article, social_config)
+
+        slide = result.instagram.slides[0]
+        assert len(slide.title) <= 70
+        assert len(slide.body) <= 240
+
+    def test_drops_a_figure_that_is_not_in_the_article(
+        self, copy_payload, article, social_config
+    ):
+        payload = copy_module.deepcopy(copy_payload)
+        payload["instagram"]["slides"][0]["figure"] = "98 por ciento"
+
+        result = build_social_copy(payload, article, social_config)
+
+        assert result.instagram.slides[0].figure == ""
+
+    def test_discards_duplicate_bodies(
+        self, copy_payload, article, social_config
+    ):
+        payload = copy_module.deepcopy(copy_payload)
+        duplicate = copy_module.deepcopy(payload["instagram"]["slides"][0])
+        payload["instagram"]["slides"][1] = duplicate
+
+        result = build_social_copy(payload, article, social_config)
+
+        assert len(result.instagram.slides) == 3
+        bodies = [slide.body for slide in result.instagram.slides]
+        assert len(set(bodies)) == 3
+
+    def test_slides_are_serialized_in_the_copy_json(
+        self, copy_payload, article, social_config
+    ):
+        result = build_social_copy(copy_payload, article, social_config)
+
+        payload = result.to_dict()
+
+        assert len(payload["instagram"]["slides"]) == 3
+        assert payload["instagram"]["slides"][0]["title"]
+
+
+# ---------------------------------------------------------------------------
 # Ajuste a los límites de plataforma
 # ---------------------------------------------------------------------------
 

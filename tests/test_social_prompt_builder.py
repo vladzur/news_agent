@@ -53,6 +53,14 @@ class TestCopySystemPrompt:
 
         assert "No incluyas hashtags dentro del texto" in prompt
 
+    def test_describes_the_instagram_carousel(self, social_config):
+        prompt = build_copy_system_prompt(social_config)
+
+        assert "carrusel vertical" in prompt
+        assert "tres slides" in prompt
+        assert "portada" in prompt
+        assert "firma de marca" in prompt
+
 
 class TestCopyUserPrompt:
     """Contenido del prompt de usuario con el material de origen."""
@@ -127,6 +135,19 @@ class TestCopyUserPrompt:
         prompt = build_copy_user_prompt(article, social_config)
 
         assert "x.thread[0]" in prompt
+
+    def test_describes_the_three_instagram_slides(self, article, social_config):
+        prompt = build_copy_user_prompt(article, social_config)
+
+        assert '"slides"' in prompt
+        assert "exactamente" in prompt
+        assert "3 slides" in prompt or "tres slides" in prompt
+
+    def test_states_the_instagram_slide_limits(self, article, social_config):
+        prompt = build_copy_user_prompt(article, social_config)
+
+        assert "70 caracteres" in prompt
+        assert "240 caracteres" in prompt
 
     def test_forbids_markdown_fences_in_the_response(self, article, social_config):
         prompt = build_copy_user_prompt(article, social_config)

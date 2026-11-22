@@ -7,12 +7,14 @@ from datetime import datetime, timezone
 from news_agent.social.writer import (
     ASSETS_DIR_NAME,
     COPY_FILE_NAME,
+    INSTAGRAM_DIR_NAME,
     MANIFEST_FILE_NAME,
     MARKDOWN_FILE_NAMES,
     PROMPT_TEXT_FILE_NAME,
     PROMPTS_FILE_NAME,
     assets_dir,
     build_bundle_dir,
+    instagram_dir,
     render_facebook_markdown,
     render_instagram_markdown,
     render_x_thread_markdown,
@@ -71,6 +73,22 @@ class TestAssetsDir:
 
     def test_returns_an_absolute_path(self, tmp_path):
         assert assets_dir(tmp_path).is_absolute()
+
+
+class TestInstagramDir:
+    """Subdirectorio exclusivo del carrusel de Instagram."""
+
+    def test_creates_the_instagram_subfolder(self, tmp_path):
+        path = instagram_dir(tmp_path)
+
+        assert path.name == INSTAGRAM_DIR_NAME
+        assert path.is_dir()
+
+    def test_returns_an_absolute_path(self, tmp_path):
+        assert instagram_dir(tmp_path).is_absolute()
+
+    def test_is_separate_from_the_generic_assets_folder(self, tmp_path):
+        assert instagram_dir(tmp_path) != assets_dir(tmp_path)
 
 
 class TestSlugForTitle:
@@ -194,6 +212,22 @@ class TestRenderMarkdown:
         content = render_instagram_markdown(social_copy)
 
         assert "no se pudo verificar" in content
+
+    def test_instagram_markdown_lists_the_carousel_slides(self, social_copy):
+        content = render_instagram_markdown(social_copy)
+
+        assert "Carrusel vertical" in content
+        assert "instagram/" in content
+        for slide in social_copy.instagram.slides:
+            assert slide.title in content
+            assert slide.body in content
+
+    def test_instagram_markdown_includes_the_slide_figure(self, social_copy):
+        social_copy.instagram.slides[0].figure = "44 años"
+
+        content = render_instagram_markdown(social_copy)
+
+        assert "**Dato clave:** 44 años" in content
 
 
 class TestSavePlatformMarkdown:
@@ -341,6 +375,69 @@ class TestSaveManifest:
         assert payload["banners"]["rendered"] == 1
         assert payload["banners"]["failed"] == 1
         assert payload["banners"]["items"][1]["path"] is None
+
+    def test_reports_a_missing_carousel_as_skipped(
+        self, tmp_path, social_copy, article
+    ):
+        payload = self._manifest(tmp_path, social_copy, article)
+
+        assert payload["files"]["instagram_carousel"] is None
+        assert payload["instagram_carousel"]["status"] == "skipped"
+        assert payload["instagram_carousel"]["slides"] == 0
+        assert payload["instagram_carousel"]["directory"] is None
+
+    def test_records_the_rendered_carousel(self, tmp_path, social_copy, article):
+        from news_agent.social.models import InstagramSlideSpec
+
+        carousel = [
+            InstagramSlideSpec(1, "cover", social_copy.title, 1080, 1920, tmp_path / "01.png"),
+            InstagramSlideSpec(2, "summary", "Punto", 1080, 1920, tmp_path / "02.png"),
+            InstagramSlideSpec(5, "signature", "La Chispa Sur", 1080, 1920, None),
+        ]
+        directory = instagram_dir(tmp_path)
+
+        payload = self._manifest(
+            tmp_path,
+            social_copy,
+            article,
+            carousel_slides=carousel,
+            carousel_dir_path=directory,
+            carousel_format="instagram_reel",
+        )
+
+        assert payload["files"]["instagram_carousel"] == INSTAGRAM_DIR_NAME
+        assert payload["instagram_carousel"]["status"] == "partial"
+        assert payload["instagram_carousel"]["directory"] == INSTAGRAM_DIR_NAME
+        assert payload["instagram_carousel"]["format"] == "instagram_reel"
+        assert payload["instagram_carousel"]["width"] == 1080
+        assert payload["instagram_carousel"]["height"] == 1920
+        assert payload["instagram_carousel"]["slides"] == 3
+        assert payload["instagram_carousel"]["rendered"] == 2
+        assert payload["instagram_carousel"]["failed"] == 1
+
+    def test_records_a_fully_rendered_carousel(
+        self, tmp_path, social_copy, article
+    ):
+        from news_agent.social.models import InstagramSlideSpec
+
+        carousel = [
+            InstagramSlideSpec(
+                index, "summary", "Punto", 1080, 1920, tmp_path / f"{index}.png"
+            )
+            for index in range(1, 4)
+        ]
+
+        payload = self._manifest(
+            tmp_path,
+            social_copy,
+            article,
+            carousel_slides=carousel,
+            carousel_dir_path=instagram_dir(tmp_path),
+            carousel_format="instagram_reel",
+        )
+
+        assert payload["instagram_carousel"]["status"] == "generated"
+        assert payload["instagram_carousel"]["failed"] == 0
 
     def test_records_whether_the_quote_was_verified(self, tmp_path, social_copy, article):
         payload = self._manifest(tmp_path, social_copy, article)

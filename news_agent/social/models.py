@@ -159,16 +159,35 @@ class FacebookCopy:
 
 
 @dataclass
+class InstagramSlide:
+    """Slide de resumen de un carrusel vertical de Instagram.
+
+    Attributes:
+        title: Titular breve del punto, pensado para leerse de un vistazo.
+        body: Explicación del punto en una o dos oraciones.
+        figure: Cifra o dato duro opcional, verificado contra el artículo.
+    """
+
+    title: str
+    body: str
+    figure: str = ""
+
+
+@dataclass
 class InstagramCopy:
     """Copy para Instagram.
 
     Attributes:
         caption: Texto de la publicación, con primera línea como gancho.
         hashtags: Hashtags para el bloque final.
+        slides: Tres slides de resumen para el carrusel vertical, en orden de
+                lectura. Siempre son tres: la portada y la firma se agregan
+                al renderizar.
     """
 
     caption: str
     hashtags: list[str] = field(default_factory=list)
+    slides: list[InstagramSlide] = field(default_factory=list)
 
 
 @dataclass
@@ -308,6 +327,38 @@ class BannerSpec:
 
 
 @dataclass
+class InstagramSlideSpec:
+    """Especificación de un slide renderizado del carrusel de Instagram.
+
+    Attributes:
+        index: Posición del slide dentro del carrusel, desde 1.
+        kind: Tipo de pieza: ``cover``, ``summary`` o ``signature``.
+        title: Texto principal del slide, útil para revisar la pieza sin abrir
+               el PNG.
+        width: Ancho en píxeles.
+        height: Alto en píxeles.
+        path: Ruta del PNG generado. None si el render falló.
+    """
+
+    index: int
+    kind: str
+    title: str
+    width: int
+    height: int
+    path: Path | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serializa la especificación del slide a un diccionario.
+
+        Returns:
+            dict[str, Any]: Representación serializable (la ruta como texto).
+        """
+        data = asdict(self)
+        data["path"] = str(self.path) if self.path else None
+        return data
+
+
+@dataclass
 class SocialPackage:
     """Resultado completo de una ejecución de repurposing.
 
@@ -319,6 +370,8 @@ class SocialPackage:
         copy_path: Ruta del JSON de copys.
         prompts_path: Ruta del JSON de prompts visuales, o None si se omitió.
         manifest_path: Ruta del manifiesto del bundle.
+        carousel: Slides del carrusel de Instagram (vacío si se omitió).
+        carousel_dir: Subdirectorio exclusivo del carrusel, o None.
     """
 
     bundle_dir: Path
@@ -328,3 +381,5 @@ class SocialPackage:
     manifest_path: Path
     banners: list[BannerSpec] = field(default_factory=list)
     prompts_path: Path | None = None
+    carousel: list[InstagramSlideSpec] = field(default_factory=list)
+    carousel_dir: Path | None = None

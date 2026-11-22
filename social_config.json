@@ -2,7 +2,7 @@
   "brand": {
     "name": "La Chispa Sur",
     "handle": "@lachispasur",
-    "tagline": "Periodismo crítico desde el sur",
+    "tagline": "Periodismo crítico desde La Araucanía",
     "website": "lachispasur.cl",
     "logo_path": "assets/logo_lachispasur.png",
     "logo_height_ratio": 0.11,
@@ -56,14 +56,22 @@
       "x": [1600, 900],
       "facebook": [1200, 630],
       "instagram_feed": [1080, 1080],
-      "instagram_story": [1080, 1920]
+      "instagram_story": [1080, 1920],
+      "instagram_reel": [1080, 1920]
     },
     "safe_zone": {
       "instagram_story": {
         "top": 250,
         "bottom": 340
+      },
+      "instagram_reel": {
+        "top": 140,
+        "bottom": 220
       }
     }
+  },
+  "instagram_carousel": {
+    "format": "instagram_reel"
   },
   "visual_prompts": {
     "treatments": {
