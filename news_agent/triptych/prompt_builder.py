@@ -117,7 +117,7 @@ def _render_budget(specs: dict[str, Any]) -> str:
     return "\n".join(
         [
             (
-                f"- Hoja de {page['width_mm']:.0f} x {page['height_mm']:.0f} "
+                f"- Hoja de {page['width_mm']:.1f} x {page['height_mm']:.1f} "
                 f"mm, {page['columns_per_side']} columnas por cara."
             ),
             (
