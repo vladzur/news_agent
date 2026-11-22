@@ -165,23 +165,32 @@ El único origen admitido es un **artículo Markdown ya publicado** (`articulos/
 ### 6.4. Capa del prompt visual
 
 - **Un único prompt por columna, en inglés y listo para Midjourney.** El subsistema no genera imágenes ni entrega prompts por relación de aspecto: produce un comando completo con la proporción declarada en `social_config.json` (por defecto `--ar 16:9`) y los flags de versión.
-- **El tratamiento se decide por columna y queda declarado en la salida:**
-  - `photorealistic` — **tratamiento por defecto**. Se usa cuando la columna reporta hechos, lugares, objetos, personas o escenas concretas que pueden mostrarse como una fotografía documental plausible.
-  - `caricature` — **excepción**. Se usa solo cuando la columna es abstracta: un argumento, una tendencia económica o institucional, una metáfora o una crítica sin una escena documentable. La caricatura no puede ser una forma de eludir un hecho fotografiable.
-  - El modelo explica en `rationale` (en español) qué hechos concretos sostienen la fotografía o qué argumento abstracto obliga la caricatura. Un rationale vacío invalida la respuesta.
-- **Coherencia verificada en código**, no solo sugerida en el prompt: un prompt `photorealistic` debe nombrar un recurso fotográfico (lente, luz natural, reportaje, grano de película) y uno `caricature` debe nombrar una técnica de ilustración. Si el tratamiento declarado y la técnica descrita se contradicen, el prompt se descarta y se reintenta la llamada.
+- **El tratamiento se decide por columna con precedencia explícita y queda declarado en la salida:**
+  - `representative` — **prioridad**. Se usa cuando la columna gira en torno a figuras públicas políticas nombradas: jefes de Estado, ministros, legisladores, candidatos, autoridades o dirigentes de partido. El prompt debe mostrar a esas figuras con un **parecido reconocible** dentro de una composición editorial construida —collage de papel recortado, serigrafía con semitono, afiche pintado o risografía—, con color plano posterizado, contornos de tinta y textura de papel. La composición no puede confundirse con una fotografía real ni con una recreación de prensa.
+  - `photorealistic` — **camino por defecto sin figuras públicas**. Se usa cuando no hay figuras públicas políticas centrales y la columna reporta hechos, lugares, objetos o escenas concretas que pueden mostrarse como una fotografía documental plausible.
+  - `caricature` — **excepción**. Se usa solo cuando la columna es abstracta, no nombra figuras públicas políticas y no tiene una escena documentable: un argumento, una tendencia económica o institucional, una metáfora o una crítica. La caricatura no puede ser una forma de eludir un hecho fotografiable.
+  - El modelo declara en `political_figures` las figuras públicas políticas que la imagen muestra, copiadas del artículo. La lista es obligatoria y puede quedar vacía. Si no está vacía, el tratamiento debe ser `representative` y cada figura debe aparecer nombrada en el prompt positivo. El modelo explica en `rationale`, en español, qué hechos concretos sostienen el tratamiento y qué figuras obligan la composición representativa. Un rationale vacío invalida la respuesta.
+- **Fuerza de representación verificada en código:** el prompt debe nombrar anclas concretas del artículo —nombres propios, acrónimos, instituciones, lugares, objetos y cifras—. Se exigen dos anclas distintas en `photorealistic` y `representative`, y una en `caricature`; si el artículo no produce anclas utilizables, la comprobación se omite con una advertencia en el log. Las anclas detectadas se enumeran en el user prompt para que el modelo conserve los nombres propios en su grafía original en español.
+- **Coherencia verificada en código**, no solo sugerida en el prompt:
+  - `photorealistic` exige un recurso fotográfico (lente, luz natural, reportaje o grano de película), rechaza las señales de ilustración y rechaza los tropos abstractos (`abstract composition`, `purely symbolic`, `surreal`, `dreamlike`, `floating symbols`, `visual metaphor`, entre otros).
+  - `representative` exige una técnica de composición editorial (collage, semitono, serigrafía, afiche o risografía) y rechaza el lenguaje fotográfico y de realismo (`photograph`, `documentary`, `35mm`, `lens`, `photorealistic`, `paparazzi`, `film still`, entre otros). También rechaza las frases que ocultan el rostro de la figura.
+  - `caricature` exige una técnica de ilustración y no puede declarar lenguaje fotográfico.
+  - Las figuras declaradas se verifican contra el titular, el lead, los subtítulos y el cuerpo del artículo. Una figura inventada, ausente o que solo figure en las fuentes o en el apéndice de portada invalida la respuesta. Si el artículo menciona un cargo sin nombrar a la persona, no se inventa un rostro.
+- **Negativos por tratamiento:** `treatment_negatives.representative` agrega al `--no` los términos que impiden derivar hacia una foto realista —realismo fotográfico, foto de prensa, paparazzi, piel realista—. El negativo final se compone en este orden: negativo de marca → negativo del tratamiento → `extra_negative`, sin duplicar términos. Un `extra_negative` que prohíba figuras públicas se rechaza siempre; en `representative` también se rechaza el que esconda su rostro o su parecido.
 - **Textos breves dentro de la escena**: rótulos de tres o cuatro palabras en español, integrados como letreros, pancartas, carteles, pantallas o precios, **en mayúsculas y sin comillas** (`PENSIONES`, `-10,39%`). El material de origen entrega las cifras de la columna para que el modelo las use cuando aporten.
 - **Restricciones verificadas en código**:
   - Se rechazan los **bloques de texto**: párrafos, letra pequeña y titulares largos, porque los modelos de difusión los renderizan como ruido. Los rótulos breves y las cifras no se marcan como infracción.
   - Obligatorio nombrar una **paleta de color**: un prompt sin señales cromáticas se rechaza, porque devuelve imágenes planas y sin contraste.
   - Se rechaza la **violencia explícita** (`blood`, `gore`, `corpse`, `massacre`, entre otros) y las **escenas fabricadas o suplantaciones de identidad** (`deepfake`, `face swap`, `staged reenactment`, `fabricated scene`).
-  - Los rótulos dentro de la imagen —en mayúsculas o entre comillas— quedan excluidos de la heurística que detecta prompts escritos en español, de modo que un prompt en inglés puede incluir etiquetas en español. Además, el código retira las comillas y las barras invertidas del prompt: Midjourney recibe texto plano, no JSON.
+  - Los rótulos dentro de la imagen —en mayúsculas o entre comillas— quedan excluidos de la heurística que detecta prompts escritos en español. Antes de aplicar esa heurística también se retiran las anclas del artículo y los artículos que las preceden (`La Moneda`, `La Araucanía`, `Los Lagos`), de modo que un prompt en inglés puede nombrar lugares y personas en español sin ser rechazado. Además, el código retira las comillas y las barras invertidas del prompt: Midjourney recibe texto plano, no JSON.
   - Prompt positivo entre 25 y 200 palabras, en inglés.
 - **Reglas editoriales del prompt**, no verificables de forma determinista:
-  - En el tratamiento fotorrealista, las **figuras públicas nombradas** aparecen solo dentro de una escena documental: se prohíben el gesto inventado y el escenario inventado. Las víctimas, menores y personas privadas se representan de forma no identificable.
-  - En el tratamiento de caricatura, las figuras públicas nombradas pueden aparecer como personajes estilizados; las víctimas, menores y personas privadas, como figuras anónimas.
-- **Salida:** tratamiento, su justificación en español, prompt positivo, prompt negativo (el de marca más los agregados específicos de la columna, sin duplicar términos) y comando completo de Midjourney (`--ar`, flag de estilo, `--v` y `--no`).
-- **Dos archivos por bundle:** `visual_prompt.txt` contiene únicamente el comando en texto plano —sin JSON, sin comillas escapadas— para pegarlo en Midjourney; `visual_prompts.json` conserva los metadatos (tratamiento, justificación, prompt, negativo y proporción).
+  - La imagen debe representar el contenido real de la columna. Una escena genérica o abstracta que podría ilustrar cualquier artículo es un fallo, aunque cumpla las demás reglas.
+  - Las figuras públicas políticas nombradas no se omiten, recortan, ocultan ni sustituyen por siluetas o personas anónimas. Se muestran con su parecido reconocible y dentro de una composición que se lea de inmediato como una ilustración editorial.
+  - Las víctimas, menores y personas privadas se representan de forma no identificable.
+  - En el tratamiento fotorrealista no se inventa un evento que la columna no reporte; la escena debe ser plausible y fiel a sus hechos.
+- **Salida:** tratamiento, figuras públicas, justificación en español, prompt positivo, prompt negativo (el de marca más el del tratamiento y los agregados específicos de la columna, sin duplicar términos) y comando completo de Midjourney (`--ar`, flag de estilo, `--v` y `--no`).
+- **Dos archivos por bundle:** `visual_prompt.txt` contiene únicamente el comando en texto plano —sin JSON, sin comillas escapadas— para pegarlo en Midjourney; `visual_prompts.json` conserva los metadatos (tratamiento, figuras públicas, justificación, prompt, negativo y proporción).
 
 ### 6.5. Capa de assets locales (Pillow)
 
@@ -217,7 +226,7 @@ Cuando la plataforma `instagram` está habilitada, el subsistema suma un carruse
 
 ### 6.6. Formato de salida (bundle)
 
-Cada ejecución escribe una carpeta autocontenida `social/AAAA_MM_DD_slug-del-titulo/` con los copys en JSON, el comando de Midjourney en `visual_prompt.txt`, los metadatos del prompt en `visual_prompts.json`, un Markdown listo para copiar y pegar por plataforma, los PNG de los banners en `assets/`, el carrusel vertical 4:3 (1080×1440) en el subdirectorio exclusivo `instagram/` (`01_cover.png`, `02_point_1.png`, `03_point_2.png`, `04_point_3.png` y `05_signature.png`) y un `manifest.json` que registra qué se generó, qué falló y con qué artículo se produjo. El bloque `visual_prompts` del manifiesto incluye `status` (`generated`, `skipped` o `failed`) y `error` cuando la generación falló, de modo que omitir el prompt con `--skip-prompts` no se confunde con un fallo. El bloque `instagram_carousel` registra `status` (`generated`, `partial`, `failed` o `skipped`), formato, dimensiones, cantidad de slides y la ruta de cada pieza.
+Cada ejecución escribe una carpeta autocontenida `social/AAAA_MM_DD_slug-del-titulo/` con los copys en JSON, el comando de Midjourney en `visual_prompt.txt`, los metadatos del prompt en `visual_prompts.json` (tratamiento, figuras públicas, justificación, prompt y negativo), un Markdown listo para copiar y pegar por plataforma, los PNG de los banners en `assets/`, el carrusel vertical 4:3 (1080×1440) en el subdirectorio exclusivo `instagram/` (`01_cover.png`, `02_point_1.png`, `03_point_2.png`, `04_point_3.png` y `05_signature.png`) y un `manifest.json` que registra qué se generó, qué falló y con qué artículo se produjo. El bloque `visual_prompts` del manifiesto incluye `status` (`generated`, `skipped` o `failed`), `error` cuando la generación falló y `political_figures` con las figuras representadas, de modo que omitir el prompt con `--skip-prompts` no se confunde con un fallo. El bloque `instagram_carousel` registra `status` (`generated`, `partial`, `failed` o `skipped`), formato, dimensiones, cantidad de slides y la ruta de cada pieza.
 
 El campo `quote_card.verbatim` del JSON de copys —repetido como `verified_quote` en el manifiesto— indica si la cita destacada se verificó palabra por palabra contra el artículo de origen.
 
@@ -232,19 +241,19 @@ La identidad visual y los límites viven en `social_config.json`, versionado en 
 | `banners.templates` / `banners.sizes` | Matriz plantilla → formatos y tamaño de cada formato | ✅ |
 | `banners.safe_zone` | Bandas no utilizables de los formatos verticales, incluido `instagram_portrait` | ❌ |
 | `instagram_carousel` | Formato del carrusel vertical; debe ser un `instagram_*` vertical declarado en `banners.sizes`. Por defecto, `instagram_portrait` (1080×1440) | ❌ |
-| `visual_prompts` | Tratamientos, reglas de decisión, prompt negativo, proporción única y sufijo de Midjourney | ✅ |
+| `visual_prompts` | Los tres tratamientos, las reglas de decisión, el prompt negativo de marca, los negativos por tratamiento, la proporción única y el sufijo de Midjourney. Se validan al cargar | ✅ |
 
-Un color mal escrito, una clave de color faltante, un tamaño inválido, una sección `visual_prompts` incompleta, una plataforma con límites inválidos, una plantilla que apunte a un formato inexistente, o un carrusel que apunte a un formato no vertical o de otra plataforma se detectan al cargar el archivo, con un mensaje que indica el campo culpable.
+Un color mal escrito, una clave de color faltante, un tamaño inválido, una sección `visual_prompts` incompleta o con un tratamiento o un negativo por tratamiento inválido, una plataforma con límites inválidos, una plantilla que apunte a un formato inexistente, o un carrusel que apunte a un formato no vertical o de otra plataforma se detectan al cargar el archivo, con un mensaje que indica el campo culpable.
 
 ### 6.8. Estructura del subsistema
 
 | Módulo (`news_agent/social/`) | Responsabilidad |
 |-------------------------------|-----------------|
 | `orchestrator.py` | Coordina el flujo completo y devuelve el resumen del bundle |
-| `article_source.py` | Parsea el artículo de origen y extrae su material reutilizable |
+| `article_source.py` | Parsea el artículo de origen, extrae su material reutilizable y calcula las anclas concretas del prompt visual |
 | `prompt_builder.py` | Construye los prompts de copys (español) y del prompt visual (inglés) |
 | `copy_generator.py` | Genera y valida los copys contra los límites de cada plataforma |
-| `visual_prompts.py` | Genera y valida el prompt visual en inglés con su tratamiento |
+| `visual_prompts.py` | Genera y valida el prompt visual en inglés con sus tres tratamientos, figuras públicas y anclas |
 | `banner_renderer.py` | Renderiza los banners con Pillow y expone las primitivas de retícula compartidas |
 | `instagram_renderer.py` | Renderiza el carrusel vertical: portada, tres resúmenes y firma |
 | `platform_specs.py` | Resuelve los límites por plataforma y filtra por formato |

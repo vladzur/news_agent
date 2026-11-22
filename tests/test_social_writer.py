@@ -133,6 +133,7 @@ class TestJsonFiles:
         assert payload["treatment"] == "photorealistic"
         assert payload["prompt"] == prompt.prompt
         assert payload["midjourney_prompt"] == prompt.midjourney_prompt
+        assert payload["political_figures"] == prompt.political_figures
 
     def test_saves_the_midjourney_command_as_plain_text(
         self, tmp_path, visual_payload, social_config
@@ -360,6 +361,7 @@ class TestSaveManifest:
         assert payload["visual_prompts"]["count"] == 1
         assert payload["visual_prompts"]["treatment"] == "photorealistic"
         assert payload["visual_prompts"]["aspect_ratio"] == prompt.aspect_ratio
+        assert payload["visual_prompts"]["political_figures"] == []
 
     def test_counts_rendered_and_failed_banners(self, tmp_path, social_copy, article):
         from news_agent.social.models import BannerSpec

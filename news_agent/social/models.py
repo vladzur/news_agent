@@ -269,12 +269,15 @@ class VisualPrompt:
     """Prompt en inglés para Midjourney, con el tratamiento elegido.
 
     Attributes:
-        treatment: Tratamiento visual: "photorealistic" o "caricature".
+        treatment: Tratamiento visual: "photorealistic", "representative" o
+                   "caricature".
         rationale: Motivo editorial de ese tratamiento, en español.
         prompt: Prompt positivo en inglés, con paleta y rótulos breves.
         negative_prompt: Prompt negativo con los artefactos a evitar.
         midjourney_prompt: Prompt listo para Midjourney, con sus flags.
         aspect_ratio: Proporción declarada en la configuración (ej: "16:9").
+        political_figures: Figuras públicas políticas nombradas en la imagen,
+                           tal como aparecen en el artículo. Vacía si no hay.
     """
 
     treatment: str
@@ -283,6 +286,7 @@ class VisualPrompt:
     negative_prompt: str
     midjourney_prompt: str
     aspect_ratio: str
+    political_figures: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         """Serializa el prompt visual a un diccionario apto para JSON.

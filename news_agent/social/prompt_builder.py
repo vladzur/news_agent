@@ -5,11 +5,14 @@ Hay dos familias de prompts, con contratos deliberadamente distintos:
 - **Copys**: salida en español neutro y JSON estructurado por plataforma. El
   esquema se genera desde la configuración para que el prompt y el validador
   nunca se separen.
-- **Prompts visuales**: salida en inglés, pensada para Midjourney, con dos
-  tratamientos posibles —fotorrealista documental o caricatura editorial— y \
-  paleta de color obligatoria. El fotorrealismo es el tratamiento por defecto \
-  cuando la columna tiene hechos, lugares o escenas concretas; la caricatura \
-  queda reservada para columnas abstractas o sin una escena documentable. La \
+- **Prompts visuales**: salida en inglés, pensada para Midjourney, con tres
+  tratamientos —representativo, fotorrealista documental o caricatura—, paleta
+  de color obligatoria y anclas concretas del artículo. El tratamiento
+  representativo se impone cuando la columna gira en torno a figuras públicas
+  políticas: las muestra con parecido reconocible dentro de una composición
+  editorial que no puede confundirse con una fotografía. El fotorrealismo es
+  el camino por defecto cuando no hay figuras públicas y hay hechos
+  documentables; la caricatura queda reservada para columnas abstractas. La
   imagen puede incluir rótulos breves en español integrados en la escena.
 
 Ambas familias separan la identidad editorial (system prompt) de la tarea y el
@@ -27,6 +30,7 @@ from ..config import (
     SOCIAL_MAX_HOOKS,
     SOCIAL_MIN_HOOKS,
 )
+from .article_source import extract_concrete_anchors
 from .models import ArticleSource, SocialCopy
 from .platform_specs import ALL_PLATFORMS, platform_specs, thread_bounds
 
@@ -34,6 +38,11 @@ from .platform_specs import ALL_PLATFORMS, platform_specs, thread_bounds
 # Logger del módulo
 # ---------------------------------------------------------------------------
 logger = logging.getLogger(__name__)
+
+# Cantidad máxima de anclas concretas que se enumeran en el user prompt. La
+# validación usa el conjunto completo; aquí se recorta para no inflar el
+# prompt con decenas de nombres propios.
+_PROMPT_ANCHOR_LIMIT = 12
 
 
 # ---------------------------------------------------------------------------
@@ -136,44 +145,67 @@ You are the picture editor of La Chispa Sur, an independent left-wing \
 digital news outlet from southern Chile. You read one column and write the \
 single English prompt that a designer pastes into Midjourney to illustrate it.
 
-Decide the treatment first, then write the prompt.
+Your first duty is representational force: the image must carry the actual \
+content of the column — its people, place, institution, object, number or \
+event — so a reader who knows the column recognizes its story at a glance. A \
+generic mood scene that could illustrate any article is a failed prompt.
 
-## Treatment
+## Treatment precedence
 
-Photorealistic is the default. Choose it when the column reports concrete, \
-recognisable facts — a place, an event, an object, a person or a scene — that \
-can be shown as one plausible documentary photograph: a street, a courtroom, \
-a market, a picket line, a signed document, a public figure at a podium.
-
-Choose caricature — a bold editorial illustration — only when the column is \
-abstract: an argument, an economic or institutional trend, a metaphor or a \
-critique with no single scene that can be documented. Caricature is never the \
-default and never a way to dodge a fact that can be photographed.
+1. Representative. Choose it whenever the column centres on one or more named \
+political public figures: heads of state, ministers, legislators, candidates, \
+officials or party leaders. Those figures must appear in the image with a \
+recognizable likeness. Compose them as an explicitly constructed editorial \
+artefact — cut-paper collage, halftone screen print, posterised painting, \
+risograph — with flat colour blocks, bold ink outlines, visible paper grain \
+and layered graphic panels. The result must be unmistakably an illustration \
+and never a plausible documentary scene.
+2. Photorealistic. Choose it only when no named political public figure is \
+central and the column reports concrete, recognizable facts — a place, an \
+event, an object or a scene — that can be shown as one plausible documentary \
+photograph: a street, a courtroom, a market, a picket line, a signed document.
+3. Caricature. Choose it only for an abstract column with no named political \
+public figure and no single scene that can be documented: an argument, an \
+economic or institutional trend, a metaphor or a critique. Caricature is never \
+a way to dodge a fact that can be photographed.
 
 ## Rules
-1. Write the prompt in English only; the text you request inside the image is \
+
+1. Write the prompt in English only; any text you request inside the image is \
 in Spanish.
-2. A photorealistic prompt reads like a documentary photograph: subject, \
+2. Name the column's concrete anchors. Use at least two distinct anchors — \
+people, places, institutions, objects or figures — in the photorealistic and \
+representative treatments, and at least one in caricature. Keep proper nouns \
+in their original Spanish spelling. Never replace the column's actual content \
+with a generic scene, an abstract composition, floating symbols or a visual \
+metaphor.
+3. Never omit, hide, crop, turn away, silhouette or anonymize a named \
+political public figure the column is about. Do not substitute an anonymous \
+stand-in, and never add negatives such as recognizable politicians or public \
+figures. Victims, minors and private individuals remain unidentified.
+4. In the representative treatment, never stage a photographic reenactment of \
+an event. You may place the figure in a symbolic editorial setting — a podium, \
+a map, a document, an institution — but the composition must read as a \
+constructed poster, not as a press image. No camera language, no candid \
+framing and no film-still realism.
+5. In the photorealistic treatment, write a documentary scene: subject, \
 action, place, light, lens and framing. Never invent an event the column does \
 not report; the scene must be plausible and faithful to its facts.
-3. In the photorealistic treatment, public figures named in the column appear \
-only inside a documentary scene: no deepfake, no invented gesture and no \
-invented setting. Victims, minors and private individuals appear unidentified.
-4. In the caricature treatment, named public figures may appear as stylised \
-characters; victims, minors and private individuals appear as anonymous \
-figures.
-5. Short in-image text is welcome when it belongs to the scene — signs, \
+6. In the caricature treatment, named figures may appear as stylised \
+characters, but keep their distinguishing features recognizable.
+7. Short in-image text is welcome when it belongs to the scene — signs, \
 placards, banners, price tags, screens — and reinforces the message. Keep it \
 to three or four words at most, write it in Spanish and in capitals, and never \
 use quotation marks or backslashes: write PENSIONES or -10,39%, not \
 "-10,39%". The prompt is pasted into Midjourney as plain text, so escaped \
 quotes break it. Never ask for paragraphs, fine print or long headlines.
-6. Always name a technique and a colour palette: the medium plus palette for \
-caricature, the photographic treatment plus palette for photorealistic work.
-7. No explicit violence.
+8. Always name a technique and a colour palette: the constructed medium plus \
+palette for representative work, the photographic treatment plus palette for \
+photorealistic work, and the illustrated medium plus palette for caricature.
+9. No explicit violence, no deepfake and no face swap.
 
 Write comma-separated descriptors, never commands such as "generate" or \
-"create an image". Aim for 50 to 120 words.
+"create an image". Aim for 60 to 140 words.
 """
 
 
@@ -442,30 +474,35 @@ def build_visual_prompt_user_prompt(
     treatments = visual_config.get("treatments", {})
     if not isinstance(treatments, dict):
         treatments = {}
-    photorealistic_style = str(treatments.get("photorealistic", "")).strip()
-    caricature_style = str(treatments.get("caricature", "")).strip()
     treatment_rules = str(visual_config.get("treatment_rules", "")).strip()
     negative = str(visual_config.get("negative_prompt", "")).strip()
     aspect_ratio = str(visual_config.get("aspect_ratio", "")).strip()
+    anchors = extract_concrete_anchors(article)[:_PROMPT_ANCHOR_LIMIT]
 
     parts: list[str] = [
         "## Task",
         "",
         ("Read the column and write one English Midjourney prompt that "
-        "illustrates it. Decide the treatment first, then describe the "
-        "image."),
+        "represents its actual content. Decide the treatment first, then "
+        "describe the image with its concrete anchors."),
         "",
         "## Treatment decision",
         "",
         treatment_rules,
         "",
-        f"- **photorealistic** — {photorealistic_style}",
-        f"- **caricature** — {caricature_style}",
-        "",
-        "## Column material",
-        "",
-        f"**Headline:** {article.title}",
     ]
+
+    for name, style in treatments.items():
+        parts.append(f"- **{name}** — {str(style).strip()}")
+
+    parts.extend(
+        [
+            "",
+            "## Column material",
+            "",
+            f"**Headline:** {article.title}",
+        ]
+    )
 
     if article.byline:
         parts.append(f"**Byline:** {article.byline}")
@@ -489,8 +526,38 @@ def build_visual_prompt_user_prompt(
         for source in article.sources:
             parts.append(f"- {source}")
 
+    if anchors:
+        parts.extend(
+            [
+                "",
+                "## Concrete anchors from the column",
+                "",
+                ("The prompt must name at least two of these anchors in the "
+                "photorealistic and representative treatments, and at least "
+                "one in caricature. Keep proper nouns in their original "
+                "Spanish spelling and do not replace them with generic "
+                "descriptions."),
+                "",
+            ]
+        )
+        for anchor in anchors:
+            parts.append(f"- {anchor}")
+
     parts.extend(
         [
+            "",
+            "## Political public figures",
+            "",
+            ("Identify the named political public figures the column is about "
+            "—heads of state, ministers, legislators, candidates, officials "
+            "or party leaders— and list them in `political_figures`. If the "
+            "column centres on any of them, the treatment must be "
+            "representative and the prompt must show every one of them with a "
+            "recognizable likeness. Never hide, crop, turn away, silhouette "
+            "or anonymize them, and never put terms such as recognizable "
+            "politicians or public figures in `extra_negative`. Do not invent "
+            "a face for an unnamed office: if the column mentions only the "
+            "office, leave `political_figures` empty."),
             "",
             "## Editorial angle already approved for social media",
             "",
@@ -509,20 +576,35 @@ def build_visual_prompt_user_prompt(
             "",
             "## What the image must do",
             "",
-            ("1. Show the central idea of the column in one image, using the "
-            "people, places, objects and figures it actually mentions; a "
-            "reader should get it at a glance."),
-            ("2. Choose photorealistic whenever those facts can be shown as "
-            "a plausible documentary photograph; fall back to caricature "
-            "only for abstract columns with no documentable scene."),
-            ("3. Keep the scene faithful to the column: never turn a "
+            ("1. Show the column's actual conflict in one image, using the "
+            "people, places, institutions, objects and figures it names; a "
+            "reader should recognize the story at a glance."),
+            ("2. Apply the treatment precedence: representative when named "
+            "political public figures are central; photorealistic when no "
+            "political public figure is central and the facts can be "
+            "photographed; caricature only for abstract columns with "
+            "neither."),
+            ("3. In the photorealistic treatment, build one plausible "
+            "documentary scene with subject, action, place, light, lens and "
+            "framing. Do not replace the scene with an abstract composition "
+            "or a generic mood image."),
+            ("4. In the representative treatment, show every named political "
+            "public figure with a recognizable likeness inside an explicitly "
+            "constructed editorial composition —cut-paper collage, halftone "
+            "screen print, posterised painting or risograph—. It must be "
+            "unmistakably an illustration, never a press image or a staged "
+            "reenactment."),
+            ("5. In the caricature treatment, keep named figures recognizable "
+            "as stylized characters; victims, minors and private individuals "
+            "appear as anonymous figures."),
+            ("6. Keep the scene faithful to the column: never turn a "
             "hypothesis, an investigation or a suspicion into a depicted "
             "fact, and never invent an event the column does not report."),
-            ("4. Integrate short Spanish text only when it belongs to the "
+            ("7. Integrate short Spanish text only when it belongs to the "
             'scene —signs, placards, banners, screens or price tags—, in '
             "capitals and under five words, with no quotation marks and no "
             "escaped characters."),
-            ("5. Name the technique and a colour palette, and keep the "
+            ("8. Name the technique and a colour palette, and keep the "
             "palette consistent with La Chispa Sur: crimson red, warm amber "
             "and deep teal."),
         ]
@@ -530,7 +612,7 @@ def build_visual_prompt_user_prompt(
 
     if aspect_ratio:
         parts.append(
-            "6. Do not add Midjourney flags: the system appends "
+            "9. Do not add Midjourney flags: the system appends "
             f"--ar {aspect_ratio} and the version flags."
         )
 
@@ -544,7 +626,8 @@ def build_visual_prompt_user_prompt(
             "The object must have exactly this shape:",
             "",
             "{",
-            '  "treatment": "photorealistic",',
+            '  "treatment": "representative",',
+            '  "political_figures": ["Nombre Apellido"],',
             '  "rationale": "Motivo editorial en español",',
             '  "prompt": "English prompt with a named technique and palette",',
             ('  "extra_negative": "Comma-separated artefacts to avoid, '
@@ -552,21 +635,28 @@ def build_visual_prompt_user_prompt(
             "}",
             "",
             "Notes on the schema:",
-            ('- `treatment` must be exactly "photorealistic" or '
-            '"caricature".'),
+            ('- `treatment` must be exactly "representative", '
+            '"photorealistic" or "caricature".'),
+            ("- `political_figures` lists the named political public figures "
+            "the column is about, copied from its material. It must be a "
+            "list of strings and may be empty. If it is not empty, the "
+            "treatment must be representative."),
             ("- `rationale` explains in Spanish, in one or two sentences, "
-            "which concrete facts of the column support a documentary "
-            "photograph or which abstract argument forces a caricature."),
+            "which concrete facts of the column support the chosen treatment "
+            "and which named political public figures, if any, force the "
+            "representative composition."),
             ("- `prompt` must be written in English. Any text that should "
             "appear inside the image goes in Spanish, in capitals and "
             "without quotation marks or backslashes, no longer than five "
             "words, e.g. PENSIONES or -10,39%. The prompt is copied verbatim "
             "into Midjourney, so it must stay plain text."),
-            ("- `prompt` must name the technique and a colour palette and "
-            "aim for 50 to 120 words."),
+            ("- `prompt` must name the technique, a colour palette and at "
+            "least two concrete anchors from the column (one in caricature), "
+            "and aim for 60 to 140 words."),
             ("- `extra_negative` adds column-specific artefacts to avoid on "
             "top of the standard negative prompt. Never repeat the standard "
-            "negative prompt here."),
+            "negative prompt here and never use it to ban recognizable "
+            "political public figures."),
             f"- The standard negative prompt already in force is: {negative}",
         ]
     )
