@@ -418,6 +418,8 @@ def save_manifest(
     markdown_files: dict[str, Path],
     platforms: list[str],
     article: ArticleSource,
+    prompt_status: str | None = None,
+    prompt_error: str | None = None,
 ) -> Path:
     """Guarda el manifiesto del bundle con todo lo generado.
 
@@ -429,12 +431,23 @@ def save_manifest(
         markdown_files: Archivos Markdown escritos, por plataforma.
         platforms: Plataformas habilitadas en la ejecución.
         article: Artículo de origen.
+        prompt_status: Estado explícito del prompt visual: ``generated``,
+                       ``skipped`` o ``failed``. Si se omite, se deduce de
+                       ``prompt``.
+        prompt_error: Motivo del fallo cuando ``prompt_status`` es ``failed``.
 
     Returns:
         Path: Ruta absoluta del manifiesto escrito.
     """
     rendered = [banner for banner in banners if banner.path is not None]
     failed = [banner for banner in banners if banner.path is None]
+
+    if prompt is not None:
+        status = "generated"
+    elif prompt_status in {"skipped", "failed"}:
+        status = prompt_status
+    else:
+        status = "skipped"
 
     payload: dict[str, Any] = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -455,6 +468,8 @@ def save_manifest(
             },
         },
         "visual_prompts": {
+            "status": status,
+            "error": prompt_error if status == "failed" else None,
             "count": 1 if prompt else 0,
             "treatment": prompt.treatment if prompt else None,
             "aspect_ratio": prompt.aspect_ratio if prompt else None,

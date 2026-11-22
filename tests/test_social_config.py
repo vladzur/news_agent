@@ -189,6 +189,62 @@ class TestLoadSocialConfig:
         with pytest.raises(ConfigurationError, match="--v"):
             load_social_config(path)
 
+    def test_platforms_with_an_unknown_platform_raises(
+        self, tmp_path, social_config
+    ):
+        payload = copy.deepcopy(social_config)
+        payload["platforms"]["tiktok"] = {"max_chars": 300}
+        path = tmp_path / "plataforma-desconocida.json"
+        path.write_text(json.dumps(payload), encoding="utf-8")
+
+        with pytest.raises(ConfigurationError, match="tiktok"):
+            load_social_config(path)
+
+    def test_platforms_with_a_non_object_section_raises(
+        self, tmp_path, social_config
+    ):
+        payload = copy.deepcopy(social_config)
+        payload["platforms"] = "x"
+        path = tmp_path / "plataformas-malas.json"
+        path.write_text(json.dumps(payload), encoding="utf-8")
+
+        with pytest.raises(ConfigurationError, match="objeto JSON"):
+            load_social_config(path)
+
+    def test_platform_with_an_unknown_field_raises(
+        self, tmp_path, social_config
+    ):
+        payload = copy.deepcopy(social_config)
+        payload["platforms"]["x"]["inventado"] = 1
+        path = tmp_path / "campo-desconocido.json"
+        path.write_text(json.dumps(payload), encoding="utf-8")
+
+        with pytest.raises(ConfigurationError, match="inventado"):
+            load_social_config(path)
+
+    def test_platform_with_a_non_positive_limit_raises(
+        self, tmp_path, social_config
+    ):
+        payload = copy.deepcopy(social_config)
+        payload["platforms"]["x"]["max_chars"] = 0
+        path = tmp_path / "limite-invalido.json"
+        path.write_text(json.dumps(payload), encoding="utf-8")
+
+        with pytest.raises(ConfigurationError, match="max_chars"):
+            load_social_config(path)
+
+    def test_platform_thread_bounds_cannot_be_inverted(
+        self, tmp_path, social_config
+    ):
+        payload = copy.deepcopy(social_config)
+        payload["platforms"]["x"]["thread_min_tweets"] = 9
+        payload["platforms"]["x"]["thread_max_tweets"] = 8
+        path = tmp_path / "hilo-invertido.json"
+        path.write_text(json.dumps(payload), encoding="utf-8")
+
+        with pytest.raises(ConfigurationError, match="thread_min_tweets"):
+            load_social_config(path)
+
     def test_banners_without_templates_raises(self, tmp_path, social_config):
         payload = {**social_config, "banners": {"sizes": {"x": [100, 100]}}}
         path = tmp_path / "sin-plantillas.json"
