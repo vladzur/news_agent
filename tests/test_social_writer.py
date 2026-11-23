@@ -391,9 +391,9 @@ class TestSaveManifest:
         from news_agent.social.models import InstagramSlideSpec
 
         carousel = [
-            InstagramSlideSpec(1, "cover", social_copy.title, 1080, 1440, tmp_path / "01.png"),
-            InstagramSlideSpec(2, "summary", "Punto", 1080, 1440, tmp_path / "02.png"),
-            InstagramSlideSpec(5, "signature", "La Chispa Sur", 1080, 1440, None),
+            InstagramSlideSpec(1, "cover", social_copy.title, 1080, 1350, tmp_path / "01.png"),
+            InstagramSlideSpec(2, "summary", "Punto", 1080, 1350, tmp_path / "02.png"),
+            InstagramSlideSpec(5, "signature", "La Chispa Sur", 1080, 1350, None),
         ]
         directory = instagram_dir(tmp_path)
 
@@ -411,7 +411,7 @@ class TestSaveManifest:
         assert payload["instagram_carousel"]["directory"] == INSTAGRAM_DIR_NAME
         assert payload["instagram_carousel"]["format"] == "instagram_portrait"
         assert payload["instagram_carousel"]["width"] == 1080
-        assert payload["instagram_carousel"]["height"] == 1440
+        assert payload["instagram_carousel"]["height"] == 1350
         assert payload["instagram_carousel"]["slides"] == 3
         assert payload["instagram_carousel"]["rendered"] == 2
         assert payload["instagram_carousel"]["failed"] == 1
@@ -423,7 +423,7 @@ class TestSaveManifest:
 
         carousel = [
             InstagramSlideSpec(
-                index, "summary", "Punto", 1080, 1440, tmp_path / f"{index}.png"
+                index, "summary", "Punto", 1080, 1350, tmp_path / f"{index}.png"
             )
             for index in range(1, 4)
         ]

@@ -214,7 +214,7 @@ Dos plantillas declaradas en la configuración, renderizadas en los formatos ped
 
 #### 6.5.1. Carrusel vertical de Instagram
 
-Cuando la plataforma `instagram` está habilitada, el subsistema suma un carrusel de **cinco piezas verticales de 1080×1440 (4:3 vertical)**, todas con la misma retícula y la misma identidad visual del banner:
+Cuando la plataforma `instagram` está habilitada, el subsistema suma un carrusel de **cinco piezas verticales de 1080×1350 (4:5 vertical)**, todas con la misma retícula y la misma identidad visual del banner:
 
 | Orden | Pieza | Contenido |
 |:-----:|-------|-----------|
@@ -223,14 +223,14 @@ Cuando la plataforma `instagram` está habilitada, el subsistema suma un carruse
 | 5 | Firma | Logo centrado, nombre de la marca, tagline, sitio, handle y llamado a leer la nota completa |
 
 - **Estética compartida:** las cinco piezas reutilizan la paleta, las fuentes, el logo, la barra de acento y el pie de marca de `banner_renderer.py`. El encabezado y el pie están en la misma coordenada en todas, y los tres resúmenes usan el mismo bloque de texto y el mismo tamaño de lectura.
-- **Formato obligatorio:** `instagram_carousel.format` debe apuntar a un `instagram_*` declarado en `banners.sizes` y con alto mayor que ancho. El formato del repositorio es `instagram_portrait`, de 1080×1440, para que la pieza sea 4:3 vertical y no el 9:16 de un reel. Cualquier otra combinación se rechaza al cargar la configuración y, si se construye el renderizador directamente, lanza `InstagramRenderError`.
+- **Formato obligatorio:** `instagram_carousel.format` debe apuntar a un `instagram_*` declarado en `banners.sizes` y con relación **4:5 vertical**. El formato del repositorio es `instagram_portrait`, de 1080×1350, para que la pieza sea 4:5 vertical y no el 9:16 de un reel. Cualquier otra proporción u orientación se rechaza al cargar la configuración y, si se construye el renderizador directamente, lanza `InstagramRenderError`.
 - **Contenido de los resúmenes:** sale de `instagram.slides` del contrato de copys. Cada slide trae `text` y `figure`; no existe un titular separado. La portada y la firma se componen siempre con datos de la marca, no con texto del modelo.
 - **Tolerancia a fallos:** un slide que falla no interrumpe los otros cuatro; queda con `path: null` en el manifiesto.
 - **Salida:** los cinco PNG se escriben juntos en el subdirectorio exclusivo `instagram/` del bundle.
 
 ### 6.6. Formato de salida (bundle)
 
-Cada ejecución escribe una carpeta autocontenida `social/AAAA_MM_DD_slug-del-titulo/` con los copys en JSON, el comando de Midjourney en `visual_prompt.txt`, los metadatos del prompt en `visual_prompts.json` (tratamiento, figuras públicas, justificación, prompt y negativo), un Markdown listo para copiar y pegar por plataforma, los PNG de los banners en `assets/`, el carrusel vertical 4:3 (1080×1440) en el subdirectorio exclusivo `instagram/` (`01_cover.png`, `02_point_1.png`, `03_point_2.png`, `04_point_3.png` y `05_signature.png`) y un `manifest.json` que registra qué se generó, qué falló y con qué artículo se produjo. El bloque `visual_prompts` del manifiesto incluye `status` (`generated`, `skipped` o `failed`), `error` cuando la generación falló y `political_figures` con las figuras representadas, de modo que omitir el prompt con `--skip-prompts` no se confunde con un fallo. El bloque `instagram_carousel` registra `status` (`generated`, `partial`, `failed` o `skipped`), formato, dimensiones, cantidad de slides y la ruta de cada pieza.
+Cada ejecución escribe una carpeta autocontenida `social/AAAA_MM_DD_slug-del-titulo/` con los copys en JSON, el comando de Midjourney en `visual_prompt.txt`, los metadatos del prompt en `visual_prompts.json` (tratamiento, figuras públicas, justificación, prompt y negativo), un Markdown listo para copiar y pegar por plataforma, los PNG de los banners en `assets/`, el carrusel vertical 4:5 (1080×1350) en el subdirectorio exclusivo `instagram/` (`01_cover.png`, `02_point_1.png`, `03_point_2.png`, `04_point_3.png` y `05_signature.png`) y un `manifest.json` que registra qué se generó, qué falló y con qué artículo se produjo. El bloque `visual_prompts` del manifiesto incluye `status` (`generated`, `skipped` o `failed`), `error` cuando la generación falló y `political_figures` con las figuras representadas, de modo que omitir el prompt con `--skip-prompts` no se confunde con un fallo. El bloque `instagram_carousel` registra `status` (`generated`, `partial`, `failed` o `skipped`), formato, dimensiones, cantidad de slides y la ruta de cada pieza.
 
 El campo `quote_card.verbatim` del JSON de copys —repetido como `verified_quote` en el manifiesto— indica si la cita destacada se verificó palabra por palabra contra el artículo de origen.
 
@@ -244,10 +244,10 @@ La identidad visual y los límites viven en `social_config.json`, versionado en 
 | `platforms` | Límite de caracteres, largo del hilo y tope de hashtags por plataforma. Sobrescriben los valores por defecto de `config.py` y se validan al cargar | ❌ |
 | `banners.templates` / `banners.sizes` | Matriz plantilla → formatos y tamaño de cada formato | ✅ |
 | `banners.safe_zone` | Bandas no utilizables de los formatos verticales, incluido `instagram_portrait` | ❌ |
-| `instagram_carousel` | Formato del carrusel vertical; debe ser un `instagram_*` vertical declarado en `banners.sizes`. Por defecto, `instagram_portrait` (1080×1440) | ❌ |
+| `instagram_carousel` | Formato del carrusel vertical; debe ser un `instagram_*` 4:5 vertical declarado en `banners.sizes`. Por defecto, `instagram_portrait` (1080×1350) | ❌ |
 | `visual_prompts` | Los tres tratamientos, las reglas de decisión, el prompt negativo de marca, los negativos por tratamiento, la proporción única y el sufijo de Midjourney. Se validan al cargar | ✅ |
 
-Un color mal escrito, una clave de color faltante, un tamaño inválido, una sección `visual_prompts` incompleta o con un tratamiento o un negativo por tratamiento inválido, una plataforma con límites inválidos, una plantilla que apunte a un formato inexistente, o un carrusel que apunte a un formato no vertical o de otra plataforma se detectan al cargar el archivo, con un mensaje que indica el campo culpable.
+Un color mal escrito, una clave de color faltante, un tamaño inválido, una sección `visual_prompts` incompleta o con un tratamiento o un negativo por tratamiento inválido, una plataforma con límites inválidos, una plantilla que apunte a un formato inexistente, o un carrusel que apunte a un formato que no sea 4:5 vertical o de otra plataforma se detectan al cargar el archivo, con un mensaje que indica el campo culpable.
 
 ### 6.8. Estructura del subsistema
 
@@ -273,7 +273,7 @@ Un color mal escrito, una clave de color faltante, un tamaño inválido, una sec
 - **Prompt visual fallido** → el bundle se escribe igualmente con los copys y los banners; el manifiesto lo registra con `status: "failed"` y el motivo en `error`.
 - **Banner fallido** → se registra el error y el resto del lote continúa.
 - **Slide del carrusel fallido** → se registra el error, el slide queda con ruta nula y los otros cuatro se escriben igualmente.
-- **Formato de carrusel inválido** → se rechaza al cargar la configuración si no es un `instagram_*` vertical; si se construye el renderizador directamente, lanza `InstagramRenderError` y el bundle se escribe sin carrusel.
+- **Formato de carrusel inválido** → se rechaza al cargar la configuración si no es un `instagram_*` 4:5 vertical; si se construye el renderizador directamente, lanza `InstagramRenderError` y el bundle se escribe sin carrusel.
 - **Directorio de salida inexistente** → se crea automáticamente (incluidos los directorios intermedios).
 - **Artículo inexistente, vacío o sin titular** → error explícito de parseo y salida con código distinto de cero.
 - **API key ausente** → error explícito de configuración antes de cualquier llamada.

@@ -379,7 +379,7 @@ def render_instagram_markdown(copy: SocialCopy) -> str:
                 (
                     "Los PNG están en `instagram/`, en orden de publicación: "
                     "portada, tres resúmenes y firma de marca. Todas las "
-                    "piezas son verticales de 1080×1440 (4:3)."
+                    "piezas son verticales de 1080×1350 (4:5)."
                 ),
                 "",
             ]

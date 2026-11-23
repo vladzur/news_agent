@@ -132,7 +132,8 @@ SOCIAL_IG_MAX_HASHTAGS = 25
 # Carrusel vertical de Instagram: portada, tres slides de resumen y una firma
 # de marca. El formato se declara en social_config.json para poder ajustar el
 # tamaño sin tocar el código, pero debe ser siempre una pieza vertical de
-# Instagram. El carrusel usa 4:3 vertical (1080×1440), no el 9:16 de un reel.
+# Instagram. El carrusel usa 4:5 vertical (1080×1350), el formato vertical del
+# feed, no el 9:16 de un reel.
 SOCIAL_IG_CAROUSEL_SLIDES = 3
 SOCIAL_IG_CAROUSEL_FORMAT = "instagram_portrait"
 SOCIAL_IG_SLIDE_TEXT_MAX_CHARS = 240
@@ -789,10 +790,10 @@ def _validate_instagram_carousel_section(
 ) -> None:
     """Valida la sección opcional ``instagram_carousel``.
 
-    El carrusel solo puede apuntar a un formato vertical de Instagram ya
+    El carrusel solo puede apuntar a un formato 4:5 vertical de Instagram ya
     declarado en ``banners.sizes``. Esta regla evita que una errata en el JSON
-    produzca un carrusel horizontal o de otra plataforma, que Instagram
-    recortaría o rechazaría.
+    produzca un carrusel horizontal, de otra plataforma o con una proporción
+    distinta de la esperada, que Instagram recortaría o rechazaría.
 
     Args:
         carousel: Valor crudo de la sección 'instagram_carousel', o None.
@@ -842,6 +843,12 @@ def _validate_instagram_carousel_section(
     if height <= width:
         raise ConfigurationError(
             "El formato del carrusel de Instagram debe ser vertical, pero "
+            f"'{format_name}' mide {width}x{height}."
+        )
+
+    if width * 5 != height * 4:
+        raise ConfigurationError(
+            "El formato del carrusel de Instagram debe ser 4:5 vertical, pero "
             f"'{format_name}' mide {width}x{height}."
         )
 

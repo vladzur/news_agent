@@ -8,8 +8,8 @@ pieza y no como cinco imágenes sueltas.
 
 El formato lo declara ``social_config.json`` en la sección
 ``instagram_carousel``. El renderizador rechaza cualquier formato que no sea
-vertical y de Instagram. La configuración del repositorio usa 4:3 vertical
-(1080×1440), más legible en el feed que el 9:16 de un reel.
+4:5 vertical y de Instagram. La configuración del repositorio usa 1080×1350,
+el formato vertical del feed, más legible que el 9:16 de un reel.
 """
 
 import logging
@@ -73,7 +73,7 @@ class InstagramRenderError(Exception):
 def resolve_carousel_layout(
     config: dict[str, Any],
 ) -> tuple[str, int, int, dict[str, Any] | None]:
-    """Resuelve el formato vertical, su tamaño y sus zonas seguras.
+    """Resuelve el formato 4:5 vertical, su tamaño y sus zonas seguras.
 
     Args:
         config: Configuración de marca cargada desde ``social_config.json``.
@@ -83,7 +83,7 @@ def resolve_carousel_layout(
         zonas seguras declaradas.
 
     Raises:
-        InstagramRenderError: Si la configuración no declara un formato
+        InstagramRenderError: Si la configuración no declara un formato 4:5
                               vertical de Instagram utilizable.
     """
     carousel = config.get("instagram_carousel")
@@ -115,6 +115,12 @@ def resolve_carousel_layout(
     if width <= 0 or height <= 0 or height <= width:
         raise InstagramRenderError(
             "El formato del carrusel debe ser vertical; "
+            f"'{format_name}' mide {width}x{height}."
+        )
+
+    if width * 5 != height * 4:
+        raise InstagramRenderError(
+            "El formato del carrusel debe ser 4:5 vertical; "
             f"'{format_name}' mide {width}x{height}."
         )
 
@@ -903,7 +909,7 @@ def render_instagram_carousel(
 
     Raises:
         OSError: Si el directorio de salida no existe.
-        InstagramRenderError: Si el formato configurado no es vertical.
+        InstagramRenderError: Si el formato configurado no es 4:5 vertical.
     """
     output_path = Path(output_dir)
     if not output_path.exists():

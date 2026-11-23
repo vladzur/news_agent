@@ -18,8 +18,8 @@ from news_agent.social.instagram_renderer import (
     resolve_carousel_layout,
 )
 
-# Formato vertical declarado en la configuración del repositorio
-CAROUSEL_SIZE = (1080, 1440)
+# Formato vertical 4:5 declarado en la configuración del repositorio
+CAROUSEL_SIZE = (1080, 1350)
 
 # Índices de los slides en el carrusel completo: portada, tres resúmenes y firma
 EXPECTED_FILES = [
@@ -112,6 +112,23 @@ class TestResolveCarouselLayout:
         }
 
         with pytest.raises(InstagramRenderError, match="vertical"):
+            resolve_carousel_layout(config)
+
+    def test_rejects_a_vertical_format_that_is_not_four_by_five(
+        self, social_config
+    ):
+        config = {
+            **social_config,
+            "banners": {
+                **social_config["banners"],
+                "sizes": {
+                    **social_config["banners"]["sizes"],
+                    "instagram_portrait": [1080, 1440],
+                },
+            },
+        }
+
+        with pytest.raises(InstagramRenderError, match="4:5"):
             resolve_carousel_layout(config)
 
     def test_rejects_a_format_without_a_declared_size(self, social_config):
@@ -260,9 +277,17 @@ class TestRenderSlides:
         )
 
         # El pie de marca (handle y sitio) no cambia entre resúmenes; solo
-        # cambia el contador de la derecha.
-        assert summary_one.getpixel((70, 1262)) == summary_two.getpixel((70, 1262))
-        assert summary_one.getpixel((70, 1262)) == (0xDF, 0x32, 0x24)
+        # cambia el contador de la derecha. Comparamos la franja izquierda
+        # completa para no atar el test a una coordenada vertical fija.
+        footer_box = (0, summary_one.height - 200, 100, summary_one.height)
+        footer_one = summary_one.crop(footer_box)
+        footer_two = summary_two.crop(footer_box)
+        assert footer_one.tobytes() == footer_two.tobytes()
+
+        accent = (0xDF, 0x32, 0x24)
+        colors = footer_one.getcolors(maxcolors=footer_one.width * footer_one.height)
+        assert colors is not None
+        assert accent in {color for _, color in colors}
 
 
 
@@ -378,6 +403,6 @@ class TestSlideSpec:
     def test_serializes_a_failed_slide_as_null(self):
         from news_agent.social.models import InstagramSlideSpec
 
-        spec = InstagramSlideSpec(1, "cover", "Titular", 1080, 1440)
+        spec = InstagramSlideSpec(1, "cover", "Titular", 1080, 1350)
 
         assert spec.to_dict()["path"] is None

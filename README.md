@@ -63,7 +63,7 @@ Toma un artículo ya publicado (`articulos/articulo_N_slug.md`) y produce un **b
    | `quote_card` | Comilla destacada + cita + atribución | IG feed 1080×1080, IG story 1080×1920 |
 
    El diseño se parametriza por un factor de escala respecto de un ancho de referencia, así que una sola implementación sirve para los cuatro tamaños. En el formato vertical respeta las **zonas seguras** superior e inferior (la interfaz de la plataforma las tapa). Si la marca define un logo, se recorta su padding transparente, se escala según `logo_height_ratio` y se pega en la esquina superior derecha; el titular se desplaza hacia abajo si el logo es más alto que la etiqueta de marca.
-5. **Carrusel vertical de Instagram (Pillow)** — Cuando Instagram está entre las plataformas pedidas, el bundle suma un subdirectorio **exclusivo** `instagram/` con cinco PNG verticales de **1080×1440 (4:3 vertical)**, en orden de publicación:
+5. **Carrusel vertical de Instagram (Pillow)** — Cuando Instagram está entre las plataformas pedidas, el bundle suma un subdirectorio **exclusivo** `instagram/` con cinco PNG verticales de **1080×1350 (4:5 vertical)**, en orden de publicación:
    - **Portada**, con la estética del `headline_card`: barra de acento, etiqueta de marca, logo, titular, bajada y contador `01 / 05`.
    - **Tres slides de resumen**, sin titular: un número de punto discreto, la idea principal en tipografía grande, tarjeta opcional de dato duro y puntos de progreso.
    - **Firma de La Chispa Sur**, con el logo centrado, nombre, tagline, sitio, handle y llamado a leer la nota completa.
@@ -427,9 +427,9 @@ Edita `social_config.json` para ajustar la identidad visual sin tocar código:
 | `brand.logo_height_ratio` | ❌ | Alto del logo como fracción del ancho del lienzo (por defecto `0.11`). El ancho se limita al 22% para que no invada la etiqueta de marca |
 | `brand.fonts.*` | ❌ | Ruta a un `.ttf` por rol. Si es `null`, se resuelven fuentes del sistema (DejaVu, Liberation, Noto o Arial) y, como último recurso, la fuente por defecto de Pillow |
 | `platforms` | ❌ | Límites por plataforma. Sobrescriben los valores por defecto de `config.py` y se validan al cargar |
-| `banners.templates`, `banners.sizes` | ✅ | Matriz plantilla → formatos y tamaño de cada formato. El carrusel usa el formato vertical `instagram_portrait` (1080×1440, 4:3) |
+| `banners.templates`, `banners.sizes` | ✅ | Matriz plantilla → formatos y tamaño de cada formato. El carrusel usa el formato vertical `instagram_portrait` (1080×1350, 4:5) |
 | `banners.safe_zone` | ❌ | Zonas seguras superior e inferior para los formatos verticales, incluido `instagram_portrait` |
-| `instagram_carousel.format` | ❌ | Formato del carrusel; debe apuntar a un `instagram_*` vertical declarado en `banners.sizes`. Por defecto, `instagram_portrait` |
+| `instagram_carousel.format` | ❌ | Formato del carrusel; debe apuntar a un `instagram_*` 4:5 vertical declarado en `banners.sizes`. Por defecto, `instagram_portrait` |
 | `visual_prompts.*` | ✅ | Los tres tratamientos, las reglas de decisión, el prompt negativo de marca, los negativos por tratamiento, la proporción y el sufijo de Midjourney; se validan al cargar |
 
 Los formatos de banner se nombran con el prefijo de su plataforma (`instagram_feed`, `instagram_story`), lo que permite filtrar por `--platforms` sin mantener un mapa adicional. Además, la variable de entorno `SOCIAL_FONT_DIR` permite apuntar a un directorio propio de fuentes.
@@ -637,7 +637,7 @@ social/2026_09_14_criminalizacion-de-la-disidencia/
 │   ├── quote_card_instagram_feed.png       # 1080×1080
 │   └── quote_card_instagram_story.png      # 1080×1920
 └── instagram/                  # Carrusel vertical exclusivo, en orden de publicación
-    ├── 01_cover.png            # Portada 1080×1440
+    ├── 01_cover.png            # Portada 1080×1350
     ├── 02_point_1.png          # Resumen del punto 1
     ├── 03_point_2.png          # Resumen del punto 2
     ├── 04_point_3.png          # Resumen del punto 3
