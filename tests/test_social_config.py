@@ -407,6 +407,17 @@ class TestLoadSocialConfig:
         with pytest.raises(ConfigurationError, match="vertical"):
             load_social_config(path)
 
+    def test_instagram_carousel_rejects_a_non_four_by_five_format(
+        self, tmp_path, social_config
+    ):
+        payload = copy.deepcopy(social_config)
+        payload["banners"]["sizes"]["instagram_portrait"] = [1080, 1440]
+        path = tmp_path / "carrusel-3-4.json"
+        path.write_text(json.dumps(payload), encoding="utf-8")
+
+        with pytest.raises(ConfigurationError, match="4:5"):
+            load_social_config(path)
+
     def test_template_with_an_empty_list_raises(self, tmp_path, social_config):
         payload = {
             **social_config,
@@ -450,12 +461,12 @@ class TestRepositoryConfigCoherence:
         assert carousel["format"].startswith("instagram_")
         assert size[1] > size[0]
 
-    def test_the_carousel_uses_a_four_by_three_vertical_format(self, social_config):
+    def test_the_carousel_uses_a_four_by_five_vertical_format(self, social_config):
         carousel = social_config["instagram_carousel"]
         width, height = social_config["banners"]["sizes"][carousel["format"]]
 
-        assert (width, height) == (1080, 1440)
-        assert height * 3 == width * 4
+        assert (width, height) == (1080, 1350)
+        assert height * 4 == width * 5
 
     def test_declares_the_headline_and_quote_templates(self, social_config):
         templates = social_config["banners"]["templates"]

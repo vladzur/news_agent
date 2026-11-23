@@ -231,7 +231,7 @@ class TestRunSocialize:
 
         for path in result["carousel_paths"]:
             with Image.open(path) as image:
-                assert image.size == (1080, 1440)
+                assert image.size == (1080, 1350)
 
     def test_writes_the_manifest(self, run):
         runner, _ = run

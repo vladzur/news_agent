@@ -57,7 +57,7 @@
       "facebook": [1200, 630],
       "instagram_feed": [1080, 1080],
       "instagram_story": [1080, 1920],
-      "instagram_portrait": [1080, 1440]
+      "instagram_portrait": [1080, 1350]
     },
     "safe_zone": {
       "instagram_story": {
