@@ -84,7 +84,8 @@ COMMAND_DESCRIPTIONS: dict[str, str] = {
 REPORT_FILE_PATTERN = "pauta_semanal_*.md"
 ARTICLE_FILE_PATTERN = "articulo_*.md"
 
-# Número editorial que abre el nombre de los artículos (articulo_3_slug.md).
+# Número editorial que abre el nombre de los artículos, con o sin fecha:
+# articulo_3_2026_11_23_slug.md o la variante antigua articulo_3_slug.md.
 ARTICLE_ORDER_RE = re.compile(r"articulo_(\d+)")
 
 # Ayuda reutilizada por todos los subcomandos.
@@ -242,6 +243,11 @@ def _add_article_parser(
         help=f"Directorio donde guardar la nota "
         f"(por defecto: {DEFAULT_ARTICLES_DIR}/).",
     )
+    parser.add_argument(
+        "--skip-review",
+        action="store_true",
+        help="Omite la revisión editorial posterior a la redacción.",
+    )
     parser.add_argument("--verbose", action="store_true", help=VERBOSE_HELP)
     parser.set_defaults(handler=_handle_article)
 
@@ -398,6 +404,11 @@ def _add_all_parser(
         action="store_true",
         help="Guarda además un JSON intermedio con los artículos procesados.",
     )
+    parser.add_argument(
+        "--skip-review",
+        action="store_true",
+        help="Omite la revisión editorial posterior a la redacción.",
+    )
     _add_social_platform_options(parser)
     parser.add_argument(
         "--triptych-config",
@@ -531,8 +542,9 @@ def find_latest_article(
 ) -> Path | None:
     """Localiza el artículo más reciente de un directorio.
 
-    Los artículos no llevan fecha en el nombre, así que se usa la fecha de
-    modificación como criterio de orden.
+    Se usa la fecha de modificación como criterio de orden: la fecha del
+    nombre identifica el día de la edición y no permite desempatar varias
+    notas generadas el mismo día.
 
     Args:
         directory: Directorio donde buscar.
@@ -924,10 +936,24 @@ def print_article_summary(result: dict[str, Any]) -> None:
         print(f"   🗞️  Titular aplicado: \"{headline}\"")
         print(f"   📎 Bajada: \"{result.get('deck', '')}\"")
         proposals = result.get("headline_proposals") or []
+        if proposals:
+            print(
+                f"   📰 Propuestas de portada: {len(proposals)} "
+                "(al final del artículo)"
+            )
+
+    review = result.get("review") or {}
+    status = review.get("status")
+    if status == "applied":
+        print("   ✍️  Revisión editorial: aplicada")
+        if review.get("changes"):
+            print(f"   🔧 Correcciones: {review['changes']}")
+    elif status == "failed":
         print(
-            f"   📰 Propuestas de portada: {len(proposals)} "
-            "(al final del artículo)"
+            "   ⚠️  Revisión editorial no aplicada: se guardó el texto previo."
         )
+    elif status == "skipped":
+        print("   ⏭️  Revisión editorial omitida (--skip-review).")
 
 
 def print_social_summary(result: dict[str, Any]) -> None:
@@ -990,6 +1016,7 @@ def _write_article_step(
     number: int,
     output_dir: Path,
     verbose: bool,
+    skip_review: bool = False,
 ) -> dict[str, Any]:
     """Ejecuta la escritura de la nota traduciendo sus errores a mensajes.
 
@@ -998,6 +1025,7 @@ def _write_article_step(
         number: Número de propuesta a desarrollar.
         output_dir: Directorio donde guardar la nota.
         verbose: Si es True, activa logging DEBUG.
+        skip_review: Si es True, omite la revisión editorial.
 
     Returns:
         dict[str, Any]: Resumen devuelto por ``write_article``.
@@ -1011,6 +1039,7 @@ def _write_article_step(
             article_number=number,
             output_dir=output_dir,
             verbose=verbose,
+            skip_review=skip_review,
         )
     except PautaParseError as exc:
         print(f"Error al leer la pauta: {exc}", file=sys.stderr)
@@ -1145,7 +1174,13 @@ def _handle_article(args: argparse.Namespace) -> None:
     number = resolve_article_number(args.number, pauta_path)
     output_dir = resolve_output_dir(args.output, DEFAULT_ARTICLES_DIR)
 
-    result = _write_article_step(pauta_path, number, output_dir, args.verbose)
+    result = _write_article_step(
+        pauta_path,
+        number,
+        output_dir,
+        args.verbose,
+        args.skip_review,
+    )
     print_article_summary(result)
 
 
@@ -1261,6 +1296,7 @@ def _write_edition_articles(
     numbers: list[int],
     output_dir: Path,
     verbose: bool,
+    skip_review: bool = False,
 ) -> tuple[list[dict[str, Any]], list[int]]:
     """Escribe todas las notas de una edición, aislando los fallos.
 
@@ -1273,6 +1309,7 @@ def _write_edition_articles(
         numbers: Números de propuesta a desarrollar.
         output_dir: Directorio donde guardar las notas.
         verbose: Si es True, activa logging DEBUG.
+        skip_review: Si es True, omite la revisión editorial de cada nota.
 
     Returns:
         tuple[list[dict], list[int]]: Resultados de las notas escritas y
@@ -1289,7 +1326,11 @@ def _write_edition_articles(
         )
         try:
             result = _write_article_step(
-                pauta_path, number, output_dir, verbose
+                pauta_path,
+                number,
+                output_dir,
+                verbose,
+                skip_review,
             )
         except SystemExit as exc:
             if exc.code in (None, 0):
@@ -1415,7 +1456,11 @@ def _handle_all(args: argparse.Namespace) -> None:
             "(una por propuesta)..."
         )
         article_results, failed_articles = _write_edition_articles(
-            pauta_path, numbers, articles_dir, args.verbose
+            pauta_path,
+            numbers,
+            articles_dir,
+            args.verbose,
+            args.skip_review,
         )
 
         if article_results:
@@ -1443,7 +1488,11 @@ def _handle_all(args: argparse.Namespace) -> None:
 
         print("\n▶️  Paso 2/4: escribiendo la nota...")
         article_result = _write_article_step(
-            pauta_path, number, articles_dir, args.verbose
+            pauta_path,
+            number,
+            articles_dir,
+            args.verbose,
+            args.skip_review,
         )
         print_article_summary(article_result)
         article_results = [article_result]

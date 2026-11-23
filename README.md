@@ -2,7 +2,7 @@
 
 **Curador automatizado de pauta periodística para La Chispa Sur**, medio digital independiente de izquierda, crítico del modelo neoliberal.
 
-El agente recolecta noticias desde canales RSS y scraping web, las filtra por una ventana temporal de 4 días (96 horas), enriquece los resúmenes cortos extrayendo el contenido completo de los artículos con trafilatura, y utiliza el modelo **DeepSeek-Flash** (vía API compatible con OpenAI SDK) para sintetizar **cinco propuestas de pauta editorial semanal (tres de foco nacional y dos de foco internacional)** con profundidad analítica, tono incisivo y narrativa ágil. Las propuestas internacionales priorizan hechos que conmocionan al mundo, pueblos oprimidos y políticas imperialistas que afectan la estabilidad mundial, con mirada antiimperialista desde el sur global. También permite **escribir artículos completos (~1000 palabras)** a partir de cualquiera de las propuestas generadas, con un sistema de **referencias deterministas a fuentes** que asegura que el redactor reciba el contenido completo de los artículos fuente correctos para cada propuesta. Con `python -m news_agent all --all-articles`, una sola invocación genera la pauta, las cinco notas y las piezas de redes sociales de cada nota.
+El agente recolecta noticias desde canales RSS y scraping web, las filtra por una ventana temporal de 4 días (96 horas), enriquece los resúmenes cortos extrayendo el contenido completo de los artículos con trafilatura, y utiliza el modelo **DeepSeek-Flash** (vía API compatible con OpenAI SDK) para sintetizar **cinco propuestas de pauta editorial semanal (tres de foco nacional y dos de foco internacional)** con profundidad analítica, tono incisivo y narrativa ágil. Las propuestas internacionales priorizan hechos que conmocionan al mundo, pueblos oprimidos y políticas imperialistas que afectan la estabilidad mundial, con mirada antiimperialista desde el sur global. También permite **escribir artículos completos (~1000 palabras)** a partir de cualquiera de las propuestas generadas, con un sistema de **referencias deterministas a fuentes** que asegura que el redactor reciba el contenido completo de los artículos fuente correctos para cada propuesta. Cada nota pasa después por un **editor de portada** (tres propuestas de titular y bajada) y por un **editor periodístico** que revisa y corrige la redacción, la coherencia y el estilo antes de guardarla. Con `python -m news_agent all --all-articles`, una sola invocación genera la pauta, las cinco notas y las piezas de redes sociales de cada nota.
 
 ---
 
@@ -38,13 +38,14 @@ Toma una propuesta específica de la pauta (1 a 5) y la expande a un artículo d
 3. **Prompt enriquecido** — El redactor recibe una sección `## Material de origen disponible` con el contenido completo de los artículos fuente correctos para su propuesta, permitiéndole escribir con datos verificables en lugar de inventar o depender de memoria.
 4. **Redacción del artículo** — Usa un system prompt de redactor periodístico (identidad La Chispa Sur) que exige trazabilidad de cada dato a las fuentes proporcionadas y **foco editorial único**: desarrolla solo el eje de la propuesta aprobada, descarta el material de origen que trate otros temas y no fuerza conexiones para unirlo.
 5. **Editor de portada** — Una segunda llamada, con rol de editor de portada, devuelve **tres propuestas diferenciadas** de titular y bajada: denuncia/tesis política, narrativo/humano y analítico/geopolítico. Los largos se validan en código (12-16 palabras el titular, 25-45 la bajada): si el modelo se desvía se reintenta una vez y, si vuelve a fallar, solo se recortan los textos que exceden el máximo; los que quedan cortos se conservan con una advertencia en el log. La **propuesta 1 se aplica** como titular y bajada del artículo; las tres quedan en un apéndice `## 📰 Propuestas de portada` al final del archivo para cambiarlas sin repetir la generación. Si esta etapa falla, la nota se guarda igual con el titular del redactor.
-6. **Artículo final** — Titular y bajada de portada, lead, desarrollo por secciones con subtítulos, fuentes citadas y el apéndice de propuestas. Guardado como `articulo_N_slug-del-titulo.md`. El apéndice está marcado como no publicable y el parser de RRSS lo excluye del material de origen.
+6. **Revisión editorial (editor periodístico)** — Una tercera llamada, con rol de editor periodístico, recibe el **titular seleccionado, la bajada y el cuerpo**, y devuelve las tres piezas corregidas en JSON (`titular`, `bajada`, `cuerpo`, `resumen_cambios`). Revisa ortografía, sintaxis, puntuación, coherencia entre las tres piezas y estilo según la línea editorial de La Chispa Sur, sin agregar hechos ni cambiar el ángulo aprobado. En código se exige que el cuerpo conserve el número de secciones, el bloque de fuentes y un volumen entre 0,7 y 1,3 veces el original; las referencias `[art. N]` se eliminan y un titular o una bajada fuera de rango conservan la versión de portada. Si la etapa falla o devuelve un contrato inválido, **la nota se guarda con el texto previo** y se advierte: la revisión nunca impide publicar. La propuesta 1 del apéndice se sincroniza con las correcciones; las alternativas 2 y 3 se conservan. Con `--skip-review` se omite la etapa.
+7. **Artículo final** — Titular y bajada de portada, lead, desarrollo por secciones con subtítulos, fuentes citadas y el apéndice de propuestas. Guardado como `articulo_N_AAAA_MM_DD_slug-del-titulo.md`: la fecha de creación va en el nombre y también en una línea `**Fecha de creación:** AAAA-MM-DD` después del titular, para que sea visible al abrir el archivo. El apéndice está marcado como no publicable y el parser de RRSS lo excluye del material de origen.
 
 > **¿Por qué referencias primero y matching por medio como respaldo?** El prompt exige que el modelo cite cada artículo con `[art. N]`, y el sistema resuelve esa referencia de forma determinista contra los artículos del pipeline. Las referencias fuera de rango se descartan. Cuando la pauta no trae referencias utilizables —pautas antiguas o respuestas que ignoran la instrucción—, entra el matching por nombre de medio + keywords. Si el modelo inventa un número, la referencia puede apuntar al artículo equivocado: el sistema solo valida el rango, así que conviene revisar el companion antes de redactar una nota sensible.
 
 ### 3. Repurposing de artículos para redes sociales (RRSS)
 
-Toma un artículo ya publicado (`articulos/articulo_N_slug.md`) y produce un **bundle autocontenido** con todo lo necesario para publicarlo en X, Facebook e Instagram:
+Toma un artículo ya publicado (`articulos/articulo_N_AAAA_MM_DD_slug.md`) y produce un **bundle autocontenido** con todo lo necesario para publicarlo en X, Facebook e Instagram:
 
 1. **Parseo del artículo de origen** — Separa titular, firma, lead, secciones, fuentes citadas, cifras detectadas y oraciones candidatas a cita. Todo lo que se genere después se valida contra este material.
 2. **Copys estructurados (LLM)** — En una sola llamada obtiene y valida:
@@ -115,7 +116,7 @@ python -m news_agent print
 # RRSS de varios artículos: uno elegido por la terminal, uno concreto por ruta
 # o todos los que haya en articulos/
 python -m news_agent social --select
-python -m news_agent social --article articulos/articulo_3_slug.md
+python -m news_agent social --article articulos/articulo_3_2026_09_14_slug.md
 python -m news_agent social --all
 
 # Limpieza de los artefactos con más de 90 días (pide confirmación)
@@ -146,6 +147,7 @@ python -m news_agent clean --days 90
 | `--articles-dir DIR` | `social` | Directorio de artículos de origen para `--all` y `--select`, y también para el artículo implícito cuando no se pasa `--article` (por defecto `articulos/`). |
 | `-n`, `--number N` | `article`, `all` | Propuesta a desarrollar (1 a 5). Si se omite, se pregunta por la terminal. Excluyente con `--all-articles`. |
 | `--all-articles` | `all` | Desarrolla las cinco propuestas y genera las piezas de RRSS de cada nota, sin preguntar por la terminal. |
+| `--skip-review` | `article`, `all` | Omite la revisión editorial del editor periodístico posterior a la redacción. |
 | `--platforms LISTA` | `social`, `all` | Plataformas separadas por comas (`x,facebook,instagram`). Por defecto, todas. |
 | `--social-config RUTA` | `social`, `all` | JSON de marca y plantillas (por defecto `social_config.json`). |
 | `--triptych-config RUTA` | `print`, `all` | JSON de geometría, tipografía y estilo del tríptico (por defecto `triptych_config.json`). |
@@ -163,13 +165,13 @@ Se mantienen por compatibilidad con los scripts y los cron ya desplegados:
 | Generar pauta | `python -m news_agent --feeds rss_feeds.json --output ./reportes` |
 | Generar pauta + debug | `python -m news_agent --feeds rss_feeds.json --output ./reportes --debug` |
 | Escribir artículo | `python -m news_agent --write-article reportes/pauta_semanal_AAAA_MM_DD.md --article 1 --output ./articulos` |
-| Repurposing para RRSS | `python -m news_agent --socialize articulos/articulo_1_slug.md --output ./social` |
+| Repurposing para RRSS | `python -m news_agent --socialize articulos/articulo_1_2026_09_14_slug.md --output ./social` |
 
 Flags de los modos clásicos:
 
 - `--verbose`: Activa logging nivel DEBUG para diagnóstico detallado.
 - `--output`: Directorio donde guardar los archivos generados. Si se omite se usa `reportes/`, `articulos/` o `social/` según el modo, y una ruta que apunte al directorio actual se rechaza: los modos clásicos tampoco escriben en el directorio actual. El tríptico impreso se genera desde `print` o desde el paso 4 de `all`; los modos clásicos no lo generan (usa `impresos/` por defecto).
-- `--write-article RUTA_PAUTA`: Activa el modo de escritura de artículo desde una pauta existente. Requiere `--article N`.
+- `--write-article RUTA_PAUTA`: Activa el modo de escritura de artículo desde una pauta existente. Requiere `--article N`. Este modo aplica por defecto la revisión editorial; no tiene una bandera equivalente a `--skip-review`.
 - `--article N`: Propuesta a desarrollar (1 a 5). Solo es válido junto con `--write-article`; sin él, el CLI rechaza la invocación con código 2.
 - `--debug`: Guarda un archivo JSON intermedio en `<directorio_de_salida>/debug/articulos_procesados_YYYY_MM_DD.json` con los datos completos de cada artículo (resumen RSS, contenido extraído y resumen final enviado al LLM) para depuración y ajuste de prompts. Con la salida por defecto queda en `reportes/debug/`.
 - `--socialize RUTA_ARTICULO`: Activa el modo de repurposing para redes sociales. No se puede combinar con `--feeds`, `--debug`, `--write-article` ni `--article`.
@@ -200,6 +202,7 @@ news_agent/
 ├── report_writer.py       # Escritura de reportes .md y artículos
 ├── article_writer.py      # Parseo de pauta + escritura de artículo completo
 ├── headline_editor.py     # Editor de portada: 3 propuestas de titular y bajada
+├── editorial_review.py    # Editor periodístico: revisión y corrección del artículo
 ├── source_references.py   # Emparejamiento determinista de fuentes y companion JSON
 └── social/                # Subsistema de repurposing para redes sociales (RRSS)
     ├── orchestrator.py    # Flujo RRSS: copys → prompt visual → banners → carrusel → bundle
@@ -382,6 +385,9 @@ python -m news_agent report --feeds rss_feeds.json
 python -m news_agent article --number 1
 python -m news_agent social --platforms x,instagram
 
+# Regenerar una nota sin la revisión editorial (ahorra una llamada al modelo)
+python -m news_agent article --number 1 --skip-review
+
 # Generar pauta con archivo de depuración intermedio
 python -m news_agent report --debug
 
@@ -526,6 +532,7 @@ El agente implementa fail-safe en cada etapa del pipeline:
 - **API key ausente** → error explícito de configuración al inicio.
 - **API devuelve vacío** → se reintenta la llamada sin razonamiento y con más presupuesto. Si el reintento tampoco devuelve contenido visible, aborta con un mensaje claro; el razonamiento interno nunca se usa como resultado.
 - **Respuesta sin estructura de artículo** → si el texto no trae titular de nivel 1 y subtítulos de sección, se descarta y se aborta sin escribir archivo, para no publicar contenido inválido.
+- **Revisión editorial fallida o inválida** → falla abierta: la nota se guarda con el titular y el cuerpo previos, el resultado registra `review.status = "failed"` y se advierte en el log. La revisión nunca bloquea la publicación; `--skip-review` la omite por completo.
 - **Directorio de salida inexistente** → el CLI lo crea automáticamente; si la ruta no se puede crear, la ejecución falla antes de escribir.
 - **Configuración de scraping inválida** → error descriptivo al cargar `rss_feeds.json` si faltan selectores obligatorios.
 - **Respuesta sin JSON válido en RRSS** → se reintenta la llamada con una nota de corrección, hasta `SOCIAL_JSON_MAX_RETRIES` veces; el JSON se extrae de forma defensiva (bloques de código, texto alrededor, comas finales sueltas).
@@ -612,9 +619,9 @@ Se genera automáticamente junto con la pauta. Contiene, para cada propuesta, lo
 
 Este archivo es leído automáticamente por `article_writer.py` al redactar un artículo, inyectando el contenido como `## Material de origen disponible` en el prompt del redactor.
 
-### Artículo completo (`articulos/articulo_N_slug-del-titulo.md`)
+### Artículo completo (`articulos/articulo_N_AAAA_MM_DD_slug-del-titulo.md`)
 
-Artículo de ~1000 palabras con lead periodístico, desarrollo en 3 secciones con subtítulos, y fuentes citadas al final. Ver ejemplos reales en [articulos/](articulos/).
+Artículo de ~1000 palabras con lead periodístico, desarrollo en 3 secciones con subtítulos, y fuentes citadas al final. La fecha de creación aparece en el nombre del archivo y en la línea `**Fecha de creación:** AAAA-MM-DD` ubicada después del titular. Ver ejemplos reales en [articulos/](articulos/).
 
 ### Bundle de RRSS (`social/AAAA_MM_DD_slug-del-titulo/`)
 

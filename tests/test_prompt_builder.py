@@ -4,10 +4,13 @@ import pytest
 
 from news_agent.prompt_builder import (
     ARTICLE_SYSTEM_PROMPT,
+    EDITORIAL_REVIEW_SYSTEM_PROMPT,
     PORTADA_SYSTEM_PROMPT,
     SYSTEM_PROMPT,
     build_article_system_prompt,
     build_article_user_prompt,
+    build_editorial_review_system_prompt,
+    build_editorial_review_user_prompt,
     build_portada_system_prompt,
     build_portada_user_prompt,
     build_system_prompt,
@@ -767,3 +770,96 @@ class TestPortadaPrompts:
 
         assert "cuerpo" in result
         assert "Ángulo aprobado" not in result
+
+
+class TestEditorialReviewPrompts:
+    """Pruebas del prompt del editor periodístico."""
+
+    def test_returns_the_constant(self):
+        """Debe devolver exactamente EDITORIAL_REVIEW_SYSTEM_PROMPT."""
+        assert (
+            build_editorial_review_system_prompt()
+            == EDITORIAL_REVIEW_SYSTEM_PROMPT
+        )
+
+    def test_contains_the_editor_role(self):
+        """Debe presentarse como editor periodístico de La Chispa Sur."""
+        prompt = build_editorial_review_system_prompt().lower()
+
+        assert "editor periodístico" in prompt
+        assert "la chispa sur" in prompt
+        assert "jefe de cierre" in prompt
+
+    def test_contains_the_editorial_identity(self):
+        """Debe fijar la línea editorial que la revisión debe cuidar."""
+        prompt = build_editorial_review_system_prompt().lower()
+
+        assert "marxista" in prompt
+        assert "antiimperialista" in prompt
+        assert "neoliberal" in prompt
+        assert "villarrica" in prompt
+        assert "la araucanía" in prompt
+
+    def test_contains_the_three_review_axes(self):
+        """Debe cubrir redacción, coherencia y estilo."""
+        prompt = build_editorial_review_system_prompt().lower()
+
+        assert "redacción" in prompt
+        assert "coherencia" in prompt
+        assert "estilo" in prompt
+        assert "ortografía" in prompt
+        assert "clickbait" in prompt
+
+    def test_prohibits_new_facts_and_structure_changes(self):
+        """Debe prohibir inventar datos y alterar la estructura."""
+        prompt = build_editorial_review_system_prompt().lower()
+
+        assert "no agregues hechos" in prompt
+        assert "no borres datos verificables" in prompt
+        assert "mismo número de secciones" in prompt
+        assert "bloque de fuentes" in prompt
+        assert "[art. n]" in prompt
+
+    def test_requires_the_json_contract(self):
+        """Debe exigir las cuatro claves del contrato."""
+        prompt = build_editorial_review_system_prompt().lower()
+
+        assert '"titular"' in prompt
+        assert '"bajada"' in prompt
+        assert '"cuerpo"' in prompt
+        assert '"resumen_cambios"' in prompt
+        assert "12 a 16 palabras" in prompt
+        assert "25 a 45" in prompt
+
+    def test_user_prompt_includes_the_pieces_and_the_proposal(self):
+        """Debe incluir propuesta, titular, bajada y cuerpo."""
+        result = build_editorial_review_user_prompt(
+            "Titular seleccionado",
+            "Bajada seleccionada",
+            "Cuerpo del artículo.",
+            {
+                "title": "Título de pauta",
+                "enfoque": "Enfoque aprobado",
+                "puntos": ["Primer punto", "Segundo punto"],
+            },
+        )
+
+        assert "Título de pauta" in result
+        assert "Enfoque aprobado" in result
+        assert "Primer punto" in result
+        assert "Titular seleccionado" in result
+        assert "Bajada seleccionada" in result
+        assert "Cuerpo del artículo." in result
+        assert "12 y 16 palabras" in result
+        assert "25 y 45" in result
+
+    def test_user_prompt_works_without_a_proposal(self):
+        """Debe funcionar sin propuesta de pauta."""
+        result = build_editorial_review_user_prompt(
+            "Titular", "Bajada", "Cuerpo"
+        )
+
+        assert "Titular" in result
+        assert "Bajada" in result
+        assert "Cuerpo" in result
+        assert "Propuesta aprobada" not in result

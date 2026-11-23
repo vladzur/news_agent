@@ -30,7 +30,7 @@ Uso clásico:
                          --article 1 --output ./articulos
 
     # Repurposing de un artículo para redes sociales
-    python -m news_agent --socialize articulos/articulo_1_slug.md \\
+    python -m news_agent --socialize articulos/articulo_1_2026_09_14_slug.md \\
                          --output ./social
 """
 
@@ -81,7 +81,7 @@ def _build_legacy_epilog() -> str:
                 "--output ./articulos"
             ),
             (
-                "  python -m news_agent --socialize articulos/articulo_1_slug.md "
+                "  python -m news_agent --socialize articulos/articulo_1_2026_09_14_slug.md "
                 "--output ./social"
             ),
         ]
@@ -155,7 +155,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=str,
         default=None,
         metavar="RUTA_ARTICULO",
-        help="Ruta al artículo Markdown (ej: articulos/articulo_1_slug.md) "
+        help="Ruta al artículo Markdown (ej: articulos/articulo_1_2026_09_14_slug.md) "
         "del cual generar copys, prompt visual y banners para redes sociales.",
     )
     parser.add_argument(

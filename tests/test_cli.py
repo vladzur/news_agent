@@ -235,6 +235,7 @@ class TestParser:
         assert args.pauta is None
         assert args.number is None
         assert args.output == "articulos"
+        assert args.skip_review is False
 
     def test_social_defaults(self):
         args = build_cli_parser().parse_args(["social"])
@@ -278,6 +279,7 @@ class TestParser:
         assert args.all_articles is False
         assert args.platforms is None
         assert args.debug is False
+        assert args.skip_review is False
 
     def test_all_accepts_the_full_edition_flag(self):
         args = build_cli_parser().parse_args(["all", "--all-articles"])
@@ -629,8 +631,33 @@ class TestArticleCommand:
         assert calls["pauta_path"] == Path("reportes/pauta.md")
         assert calls["article_number"] == 2
         assert calls["output_dir"] == output
+        assert calls["skip_review"] is False
         assert output.is_dir()
         assert "Artículo escrito" in capsys.readouterr().out
+
+    def test_passes_skip_review_to_the_writer(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        """--skip-review debe llegar a write_article."""
+        calls: dict[str, Any] = {}
+        monkeypatch.setattr(
+            cli, "write_article", _capturing(calls, _article_result(tmp_path))
+        )
+
+        main(
+            [
+                "article",
+                "--pauta",
+                "reportes/pauta.md",
+                "--number",
+                "1",
+                "--skip-review",
+                "--output",
+                str(tmp_path / "articulos"),
+            ]
+        )
+
+        assert calls["skip_review"] is True
 
     def test_discovers_the_latest_pauta(self, tmp_path, monkeypatch, capsys):
         _create_file(tmp_path / "reportes" / "pauta_semanal_2026_09_16.md")
@@ -692,6 +719,10 @@ class TestArticleCommand:
             "headline": "Titular de portada aplicado",
             "deck": "Bajada de portada aplicada.",
             "headline_proposals": [{"enfoque": "x"} for _ in range(3)],
+            "review": {
+                "status": "applied",
+                "changes": "Se corrigió una transición.",
+            },
         }
         monkeypatch.setattr(cli, "write_article", lambda **kwargs: result)
 
@@ -711,6 +742,28 @@ class TestArticleCommand:
         assert "Titular aplicado" in output
         assert "Titular de portada aplicado" in output
         assert "Propuestas de portada: 3" in output
+        assert "Revisión editorial: aplicada" in output
+        assert "Se corrigió una transición." in output
+
+    def test_prints_the_failed_and_skipped_review_states(
+        self, tmp_path, capsys
+    ):
+        """El resumen debe distinguir la revisión fallida de la omitida."""
+        failed = {
+            **_article_result(tmp_path),
+            "review": {"status": "failed", "error": "sin conexión"},
+        }
+        skipped = {
+            **_article_result(tmp_path),
+            "review": {"status": "skipped"},
+        }
+
+        cli.print_article_summary(failed)
+        cli.print_article_summary(skipped)
+
+        output = capsys.readouterr().out
+        assert "Revisión editorial no aplicada" in output
+        assert "Revisión editorial omitida" in output
 
 
 # ---------------------------------------------------------------------------
@@ -1024,6 +1077,37 @@ class TestAllCommand:
         main(["all", "--base", str(tmp_path), "--number", "3"])
 
         assert steps["article"]["article_number"] == 3
+        assert steps["article"]["skip_review"] is False
+
+    def test_propagates_skip_review_to_the_note(self, tmp_path, steps):
+        main(
+            [
+                "all",
+                "--base",
+                str(tmp_path),
+                "--number",
+                "1",
+                "--skip-review",
+            ]
+        )
+
+        assert steps["article"]["skip_review"] is True
+
+    def test_propagates_skip_review_to_every_edition_article(
+        self, tmp_path, steps
+    ):
+        main(
+            [
+                "all",
+                "--base",
+                str(tmp_path),
+                "--all-articles",
+                "--skip-review",
+            ]
+        )
+
+        assert steps["article_calls"]
+        assert all(call["skip_review"] is True for call in steps["article_calls"])
 
     def test_propagates_the_social_options(self, tmp_path, steps):
         main(

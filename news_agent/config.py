@@ -61,6 +61,27 @@ DECK_MIN_WORDS = 25
 DECK_MAX_WORDS = 45
 
 # ---------------------------------------------------------------------------
+# Constantes del editor periodístico (revisión editorial posterior al borrador)
+# ---------------------------------------------------------------------------
+# Tercera llamada por artículo: devuelve el titular, la bajada y el cuerpo
+# corregidos. El cuerpo completo (~1000 palabras) y el razonamiento comparten
+# el presupuesto, igual que en la redacción del artículo.
+EDITORIAL_REVIEW_MAX_TOKENS = 16384
+EDITORIAL_REVIEW_REASONING_EFFORT = "high"
+# Temperatura baja: la revisión corrige, no reescribe. Se busca el texto más
+# predecible posible para no alterar datos ni el ángulo aprobado.
+EDITORIAL_REVIEW_TEMPERATURE = 0.2
+# Un reintento cuando la respuesta no es JSON válido o el cuerpo no cumple el
+# contrato estructural y de extensión.
+EDITORIAL_REVIEW_JSON_MAX_RETRIES = 1
+# El cuerpo corregido debe conservar el volumen del original: por debajo del
+# mínimo la revisión habría resumido; por encima del máximo, habría expandido.
+EDITORIAL_REVIEW_MIN_BODY_RATIO = 0.7
+EDITORIAL_REVIEW_MAX_BODY_RATIO = 1.3
+# Tope del resumen de correcciones que se registra en el log y en el CLI.
+EDITORIAL_REVIEW_MAX_CHANGES_CHARS = 400
+
+# ---------------------------------------------------------------------------
 # Constantes de la ventana de análisis y formato
 # ---------------------------------------------------------------------------
 TIME_WINDOW_HOURS = 96  # 4 días: noticias anteriores ya tienen desarrollos posteriores en la ventana

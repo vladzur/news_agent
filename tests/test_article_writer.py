@@ -14,6 +14,11 @@ from news_agent.article_writer import (
     parse_pauta_file,
     write_article,
 )
+from news_agent.editorial_review import (
+    EditorialReview,
+    EditorialReviewError,
+    split_article,
+)
 from news_agent.headline_editor import (
     APPENDIX_HEADING,
     ENFOQUES,
@@ -280,6 +285,24 @@ class TestWriteArticle:
     def mock_api_key(self, monkeypatch):
         """Establece una API key de prueba."""
         monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test-article-key")
+
+    @pytest.fixture(autouse=True)
+    def review_passthrough(self):
+        """Revisión sin cambios para que los tests no dependan del modelo."""
+
+        def _passthrough(article, client, proposal=None):
+            parts = split_article(article)
+            return EditorialReview(
+                headline=parts.headline,
+                deck=parts.deck,
+                body=parts.body,
+            )
+
+        with patch(
+            "news_agent.article_writer.review_and_correct",
+            side_effect=_passthrough,
+        ):
+            yield
 
     @pytest.fixture
     def headline_proposals(self):
@@ -549,3 +572,265 @@ class TestWriteArticle:
         # Verificar que build_article_user_prompt recibió source_articles=None
         call_kwargs = mock_build.call_args.kwargs
         assert call_kwargs.get("source_articles") is None
+
+    def test_applies_the_editorial_review_to_the_saved_article(
+        self,
+        mock_api_key,
+        sample_pauta_file,
+        tmp_path,
+        mock_article_response,
+        headline_proposals,
+    ):
+        """Debe guardar las piezas corregidas y sincronizar el apéndice."""
+        reviewed_headline = (
+            "Revisión editorial: el conflicto sigue en el centro y los datos "
+            "duros sostienen la tesis del artículo"
+        )
+        reviewed_deck = (
+            "La corrección amplía el titular con el dato central, el contexto "
+            "inmediato y la relevancia de por qué el tema importa ahora para "
+            "el territorio."
+        )
+
+        def _review(article, client, proposal=None):
+            parts = split_article(article)
+            return EditorialReview(
+                headline=reviewed_headline,
+                deck=reviewed_deck,
+                body=parts.body.replace("Aquí va", "Aquí se desarrolla"),
+                changes="Se corrigió una frase del cuerpo.",
+            )
+
+        with patch(
+            "news_agent.article_writer.review_and_correct",
+            side_effect=_review,
+        ), patch(
+            "news_agent.article_writer.LLMClient"
+        ) as mock_client_class:
+            mock_client = Mock()
+            mock_client.generate_report.return_value = mock_article_response
+            mock_client_class.return_value = mock_client
+
+            result = write_article(
+                pauta_path=sample_pauta_file,
+                article_number=1,
+                output_dir=tmp_path,
+            )
+
+        content = result["article_path"].read_text(encoding="utf-8")
+
+        assert content.startswith(f"# {reviewed_headline}")
+        assert f"*{reviewed_deck}*" in content
+        assert "Aquí se desarrolla" in content
+        assert result["headline"] == reviewed_headline
+        assert result["deck"] == reviewed_deck
+        assert result["review"]["status"] == "applied"
+        assert result["review"]["changes"] == "Se corrigió una frase del cuerpo."
+        assert content.count(f"**Titular:** {reviewed_headline}") == 1
+        assert content.count(f"**Titular:** {TITULAR_PORTADA}") == 2
+
+    def test_keeps_the_article_when_the_review_fails(
+        self,
+        mock_api_key,
+        sample_pauta_file,
+        tmp_path,
+        mock_article_response,
+        headline_proposals,
+    ):
+        """Si la revisión falla, la nota se guarda con el texto previo."""
+        with patch(
+            "news_agent.article_writer.review_and_correct",
+            side_effect=EditorialReviewError("sin revisión"),
+        ), patch(
+            "news_agent.article_writer.LLMClient"
+        ) as mock_client_class:
+            mock_client = Mock()
+            mock_client.generate_report.return_value = mock_article_response
+            mock_client_class.return_value = mock_client
+
+            result = write_article(
+                pauta_path=sample_pauta_file,
+                article_number=1,
+                output_dir=tmp_path,
+            )
+
+        content = result["article_path"].read_text(encoding="utf-8")
+
+        assert content.startswith(f"# {TITULAR_PORTADA}")
+        assert APPENDIX_HEADING in content
+        assert result["review"]["status"] == "failed"
+        assert "sin revisión" in result["review"]["error"]
+
+    def test_skips_the_review_when_requested(
+        self,
+        mock_api_key,
+        sample_pauta_file,
+        tmp_path,
+        mock_article_response,
+        headline_proposals,
+    ):
+        """Con skip_review no se debe llamar al editor periodístico."""
+        review_mock = Mock()
+
+        with patch(
+            "news_agent.article_writer.review_and_correct",
+            review_mock,
+        ), patch(
+            "news_agent.article_writer.LLMClient"
+        ) as mock_client_class:
+            mock_client = Mock()
+            mock_client.generate_report.return_value = mock_article_response
+            mock_client_class.return_value = mock_client
+
+            result = write_article(
+                pauta_path=sample_pauta_file,
+                article_number=1,
+                output_dir=tmp_path,
+                skip_review=True,
+            )
+
+        review_mock.assert_not_called()
+        assert result["review"] == {"status": "skipped"}
+
+    def test_reviews_the_portada_applied_article(
+        self,
+        mock_api_key,
+        sample_pauta_file,
+        tmp_path,
+        mock_article_response,
+        headline_proposals,
+    ):
+        """La revisión debe recibir el titular y la bajada ya aplicados."""
+        captured: dict[str, str] = {}
+
+        def _review(article, client, proposal=None):
+            captured["article"] = article
+            parts = split_article(article)
+            return EditorialReview(
+                headline=parts.headline,
+                deck=parts.deck,
+                body=parts.body,
+            )
+
+        with patch(
+            "news_agent.article_writer.review_and_correct",
+            side_effect=_review,
+        ), patch(
+            "news_agent.article_writer.LLMClient"
+        ) as mock_client_class:
+            mock_client = Mock()
+            mock_client.generate_report.return_value = mock_article_response
+            mock_client_class.return_value = mock_client
+
+            write_article(
+                pauta_path=sample_pauta_file,
+                article_number=1,
+                output_dir=tmp_path,
+            )
+
+        assert captured["article"].startswith(f"# {TITULAR_PORTADA}")
+        assert f"*{BAJADA_PORTADA}*" in captured["article"]
+        assert APPENDIX_HEADING not in captured["article"]
+
+    def test_applies_the_review_even_when_the_portada_fails(
+        self, mock_api_key, sample_pauta_file, tmp_path
+    ):
+        """Sin portada, la revisión corrige las piezas del redactor."""
+        writer_response = (
+            "# Titular del redactor\n\n"
+            "**Por La Chispa Sur**\n\n"
+            "---\n\n"
+            "*Bajada del redactor con los datos centrales y el contexto "
+            "necesario para explicar el caso completo.*\n\n"
+            "Lead del artículo con el ángulo crítico.\n\n"
+            "## Sección única\n\n"
+            "Texto de la sección con el análisis.\n\n"
+            "---\n\n"
+            "**Fuentes consultadas:**\n"
+            "- Fuente A\n"
+        )
+        reviewed_headline = (
+            "Titular corregido por el editor periodístico con el conflicto "
+            "en el centro"
+        )
+        reviewed_deck = (
+            "Bajada corregida que conserva los datos centrales, el contexto "
+            "inmediato y la relevancia de por qué el tema importa ahora."
+        )
+
+        def _review(article, client, proposal=None):
+            parts = split_article(article)
+            return EditorialReview(
+                headline=reviewed_headline,
+                deck=reviewed_deck,
+                body=parts.body,
+            )
+
+        with patch(
+            "news_agent.article_writer.generate_headline_proposals",
+            side_effect=HeadlineValidationError("sin portada"),
+        ), patch(
+            "news_agent.article_writer.review_and_correct",
+            side_effect=_review,
+        ), patch(
+            "news_agent.article_writer.LLMClient"
+        ) as mock_client_class:
+            mock_client = Mock()
+            mock_client.generate_report.return_value = writer_response
+            mock_client_class.return_value = mock_client
+
+            result = write_article(
+                pauta_path=sample_pauta_file,
+                article_number=1,
+                output_dir=tmp_path,
+            )
+
+        content = result["article_path"].read_text(encoding="utf-8")
+
+        assert content.startswith(f"# {reviewed_headline}")
+        assert f"*{reviewed_deck}*" in content
+        assert APPENDIX_HEADING not in content
+        assert result["headline"] == reviewed_headline
+        assert result["deck"] == reviewed_deck
+        assert result["review"]["status"] == "applied"
+
+    def test_discards_a_review_that_breaks_the_article_structure(
+        self,
+        mock_api_key,
+        sample_pauta_file,
+        tmp_path,
+        mock_article_response,
+        headline_proposals,
+    ):
+        """Si el reensamblado pierde las secciones, se conserva el texto previo."""
+
+        def _review(article, client, proposal=None):
+            parts = split_article(article)
+            return EditorialReview(
+                headline=parts.headline,
+                deck=parts.deck,
+                body="Un solo párrafo sin secciones ni fuentes.",
+            )
+
+        with patch(
+            "news_agent.article_writer.review_and_correct",
+            side_effect=_review,
+        ), patch(
+            "news_agent.article_writer.LLMClient"
+        ) as mock_client_class:
+            mock_client = Mock()
+            mock_client.generate_report.return_value = mock_article_response
+            mock_client_class.return_value = mock_client
+
+            result = write_article(
+                pauta_path=sample_pauta_file,
+                article_number=1,
+                output_dir=tmp_path,
+            )
+
+        content = result["article_path"].read_text(encoding="utf-8")
+
+        assert content.startswith(f"# {TITULAR_PORTADA}")
+        assert "Aquí va el cuerpo del artículo" in content
+        assert result["review"]["status"] == "failed"
+        assert "estructura publicable" in result["review"]["error"]

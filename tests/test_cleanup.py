@@ -117,9 +117,9 @@ class TestFindStaleEntries:
 
         assert [entry.path for entry in entries] == [old.resolve()]
 
-    def test_uses_the_modification_date_for_articles(self, tmp_path):
-        # Los artículos no llevan fecha en el nombre (articulo_N_slug.md), así
-        # que la única referencia disponible es la fecha de modificación.
+    def test_uses_the_modification_date_for_old_articles(self, tmp_path):
+        # Las notas antiguas no llevan fecha en el nombre (articulo_N_slug.md),
+        # así que la única referencia disponible es la fecha de modificación.
         old = _create_file(
             tmp_path / DEFAULT_ARTICLES_DIR / "articulo_1_slug.md",
             NOW - timedelta(days=45),
@@ -132,6 +132,21 @@ class TestFindStaleEntries:
         entries = find_stale_entries(tmp_path, max_age_days=30, now=NOW)
 
         assert [entry.path for entry in entries] == [old.resolve()]
+
+    def test_uses_the_name_date_for_dated_articles(self, tmp_path):
+        # Las notas nuevas incluyen la fecha de creación en el nombre
+        # (articulo_N_AAAA_MM_DD_slug.md), que manda sobre la modificación.
+        old = _create_file(
+            tmp_path
+            / DEFAULT_ARTICLES_DIR
+            / "articulo_1_2026_01_05_slug.md",
+            NOW,
+        )
+
+        entries = find_stale_entries(tmp_path, max_age_days=30, now=NOW)
+
+        assert [entry.path for entry in entries] == [old.resolve()]
+        assert entries[0].reference == datetime(2026, 1, 5, tzinfo=timezone.utc)
 
     def test_detects_social_bundles_with_their_assets(self, tmp_path):
         bundle = _create_bundle(tmp_path, "2026_07_01_titular", NOW)

@@ -1,11 +1,13 @@
 """Parseo del artículo Markdown de origen del subsistema RRSS.
 
-Los artículos que produce el agente (``articulos/articulo_N_slug.md``) tienen
-una estructura estable: titular de nivel 1, firma, separador horizontal,
-lead, secciones de nivel 2 y un bloque final de fuentes. Este módulo convierte
-ese Markdown en un ``ArticleSource`` con las piezas ya separadas, de modo que
-los prompts y los banners trabajen con material limpio en lugar del archivo
-crudo.
+Los artículos que produce el agente
+(``articulos/articulo_N_AAAA_MM_DD_slug.md``) tienen una estructura estable:
+titular de nivel 1, línea de fecha de creación, firma, separador horizontal,
+lead, secciones de nivel 2 y un bloque final de fuentes. La fecha de creación
+queda antes de la firma para que no se cuele en el cuerpo que alimenta los
+prompts de redes sociales. Este módulo convierte ese Markdown en un
+``ArticleSource`` con las piezas ya separadas, de modo que los prompts y los
+banners trabajen con material limpio en lugar del archivo crudo.
 """
 
 import logging
@@ -38,6 +40,14 @@ _H2_RE = re.compile(r"^##\s+(?!#)(\S.*?)\s*$", re.MULTILINE)
 # Firma del artículo: **Por La Chispa Sur**, _Por ..._, *Por ...*
 _BYLINE_RE = re.compile(
     r"^\s*[*_]{1,2}\s*Por\s+(.+?)\s*[*_]{1,2}\s*$",
+    re.MULTILINE | re.IGNORECASE,
+)
+
+# Línea de metadatos con la fecha de creación del artículo. No es prosa: se
+# excluye del cuerpo aunque el artículo no tenga firma y el parser no pueda
+# saltarla junto con el encabezado.
+_CREATION_DATE_RE = re.compile(
+    r"^\s*\*\*Fecha de creación:\*\*.*$",
     re.MULTILINE | re.IGNORECASE,
 )
 
@@ -124,7 +134,9 @@ def _clean_block(block: str) -> str:
     lines = [
         line.strip()
         for line in block.split("\n")
-        if line.strip() and not _RULE_RE.match(line)
+        if line.strip()
+        and not _RULE_RE.match(line)
+        and not _CREATION_DATE_RE.match(line)
     ]
     return " ".join(lines).strip()
 

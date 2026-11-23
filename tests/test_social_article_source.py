@@ -34,6 +34,60 @@ class TestParseArticleFile:
     def test_extracts_byline(self, article):
         assert article.byline == "Por La Chispa Sur"
 
+    def test_creation_date_is_not_part_of_the_body(
+        self, tmp_path, article_markdown
+    ):
+        """La fecha de creación es metadatos y no debe llegar al material de RRSS."""
+        content = article_markdown.replace(
+            "**Por La Chispa Sur**",
+            "**Fecha de creación:** 2026-11-23\n\n**Por La Chispa Sur**",
+            1,
+        )
+        path = tmp_path / "articulo_1_2026_11_23_con-fecha.md"
+        path.write_text(content, encoding="utf-8")
+
+        parsed = parse_article_file(path)
+
+        assert parsed.byline == "Por La Chispa Sur"
+        assert "Fecha de creación" not in parsed.lead
+        assert all(
+            "Fecha de creación" not in section.body
+            for section in parsed.sections
+        )
+        assert "Fecha de creación" not in parsed.body_text()
+
+    def test_creation_date_is_excluded_without_a_byline(self, tmp_path):
+        """La fecha tampoco debe colarse si el artículo no tiene firma."""
+        content = """\
+# Titular sin firma
+
+**Fecha de creación:** 2026-11-23
+
+---
+
+*Bajada del artículo.*
+
+Lead del artículo con los hechos principales.
+
+## Sección única
+
+Texto de la sección.
+
+**Fuentes consultadas:**
+- Fuente A
+"""
+        path = tmp_path / "articulo_1_2026_11_23_sin-firma.md"
+        path.write_text(content, encoding="utf-8")
+
+        parsed = parse_article_file(path)
+
+        assert "Fecha de creación" not in parsed.lead
+        assert all(
+            "Fecha de creación" not in section.body
+            for section in parsed.sections
+        )
+        assert "Fecha de creación" not in parsed.body_text()
+
     def test_extracts_lead_without_rules_or_byline(self, article):
         assert article.lead.startswith("Un hombre de 44 años fue detenido")
         assert "---" not in article.lead

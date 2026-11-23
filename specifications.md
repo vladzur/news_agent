@@ -53,6 +53,8 @@ Automatizar la recopilación, filtrado y análisis de la agenda noticiosa nacion
   - `PAUTA_MAX_TOKENS`: **65536** para la pauta semanal (presupuesto compartido entre razonamiento y contenido).
 
   - `ARTICLE_MAX_TOKENS`: **16384** para la escritura de artículos.
+
+  - `EDITORIAL_REVIEW_MAX_TOKENS`: **16384**, `EDITORIAL_REVIEW_REASONING_EFFORT="high"` y `EDITORIAL_REVIEW_TEMPERATURE=0.2` para la revisión editorial. La etapa admite un reintento (`EDITORIAL_REVIEW_JSON_MAX_RETRIES=1`) y valida que el cuerpo corregido conserve entre `0.7` y `1.3` veces el volumen del original.
     
   - Razonamiento: `PAUTA_REASONING_EFFORT="high"` y `ARTICLE_REASONING_EFFORT="high"`. El modo thinking se activa por llamada; el reintento sin razonamiento usa `CONTENT_RETRY_MAX_TOKENS=8192` como piso.
 
@@ -123,6 +125,8 @@ Markdown
 
 - **Editor de portada:** Tras la redacción se hace una segunda llamada con rol de editor de portada. Devuelve, en JSON, **tres propuestas de titular y bajada** con enfoques fijos (denuncia/tesis política, narrativo/humano y analítico/geopolítico). Los largos se validan en código —12 a 16 palabras el titular, 25 a 45 la bajada—; si no se cumplen se reintenta una vez con una nota de corrección y, si el segundo intento tampoco cumple, se recorta por código y se advierte en el log. La primera propuesta se aplica al artículo y las tres se anexan en un apéndice `## 📰 Propuestas de portada`. El apéndice está marcado como no publicable: el parser de RRSS corta el cuerpo antes de esa marca, de modo que no contamina los prompts de redes sociales. Si la segunda llamada falla, el artículo se guarda igual con el titular del redactor y sin apéndice.
 
+- **Revisión editorial (editor periodístico):** Después de aplicar la portada y antes de anexar el apéndice, una tercera llamada con rol de editor periodístico recibe el titular, la bajada y el cuerpo, y devuelve en JSON las tres piezas corregidas (`titular`, `bajada`, `cuerpo`, `resumen_cambios`). El código exige que el cuerpo conserve el mismo número de secciones y el bloque de fuentes, que su volumen quede entre `0,7` y `1,3` veces el original y que no incluya H1, firma ni apéndice; las referencias `[art. N]` se eliminan y un titular o una bajada fuera de rango conservan la versión de portada. Si la llamada, el JSON o la validación fallan, la nota se guarda con el texto previo: la revisión es fail-open y nunca impide publicar. La propuesta 1 del apéndice se sincroniza con las correcciones; `--skip-review` omite la etapa.
+
 ## 6. Subsistema de Repurposing para Redes Sociales (RRSS)
 
 ### 6.1. Objetivo
@@ -131,14 +135,14 @@ Transformar un artículo ya publicado en piezas multiplataforma para **X/Twitter
 
 ```
 python -m news_agent social --platforms x,instagram
-python -m news_agent --socialize articulos/articulo_1_slug.md --output ./social
+python -m news_agent --socialize articulos/articulo_1_2026_09_14_slug.md --output ./social
 ```
 
 El subsistema produce cuatro familias de artefactos: **copys estructurados**, **prompts visuales en inglés**, **banners renderizados localmente** y el **carrusel vertical de Instagram**. No publica nada en las plataformas ni genera las imágenes finales del prompt visual: entrega al equipo editorial el material listo para publicar y para pegar en un generador de imágenes.
 
 ### 6.2. Entrada
 
-El único origen admitido es un **artículo Markdown ya publicado** (`articulos/articulo_N_slug.md`), con la estructura que produce el agente: titular de nivel 1, firma, separador horizontal, lead, secciones de nivel 2 y bloque final de fuentes.
+El único origen admitido es un **artículo Markdown ya publicado** (`articulos/articulo_N_AAAA_MM_DD_slug.md`), con la estructura que produce el agente: titular de nivel 1, línea de fecha de creación, firma, separador horizontal, lead, secciones de nivel 2 y bloque final de fuentes. La fecha de creación queda antes de la firma para que el parser no la incluya en el cuerpo que alimenta los prompts de RRSS.
 
 - **Formato inválido:** un archivo sin titular de nivel 1 se rechaza con un error explícito de parseo.
 - **Guardia de material:** si el cuerpo del artículo tiene menos de `SOCIAL_MIN_ARTICLE_WORDS` (150) palabras, el flujo se detiene **antes** de invocar la API para evitar consumo innecesario de tokens.
@@ -290,10 +294,10 @@ El motor se opera desde un CLI por subcomandos que reduce la ejecución de cada 
 | Comando | Responsabilidad | Entradas | Artefactos |
 |---------|-----------------|----------|------------|
 | `report` | Genera la pauta editorial semanal | `--feeds`, `--output`, `--debug` | `reportes/pauta_semanal_AAAA_MM_DD.md` y su companion JSON |
-| `article` | Escribe una nota desde una propuesta | `--pauta`, `-n/--number`, `--output` | `articulos/articulo_N_slug.md` |
+| `article` | Escribe una nota desde una propuesta | `--pauta`, `-n/--number`, `--output`, `--skip-review` | `articulos/articulo_N_AAAA_MM_DD_slug.md` |
 | `social` | Repurposing para redes sociales | `--article`, `--articles-dir`, `--all`, `--select`, `--output`, `--platforms`, `--social-config`, `--skip-banners`, `--skip-prompts` | `social/AAAA_MM_DD_slug/` con copys, prompts, Markdown y banners |
 | `print` | Tríptico impreso de la semana | `--pauta`, `--output`, `--triptych-config` | `impresos/AAAA_MM_DD_pauta-semanal/` con el tríptico en JSON, el Markdown panel por panel y el manifiesto |
-| `all` | Secuencia completa, con una nota o la edición entera | `--feeds`, `--base`, `-n/--number`, `--all-articles`, opciones sociales, `--triptych-config` y `--debug` | Los cuatro anteriores; con `--all-articles`, una nota y un bundle de RRSS por propuesta |
+| `all` | Secuencia completa, con una nota o la edición entera | `--feeds`, `--base`, `-n/--number`, `--all-articles`, `--skip-review`, opciones sociales, `--triptych-config` y `--debug` | Los cuatro anteriores; con `--all-articles`, una nota y un bundle de RRSS por propuesta |
 | `clean` | Limpieza de artefactos antiguos | `--base`, `--target`, `--days`, `--dry-run`, `--yes` | Elimina archivos y bundles |
 
 Todos los comandos aceptan `--verbose`. En `clean` la bandera se acepta por uniformidad del parser, pero todavía no cambia el nivel de logging.
@@ -309,7 +313,7 @@ Ejecuta, en orden y dentro de una misma invocación: la generación de la pauta,
 ### 7.4. Entradas implícitas y directorio de salida
 
 - **Pauta:** si `article` no recibe `--pauta`, toma la más reciente de `reportes/`. El orden lo da el nombre, que incluye la fecha (`AAAA_MM_DD`).
-- **Artículo:** si `social` no recibe `--article` ni usa `--all`/`--select`, toma el de fecha de modificación más reciente del directorio indicado por `--articles-dir` (`articulos/` por defecto), porque las notas no llevan fecha en el nombre.
+- **Artículo:** si `social` no recibe `--article` ni usa `--all`/`--select`, toma el de fecha de modificación más reciente del directorio indicado por `--articles-dir` (`articulos/` por defecto). La fecha del nombre identifica el día de la edición y no desempata varias notas generadas el mismo día; por eso el criterio sigue siendo la modificación.
 - **Propuesta:** si `article` o `all` no reciben `-n/--number`, muestran los cinco titulares y preguntan cuál desarrollar. Sin terminal interactiva (por ejemplo en un cron) la ejecución falla con código 2 y un mensaje que pide `--number` o `--all-articles`, en lugar de quedar esperando una respuesta que nunca llegará. `all` valida el modo de edición y `--platforms` antes de generar la pauta. `--all-articles` es excluyente con `--number` y no requiere terminal.
 - **Pauta del tríptico:** si `print` no recibe `--pauta`, toma la más reciente de `reportes/`. El tríptico no pide número de propuesta: cubre las cinco, así que `-n` no aplica.
 - **Directorio de salida:** si no se indica `--output`, cada flujo usa su carpeta por defecto (`reportes/`, `articulos/`, `social/` o `impresos/`) y la crea si no existe. Una ruta que apunte al directorio actual se rechaza con error de uso, en los subcomandos y también en los modos clásicos.
@@ -320,7 +324,7 @@ Ejecuta, en orden y dentro de una misma invocación: la generación de la pauta,
 - **Alcance:** solo los artefactos propios de la herramienta, declarados como patrones en `news_agent/cleanup.py`: pautas y companion JSON de `reportes/`, notas de `articulos/` y bundles de `social/`.
 - **Fuera de alcance:** los bundles de `impresos/` todavía no son un objetivo de `clean`. Se limpian a mano hasta que se agregue su patrón.
 - **Nunca se elimina** la caché de contenido (`cache/`) ni los recursos de la marca (`assets/`): ninguna entrada fuera de los patrones declarados se considera, aunque sea antigua.
-- **Fecha de referencia:** la fecha codificada en el nombre cuando existe (pautas y bundles) y, cuando no (las notas), la fecha de modificación. La fecha del nombre es la fuente fiable: al clonar o copiar el repositorio, todos los archivos quedan con la fecha de la copia.
+- **Fecha de referencia:** la fecha codificada en el nombre cuando existe (pautas, bundles y notas nuevas) y, cuando no (las notas antiguas), la fecha de modificación. La fecha del nombre es la fuente fiable: al clonar o copiar el repositorio, todos los archivos quedan con la fecha de la copia.
 - **Umbral:** `--days N` (por defecto `DEFAULT_CLEAN_MAX_AGE_DAYS`, 30). Se elimina lo que supere ese corte; un valor menor que 1 es un error de uso.
 - **Confirmación:** el comando lista lo que va a eliminar, con antigüedad y tamaño, y pide confirmación. `--dry-run` muestra el listado sin borrar nada y `--yes` omite la confirmación para automatizar. En un cron no hay terminal para confirmar, así que se debe usar `--yes` o `--dry-run`; sin terminal y sin `--yes`, el comando sale con error de uso.
 - **Aislamiento de fallos:** si un artefacto no se puede eliminar, se registra en el log, el resto del lote continúa y el resumen final informa cuántos fallaron. Si hubo fallos parciales, el comando termina con código 1.

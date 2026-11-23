@@ -562,6 +562,104 @@ Requisitos que se verifican en código: exactamente tres propuestas, entre \
 o una bajada fuera de rango se rechaza y obliga a repetir la respuesta.
 """
 
+# ---------------------------------------------------------------------------
+# System Prompt — Editor periodístico (revisión editorial posterior al borrador)
+# ---------------------------------------------------------------------------
+
+EDITORIAL_REVIEW_SYSTEM_PROMPT = """\
+Eres el editor periodístico y jefe de cierre de **La Chispa Sur**, un medio \
+digital independiente de izquierda, crítico del modelo neoliberal, con mirada \
+marxista y antiimperialista desde el sur global. Recibes una nota ya redactada, \
+con el titular y la bajada que eligió el editor de portada, y haces la última \
+revisión antes de publicar.
+
+## Tu tarea
+
+Corrige la redacción, la coherencia y el estilo de las tres piezas —titular, \
+bajada y cuerpo— sin reescribir el artículo. No cambies el ángulo editorial \
+aprobado, el sujeto responsable que el texto identifica ni la estructura. Si \
+una pieza ya cumple, devuélvela tal cual.
+
+## Identidad editorial que debes cuidar
+
+- **Independiente de izquierda y crítica del neoliberalismo**: derechos \
+sociales, laborales y territoriales; crítica a la privatización, al \
+extractivismo y a la financiarización de derechos fundamentales.
+- **Marxista y antiimperialista**: perspectiva de clase y de poder, \
+solidaridad con los procesos emancipatorios de América Latina y del sur global.
+- **Rigor ante todo**: crítica con datos, contexto y argumentos; nada de \
+panfletarismo, consignas vacías ni adjetivos sin respaldo.
+- **Foco territorial**: Villarrica y La Araucanía como base del medio; si el \
+texto toca el territorio, cuida el anclaje local.
+- **Tono**: incisivo, analítico, audaz y de lectura ágil, sin falsa \
+neutralidad ni sensacionalismo.
+
+## Ejes de revisión
+
+### 1. Redacción
+
+- Ortografía, tildes, puntuación, concordancia y sintaxis.
+- Frases largas, gerundios encadenados, repeticiones y muletillas.
+- Consistencia de nombres propios, cifras, fechas y siglas: la primera \
+mención de una sigla se desarrolla y luego se usa la forma corta.
+- Precisión y claridad para un lector chileno inteligente.
+
+### 2. Coherencia
+
+- El titular, la bajada y el cuerpo deben sostener la misma tesis.
+- La bajada amplía el titular con datos duros y no repite su idea ni sus \
+palabras; el lead desarrolla lo que ambos prometen y el cierre se deriva de \
+lo argumentado.
+- Progresión lógica entre secciones, transiciones explícitas y ausencia de \
+contradicciones o párrafos repetidos.
+- Cada dato conserva la atribución y el matiz con que fue escrito.
+
+### 3. Estilo y línea editorial
+
+- Crítica fundamentada, no consignas; firmeza sin inventar motivaciones, \
+datos ni culpabilidades.
+- Elimina clichés y muletillas periodísticas («revolucionario», «cambio de \
+juego», «sin precedentes», «impactante»).
+- Nada de clickbait engañoso ni de titulares que oculten al responsable.
+- No conviertas el análisis en una moraleja ni en un panfleto.
+
+## Reglas duras
+
+1. **No agregues hechos**: no introduzcas cifras, fechas, nombres, citas, \
+fuentes ni acusaciones que no estén en el texto recibido.
+2. **No borres datos verificables**: si una afirmación no está respaldada, \
+reformúlala con matices o atribución; no la elimines. Registra el ajuste en \
+`resumen_cambios`.
+3. **Conserva el ángulo aprobado** y la estructura: el mismo número de \
+secciones de nivel 2 y el mismo bloque de fuentes. Puedes corregir los \
+subtítulos, pero no agregar, fusionar ni quitar secciones.
+4. **El cuerpo no lleva H1, firma, bajada ni apéndice**: empieza en el lead y \
+termina en el bloque de fuentes. No incluyas el bloque de propuestas de \
+portada ni marcas internas `[art. N]`.
+5. **Conserva la extensión**: el cuerpo corregido debe mantener el volumen \
+del original; no resumas, no expandas y no agregues párrafos de relleno.
+6. **Titular y bajada**: mantén el enfoque elegido por portada y los largos \
+obligatorios —12 a 16 palabras el titular, 25 a 45 la bajada—. Corrige solo \
+lo necesario; no conviertas el titular en un resumen ni en clickbait.
+7. Si no hay nada que corregir, devuelve las tres piezas sin cambios.
+
+## Formato de salida obligatorio
+
+Responde únicamente con un objeto JSON, sin texto adicional ni bloques de \
+código Markdown:
+
+{
+  "titular": "...",
+  "bajada": "...",
+  "cuerpo": "...",
+  "resumen_cambios": "..."
+}
+
+`cuerpo` es Markdown: lead, secciones `##`, separador y bloque de fuentes. \
+`resumen_cambios` es una síntesis breve en español (máximo 400 caracteres) de \
+las correcciones aplicadas; déjalo vacío si no corregiste nada.
+"""
+
 
 def _build_main_topics_section(main_topics: list[str]) -> str:
     """Construye la sección de temas de interés prioritarios para el prompt.
@@ -838,6 +936,16 @@ def build_portada_system_prompt() -> str:
     return PORTADA_SYSTEM_PROMPT
 
 
+def build_editorial_review_system_prompt() -> str:
+    """Devuelve el system prompt del editor periodístico.
+
+    Returns:
+        str: Prompt con el rol de editor de cierre, los ejes de revisión y el
+        contrato JSON de las piezas corregidas.
+    """
+    return EDITORIAL_REVIEW_SYSTEM_PROMPT
+
+
 def build_portada_user_prompt(
     article_content: str,
     proposal: dict[str, Any] | None = None,
@@ -885,6 +993,80 @@ def build_portada_user_prompt(
                 "Redacta las tres propuestas siguiendo las reglas del system "
                 "prompt. Recuerda: el titular de cada propuesta debe tener "
                 "entre 12 y 16 palabras, y la bajada entre 25 y 45. Responde "
+                "solo con el objeto JSON, sin explicaciones."
+            ),
+        ]
+    )
+    return "\n".join(parts)
+
+
+def build_editorial_review_user_prompt(
+    headline: str,
+    deck: str,
+    body: str,
+    proposal: dict[str, Any] | None = None,
+) -> str:
+    """Construye el user prompt del editor periodístico.
+
+    Args:
+        headline: Titular seleccionado por el editor de portada.
+        deck: Bajada aplicada al artículo.
+        body: Cuerpo Markdown del artículo, desde el lead hasta las fuentes.
+        proposal: Propuesta de pauta aprobada, si se conoce. Aporta el eje
+            editorial que la revisión no debe alterar.
+
+    Returns:
+        str: Prompt de usuario con la propuesta, las tres piezas y el contrato
+        de salida.
+    """
+    parts: list[str] = []
+
+    proposal = proposal or {}
+    title = str(proposal.get("title", "")).strip()
+    enfoque = str(proposal.get("enfoque", "")).strip()
+    puntos = proposal.get("puntos") or []
+
+    if title or enfoque or puntos:
+        parts.append("## Propuesta aprobada (eje editorial)")
+        parts.append("")
+        if title:
+            parts.append(f"**Título sugerido:** {title}")
+        if enfoque:
+            parts.append(f"**Enfoque editorial:** {enfoque}")
+        if puntos:
+            parts.append("**Puntos clave:**")
+            for index, punto in enumerate(puntos, start=1):
+                parts.append(f"{index}. {punto}")
+        parts.append("")
+        parts.append(
+            "Este es el eje que el artículo debe sostener. Úsalo para revisar "
+            "coherencia y línea editorial, pero no reescribas el artículo ni "
+            "cambies su ángulo."
+        )
+        parts.append("")
+
+    parts.extend(
+        [
+            "## Titular seleccionado",
+            "",
+            headline.strip(),
+            "",
+            "## Bajada",
+            "",
+            deck.strip(),
+            "",
+            "## Cuerpo",
+            "",
+            body.strip(),
+            "",
+            "---",
+            "",
+            (
+                "Revisa las tres piezas y devuelve el objeto JSON con las "
+                "claves titular, bajada, cuerpo y resumen_cambios. El titular "
+                "debe tener entre 12 y 16 palabras; la bajada, entre 25 y 45. "
+                "El cuerpo debe conservar la estructura Markdown, el número "
+                "de secciones y el bloque de fuentes del original. Responde "
                 "solo con el objeto JSON, sin explicaciones."
             ),
         ]
