@@ -72,7 +72,8 @@ def _load_main_topics() -> list[str]:
         )
     else:
         logger.info(
-            "No se configuraron temas de interés prioritarios (MAIN_TOPICS)."
+            "No se configuraron temas de interés prioritarios (MAIN_TOPICS): "
+            "se aplicará el criterio de foco único y prioridad editorial."
         )
 
     return main_topics

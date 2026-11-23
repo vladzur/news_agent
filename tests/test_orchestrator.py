@@ -483,6 +483,34 @@ class TestRunPipeline:
         assert "genocidio en Gaza" in user_prompt
         assert "Agenda de seguridad" in user_prompt
 
+    def test_pipeline_without_main_topics_requests_single_focus(
+        self, mock_api_key, feeds_file, tmp_path, monkeypatch
+    ):
+        """Sin MAIN_TOPICS debe pedir foco único y prioridad editorial."""
+        monkeypatch.delenv("MAIN_TOPICS", raising=False)
+        raw_items = self._mock_raw_items()
+        llm_response = self._mock_llm_response()
+
+        with (
+            patch("news_agent.orchestrator.fetch_all", return_value=raw_items),
+            patch("news_agent.orchestrator.enrich_items") as mock_enrich,
+            patch("news_agent.orchestrator.LLMClient") as mock_client_class,
+        ):
+            mock_enrich.return_value = raw_items
+            mock_client = Mock()
+            mock_client.generate_report.return_value = llm_response
+            mock_client_class.return_value = mock_client
+
+            run_pipeline(
+                feeds_path=feeds_file,
+                output_dir=tmp_path,
+            )
+
+        system_prompt, user_prompt = mock_client.generate_report.call_args[0]
+        assert "Criterio de foco temático" in system_prompt
+        assert "Foco temático único" in user_prompt
+        assert "Villarrica" in user_prompt
+
     def test_invalid_main_topics_exits_with_error(
         self, mock_api_key, feeds_file, monkeypatch
     ):

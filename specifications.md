@@ -63,11 +63,15 @@ Automatizar la recopilación, filtrado y análisis de la agenda noticiosa nacion
 
 El agente debe ceñirse estrictamente al perfil de identidad de *La Chispa Sur*:
 
-- **Tono:** Incisivo, analítico, audaz y de lectura ágil. No debe limitarse a replicar titulares del *mainstream*; su valor radica en **conectar puntos ocultos**, encontrar contradicciones o proponer enfoques de fondo (ensayo, reportaje o columnas de opinión).
+- **Tono:** Incisivo, analítico, audaz y de lectura ágil. No debe limitarse a replicar titulares del *mainstream*; su valor radica en **conectar puntos ocultos entre noticias que comparten un mismo eje**, encontrar contradicciones o proponer enfoques de fondo (ensayo, reportaje o columnas de opinión), sin forzar cruces entre hechos sin relación directa.
   
 - **Restricción de Volumen:** El agente debe entregar **exactamente cinco (5) propuestas** por informe: **tres (3) de ámbito nacional** y **dos (2) de ámbito internacional**, estas últimas con énfasis en hechos que conmocionan al mundo, pueblos oprimidos y políticas imperialistas que afectan la estabilidad mundial. Ni más, ni menos.
 
 - **Excepción por temas prioritarios (`MAIN_TOPICS`):** cuando la variable de entorno `MAIN_TOPICS` está definida con un array JSON de temas, esos temas tienen prioridad sobre la distribución geográfica 3/2. La cantidad total sigue siendo cinco, pero la proporción entre propuestas nacionales e internacionales puede ajustarse para cubrirlos. Si no hay material suficiente para un tema prioritario, se marca «Requiere investigación adicional» en lugar de inventar contenido.
+
+- **Criterio de foco sin `MAIN_TOPICS`:** cuando la variable no está definida o está vacía, cada propuesta debe girar en torno a un solo eje temático, territorial, institucional o de conflicto, y solo puede relacionar hechos con conexión directa y verificable (misma política, actor, territorio, institución o causa estructural). Se prohíbe agrupar noticias de coyunturas distintas para forzar un cruce. En este modo se priorizan los ejes de la línea editorial de La Chispa Sur: derechos sociales, laborales y territoriales; crítica al neoliberalismo y al extractivismo; pueblos originarios y conflictos territoriales; derechos humanos y memoria; medio ambiente; salud, educación y vivienda; foco en Villarrica y La Araucanía; y, en lo internacional, pueblos oprimidos y políticas imperialistas.
+
+- **Foco único en la redacción de notas:** el artículo completo desarrolla exclusivamente el eje de la propuesta aprobada. No incorpora material de origen de otros temas ni fuerza conexiones para unirlo; si el material disponible no respalda el eje, lo descarta.
   
 
 ## 4. Formato de Salida Requerido (Output Schema)

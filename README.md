@@ -36,7 +36,7 @@ Toma una propuesta específica de la pauta (1 a 5) y la expande a un artículo d
    - Enriquece los artículos emparejados con contenido completo forzando extracción vía `trafilatura` si es necesario.
    - Guarda un archivo **companion JSON** (`pauta_semanal_AAAA_MM_DD_companion.json`) con el contenido completo de cada artículo fuente.
 3. **Prompt enriquecido** — El redactor recibe una sección `## Material de origen disponible` con el contenido completo de los artículos fuente correctos para su propuesta, permitiéndole escribir con datos verificables en lugar de inventar o depender de memoria.
-4. **Redacción del artículo** — Usa un system prompt de redactor periodístico (identidad La Chispa Sur) que exige trazabilidad de cada dato a las fuentes proporcionadas.
+4. **Redacción del artículo** — Usa un system prompt de redactor periodístico (identidad La Chispa Sur) que exige trazabilidad de cada dato a las fuentes proporcionadas y **foco editorial único**: desarrolla solo el eje de la propuesta aprobada, descarta el material de origen que trate otros temas y no fuerza conexiones para unirlo.
 5. **Editor de portada** — Una segunda llamada, con rol de editor de portada, devuelve **tres propuestas diferenciadas** de titular y bajada: denuncia/tesis política, narrativo/humano y analítico/geopolítico. Los largos se validan en código (12-16 palabras el titular, 25-45 la bajada): si el modelo se desvía se reintenta una vez y, si vuelve a fallar, solo se recortan los textos que exceden el máximo; los que quedan cortos se conservan con una advertencia en el log. La **propuesta 1 se aplica** como titular y bajada del artículo; las tres quedan en un apéndice `## 📰 Propuestas de portada` al final del archivo para cambiarlas sin repetir la generación. Si esta etapa falla, la nota se guarda igual con el titular del redactor.
 6. **Artículo final** — Titular y bajada de portada, lead, desarrollo por secciones con subtítulos, fuentes citadas y el apéndice de propuestas. Guardado como `articulo_N_slug-del-titulo.md`. El apéndice está marcado como no publicable y el parser de RRSS lo excluye del material de origen.
 
@@ -301,7 +301,9 @@ Puedes acotar el foco de la pauta definiendo la variable de entorno `MAIN_TOPICS
 MAIN_TOPICS=["genocidio en Gaza", "Agenda de seguridad", "Retrocesos laborales"]
 ```
 
-Cuando está definida, el agente **prioriza estos temas** en la selección de las cinco propuestas, con **prioridad absoluta sobre la distribución 3 nacionales / 2 internacionales** (que puede flexibilizarse para cubrir un tema prioritario). No es un filtro estricto: si no hay material suficiente para un tema, el agente puede cubrir otro de alto impacto o marcar "Requiere investigación adicional". Si la variable no está definida o está vacía, el agente mantiene su comportamiento habitual.
+Cuando está definida, el agente **prioriza estos temas** en la selección de las cinco propuestas, con **prioridad absoluta sobre la distribución 3 nacionales / 2 internacionales** (que puede flexibilizarse para cubrir un tema prioritario). No es un filtro estricto: si no hay material suficiente para un tema, el agente puede cubrir otro de alto impacto o marcar "Requiere investigación adicional".
+
+Si la variable no está definida o está vacía, el agente aplica el **criterio de foco único**: cada propuesta debe girar en torno a un solo eje temático, territorial, institucional o de conflicto, con conexión directa y verificable entre los hechos. No se permite agrupar noticias de coyunturas distintas para forzar un cruce. En ese modo, la selección prioriza los ejes de la línea editorial de La Chispa Sur: derechos sociales, laborales y territoriales; crítica al neoliberalismo y al extractivismo; pueblos originarios y conflictos territoriales; derechos humanos y memoria; medio ambiente; salud, educación y vivienda; foco en Villarrica y La Araucanía; y, en lo internacional, pueblos oprimidos y políticas imperialistas.
 
 ### 4. Configurar fuentes
 
