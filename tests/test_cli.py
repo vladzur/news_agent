@@ -121,6 +121,39 @@ def _article_result(tmp_path: Path) -> dict[str, Any]:
     }
 
 
+def _cover_result(tmp_path: Path) -> dict[str, Any]:
+    """Resultado simulado de ``run_cover``."""
+    bundle = tmp_path / "portadas" / "2026_09_23_titular"
+    return {
+        "bundle_dir": bundle,
+        "title": "Titular",
+        "category": "Nacional",
+        "treatment": "text_first",
+        "treatment_label": "Editorial tipográfica",
+        "formats": [
+            {
+                "name": "og",
+                "width": 1200,
+                "height": 630,
+                "path": bundle / "portada_og.png",
+                "error": None,
+            },
+            {
+                "name": "web",
+                "width": 1600,
+                "height": 900,
+                "path": bundle / "portada_web.png",
+                "error": None,
+            },
+        ],
+        "metadata_path": bundle / "portada.json",
+        "alt_text": "Alt de prueba",
+        "warnings": [],
+        "skipped": False,
+        "failed_count": 0,
+    }
+
+
 def _social_result(tmp_path: Path) -> dict[str, Any]:
     """Resultado simulado de ``run_socialize``."""
     bundle = tmp_path / "social" / "2026_09_23_titular"
@@ -207,10 +240,11 @@ def _must_not_be_called(**kwargs: Any) -> dict[str, Any]:
 class TestParser:
     """Estructura de los subcomandos."""
 
-    def test_exposes_six_commands(self):
+    def test_exposes_seven_commands(self):
         assert cli.COMMANDS == (
             "report",
             "article",
+            "cover",
             "social",
             "print",
             "all",
@@ -236,6 +270,56 @@ class TestParser:
         assert args.number is None
         assert args.output == "articulos"
         assert args.skip_review is False
+
+    def test_cover_defaults(self):
+        args = build_cli_parser().parse_args(["cover"])
+
+        assert args.article is None
+        assert args.articles_dir == "articulos"
+        assert args.all_articles is False
+        assert args.select is False
+        assert args.output == "portadas"
+        assert args.category is None
+        assert args.treatment == "auto"
+        assert args.cover_config is None
+        assert args.force is False
+
+    def test_cover_parses_the_source_selection_flags(self):
+        args = build_cli_parser().parse_args(["cover", "--all"])
+
+        assert args.all_articles is True
+        assert args.select is False
+
+        args = build_cli_parser().parse_args(
+            ["cover", "--select", "--articles-dir", "otras"]
+        )
+
+        assert args.select is True
+        assert args.articles_dir == "otras"
+
+    def test_cover_source_options_are_mutually_exclusive(self):
+        with pytest.raises(SystemExit) as excinfo:
+            build_cli_parser().parse_args(
+                ["cover", "--article", "articulos/a.md", "--all"]
+            )
+
+        assert excinfo.value.code == 2
+
+    def test_cover_parses_section_treatment_and_force(self):
+        args = build_cli_parser().parse_args(
+            [
+                "cover",
+                "--category",
+                "Opinión",
+                "--treatment",
+                "quote",
+                "--force",
+            ]
+        )
+
+        assert args.category == "Opinión"
+        assert args.treatment == "quote"
+        assert args.force is True
 
     def test_social_defaults(self):
         args = build_cli_parser().parse_args(["social"])
@@ -280,6 +364,7 @@ class TestParser:
         assert args.platforms is None
         assert args.debug is False
         assert args.skip_review is False
+        assert args.skip_covers is False
 
     def test_all_accepts_the_full_edition_flag(self):
         args = build_cli_parser().parse_args(["all", "--all-articles"])
@@ -342,7 +427,7 @@ class TestParser:
         assert excinfo.value.code == 2
 
     @pytest.mark.parametrize(
-        "command", ["report", "article", "social", "all", "clean"]
+        "command", ["report", "article", "cover", "social", "all", "clean"]
     )
     def test_every_command_has_a_handler(self, command):
         args = build_cli_parser().parse_args([command])
@@ -997,6 +1082,7 @@ class TestAllCommand:
             "order": [],
             "article_calls": [],
             "article_results": [],
+            "cover_calls": [],
             "social_calls": [],
         }
         report = _report_result(tmp_path)
@@ -1022,6 +1108,12 @@ class TestAllCommand:
             calls["article_result"] = article
             return article
 
+        def _fake_cover(**kwargs: Any) -> dict[str, Any]:
+            calls["order"].append("cover")
+            calls["cover"] = kwargs
+            calls["cover_calls"].append(kwargs)
+            return _cover_result(tmp_path)
+
         def _fake_socialize(**kwargs: Any) -> dict[str, Any]:
             calls["order"].append("social")
             calls["social"] = kwargs
@@ -1036,22 +1128,32 @@ class TestAllCommand:
         monkeypatch.setattr(cli, "run_pipeline", _fake_pipeline)
         monkeypatch.setattr(cli, "write_article", _fake_write)
         monkeypatch.setattr(
+            "news_agent.cover.orchestrator.run_cover", _fake_cover
+        )
+        monkeypatch.setattr(
             "news_agent.social.orchestrator.run_socialize", _fake_socialize
         )
         monkeypatch.setattr(cli, "run_print", _fake_print)
 
         calls["report_result"] = report
         calls["write_article"] = _fake_write
+        calls["cover"] = _fake_cover
         calls["socialize"] = _fake_socialize
         return calls
 
-    def test_runs_the_four_steps_in_order(self, tmp_path, steps, capsys):
+    def test_runs_the_five_steps_in_order(self, tmp_path, steps, capsys):
         main(["all", "--base", str(tmp_path), "--number", "1"])
 
-        assert steps["order"] == ["report", "article", "social", "print"]
+        assert steps["order"] == [
+            "report",
+            "article",
+            "cover",
+            "social",
+            "print",
+        ]
         output = capsys.readouterr().out
-        assert "Paso 1/4" in output
-        assert "Paso 4/4" in output
+        assert "Paso 1/5" in output
+        assert "Paso 5/5" in output
         assert "Secuencia completa finalizada" in output
 
     def test_chains_the_generated_artifacts(self, tmp_path, steps):
@@ -1062,15 +1164,20 @@ class TestAllCommand:
             == steps["report_result"]["report_path"]
         )
         assert (
+            steps["cover"]["article_path"]
+            == steps["article_result"]["article_path"]
+        )
+        assert (
             steps["social"]["article_path"]
             == steps["article_result"]["article_path"]
         )
 
-    def test_creates_the_three_output_directories(self, tmp_path, steps):
+    def test_creates_the_four_output_directories(self, tmp_path, steps):
         main(["all", "--base", str(tmp_path), "--number", "1"])
 
         assert (tmp_path / "reportes").is_dir()
         assert (tmp_path / "articulos").is_dir()
+        assert (tmp_path / "portadas").is_dir()
         assert (tmp_path / "social").is_dir()
 
     def test_uses_the_requested_proposal_number(self, tmp_path, steps):
@@ -1175,7 +1282,13 @@ class TestAllCommand:
         assert [
             call["article_number"] for call in steps["article_calls"]
         ] == [1, 2, 3, 4, 5]
+        assert len(steps["cover_calls"]) == 5
         assert len(steps["social_calls"]) == 5
+        assert [
+            call["article_path"] for call in steps["cover_calls"]
+        ] == [
+            result["article_path"] for result in steps["article_results"]
+        ]
         assert [
             call["article_path"] for call in steps["social_calls"]
         ] == [
@@ -1184,9 +1297,11 @@ class TestAllCommand:
         assert steps["order"].count("print") == 1
 
         output = capsys.readouterr().out
-        assert "Paso 2/4" in output
+        assert "Paso 2/5" in output
+        assert "Paso 3/5" in output
         assert "Resumen de la edición completa" in output
         assert "Notas escritas: 5/5" in output
+        assert "Portadas editoriales: 5/5" in output
         assert "Bundles de RRSS: 5/5" in output
         assert "Edición completa finalizada" in output
 
@@ -1218,6 +1333,7 @@ class TestAllCommand:
         assert [
             call["article_number"] for call in steps["article_calls"]
         ] == [1, 2, 4, 5]
+        assert len(steps["cover_calls"]) == 4
         assert len(steps["social_calls"]) == 4
         assert steps["order"].count("print") == 1
         assert "incidencias" in capsys.readouterr().err
@@ -1242,9 +1358,52 @@ class TestAllCommand:
 
         assert excinfo.value.code == 1
         assert len(steps["article_calls"]) == 5
+        assert len(steps["cover_calls"]) == 5
         assert len(steps["social_calls"]) == 4
         assert steps["order"].count("print") == 1
         assert "incidencias" in capsys.readouterr().err
+
+    def test_all_articles_continues_after_a_failed_cover(
+        self, tmp_path, steps, monkeypatch, capsys
+    ):
+        original = steps["cover"]
+        failed_path = tmp_path / "articulos" / "articulo_2_titular.md"
+
+        def _flaky(**kwargs: Any) -> dict[str, Any]:
+            if kwargs["article_path"] == failed_path:
+                raise SystemExit(1)
+            return original(**kwargs)
+
+        monkeypatch.setattr(
+            "news_agent.cover.orchestrator.run_cover", _flaky
+        )
+
+        with pytest.raises(SystemExit) as excinfo:
+            main(["all", "--base", str(tmp_path), "--all-articles"])
+
+        assert excinfo.value.code == 1
+        assert len(steps["cover_calls"]) == 4
+        assert len(steps["social_calls"]) == 5
+        assert steps["order"].count("print") == 1
+        assert "incidencias" in capsys.readouterr().err
+
+    def test_can_skip_the_covers(self, tmp_path, steps, capsys):
+        main(
+            [
+                "all",
+                "--base",
+                str(tmp_path),
+                "--number",
+                "1",
+                "--skip-covers",
+            ]
+        )
+
+        assert steps["cover_calls"] == []
+        assert steps["order"] == ["report", "article", "social", "print"]
+        output = capsys.readouterr().out
+        assert "portada editorial omitida" in output
+        assert "Paso 3/5" in output
 
     def test_all_articles_skips_social_when_no_article_can_be_written(
         self, tmp_path, steps, monkeypatch, capsys
@@ -1258,6 +1417,7 @@ class TestAllCommand:
             main(["all", "--base", str(tmp_path), "--all-articles"])
 
         assert excinfo.value.code == 1
+        assert steps["cover_calls"] == []
         assert steps["social_calls"] == []
         assert steps["order"].count("print") == 1
         err = capsys.readouterr().err

@@ -65,6 +65,16 @@ _FONT_SIZES: dict[str, tuple[int, int]] = {
     "signature_name": (76, 40),
     "signature_body": (36, 20),
     "signature_web": (54, 28),
+    # Roles propios de las portadas editoriales para notas sin imagen. Se
+    # declaran aquí para que las portadas compartan la tabla tipográfica y el
+    # ajuste automático de los banners en lugar de duplicar tamaños.
+    "cover_kicker": (30, 16),
+    "cover_title": (112, 56),
+    "cover_deck": (36, 20),
+    "cover_quote": (76, 34),
+    "cover_figure": (190, 80),
+    "cover_caption": (32, 18),
+    "cover_byline": (26, 14),
 }
 
 # Roles que se resuelven con una fuente en negrita
@@ -76,6 +86,10 @@ _BOLD_ROLES = frozenset(
         "attribution",
         "signature_name",
         "signature_web",
+        "cover_kicker",
+        "cover_title",
+        "cover_quote",
+        "cover_figure",
     }
 )
 

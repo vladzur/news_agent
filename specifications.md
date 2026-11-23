@@ -287,7 +287,7 @@ Un color mal escrito, una clave de color faltante, un tamaño inválido, una sec
 
 ### 7.1. Objetivo
 
-El motor se opera desde un CLI por subcomandos que reduce la ejecución de cada flujo a un solo comando y encadena los cuatro pasos del proceso editorial cuando se quiere de punta a punta: pauta, una o todas las notas, redes sociales de cada nota y tríptico impreso. Los modos clásicos por banderas se conservan para los scripts y cron ya desplegados.
+El motor se opera desde un CLI por subcomandos que reduce la ejecución de cada flujo a un solo comando y encadena los cinco pasos del proceso editorial cuando se quiere de punta a punta: pauta, una o todas las notas, portadas editoriales, redes sociales de cada nota y tríptico impreso. Los modos clásicos por banderas se conservan para los scripts y cron ya desplegados.
 
 ### 7.2. Subcomandos
 
@@ -295,33 +295,35 @@ El motor se opera desde un CLI por subcomandos que reduce la ejecución de cada 
 |---------|-----------------|----------|------------|
 | `report` | Genera la pauta editorial semanal | `--feeds`, `--output`, `--debug` | `reportes/pauta_semanal_AAAA_MM_DD.md` y su companion JSON |
 | `article` | Escribe una nota desde una propuesta | `--pauta`, `-n/--number`, `--output`, `--skip-review` | `articulos/articulo_N_AAAA_MM_DD_slug.md` |
+| `cover` | Portada editorial de notas sin imagen | `--article`, `--articles-dir`, `--all`, `--select`, `--output`, `--category`, `--treatment`, `--cover-config`, `--force` | `portadas/AAAA_MM_DD_slug/` con `portada_web.png`, `portada_og.png` y `portada.json` |
 | `social` | Repurposing para redes sociales | `--article`, `--articles-dir`, `--all`, `--select`, `--output`, `--platforms`, `--social-config`, `--skip-banners`, `--skip-prompts` | `social/AAAA_MM_DD_slug/` con copys, prompts, Markdown y banners |
 | `print` | Tríptico impreso de la semana | `--pauta`, `--output`, `--triptych-config` | `impresos/AAAA_MM_DD_pauta-semanal/` con el tríptico en JSON, el Markdown panel por panel y el manifiesto |
-| `all` | Secuencia completa, con una nota o la edición entera | `--feeds`, `--base`, `-n/--number`, `--all-articles`, `--skip-review`, opciones sociales, `--triptych-config` y `--debug` | Los cuatro anteriores; con `--all-articles`, una nota y un bundle de RRSS por propuesta |
-| `clean` | Limpieza de artefactos antiguos | `--base`, `--target`, `--days`, `--dry-run`, `--yes` | Elimina archivos y bundles |
+| `all` | Secuencia completa, con una nota o la edición entera | `--feeds`, `--base`, `-n/--number`, `--all-articles`, `--skip-review`, `--skip-covers`, opciones sociales, `--triptych-config` y `--debug` | Los cinco anteriores; con `--all-articles`, una nota, una portada y un bundle de RRSS por propuesta |
+| `clean` | Limpieza de artefactos antiguos | `--base`, `--target`, `--days`, `--dry-run`, `--yes` | Elimina archivos y bundles de `reportes/`, `articulos/`, `social/` y `portadas/` |
 
 Todos los comandos aceptan `--verbose`. En `clean` la bandera se acepta por uniformidad del parser, pero todavía no cambia el nivel de logging.
 
 ### 7.3. Comando secuencial `all`
 
-Ejecuta, en orden y dentro de una misma invocación: la generación de la pauta, la escritura de una nota o de todas las propuestas, el bundle de redes sociales de cada nota y el tríptico impreso. La pauta y las notas recién generadas se pasan como entrada al paso siguiente, sin intervención manual.
+Ejecuta, en orden y dentro de una misma invocación: la generación de la pauta, la escritura de una nota o de todas las propuestas, la portada editorial de cada nota, el bundle de redes sociales de cada nota y el tríptico impreso. La pauta y las notas recién generadas se pasan como entrada al paso siguiente, sin intervención manual.
 
-- **Modo de una nota** (`--number N`): escribe esa propuesta, genera su bundle de RRSS y arma el tríptico. Un fallo en cualquiera de las etapas detiene la ejecución con su código de error.
-- **Edición completa** (`--all-articles`): lee las propuestas reales de la pauta, escribe una nota por cada una y genera un bundle de RRSS por nota. Si una nota o un bundle social falla, se informa y se continúa con los demás; el tríptico se arma igualmente desde la pauta. Al final se muestra un resumen y se sale con código 1 si hubo incidencias. No pregunta por la terminal, así que es el modo recomendado para cron.
+- **Modo de una nota** (`--number N`): escribe esa propuesta, genera su portada editorial, genera su bundle de RRSS y arma el tríptico. Un fallo en cualquiera de las etapas detiene la ejecución con su código de error. Con `--skip-covers` se omite solo la portada.
+- **Edición completa** (`--all-articles`): lee las propuestas reales de la pauta, escribe una nota por cada una, genera una portada y un bundle de RRSS por nota. Si una nota, una portada o un bundle social falla, se informa y se continúa con los demás; el tríptico se arma igualmente desde la pauta. Al final se muestra un resumen con notas, portadas y bundles, y se sale con código 1 si hubo incidencias. No pregunta por la terminal, así que es el modo recomendado para cron.
+- La portada de cada nota se deduce del número editorial (1–3 `Nacional`, 4–5 `Internacional`) y usa el tratamiento automático; para forzar una sección o un tratamiento se usa el subcomando `cover` por separado.
 - El tríptico se arma desde la pauta del primer paso, así que no depende de las notas generadas.
 
 ### 7.4. Entradas implícitas y directorio de salida
 
 - **Pauta:** si `article` no recibe `--pauta`, toma la más reciente de `reportes/`. El orden lo da el nombre, que incluye la fecha (`AAAA_MM_DD`).
-- **Artículo:** si `social` no recibe `--article` ni usa `--all`/`--select`, toma el de fecha de modificación más reciente del directorio indicado por `--articles-dir` (`articulos/` por defecto). La fecha del nombre identifica el día de la edición y no desempata varias notas generadas el mismo día; por eso el criterio sigue siendo la modificación.
+- **Artículo:** si `social` o `cover` no reciben `--article` ni usan `--all`/`--select`, toman el de fecha de modificación más reciente del directorio indicado por `--articles-dir` (`articulos/` por defecto). La fecha del nombre identifica el día de la edición y no desempata varias notas generadas el mismo día; por eso el criterio sigue siendo la modificación.
 - **Propuesta:** si `article` o `all` no reciben `-n/--number`, muestran los cinco titulares y preguntan cuál desarrollar. Sin terminal interactiva (por ejemplo en un cron) la ejecución falla con código 2 y un mensaje que pide `--number` o `--all-articles`, en lugar de quedar esperando una respuesta que nunca llegará. `all` valida el modo de edición y `--platforms` antes de generar la pauta. `--all-articles` es excluyente con `--number` y no requiere terminal.
 - **Pauta del tríptico:** si `print` no recibe `--pauta`, toma la más reciente de `reportes/`. El tríptico no pide número de propuesta: cubre las cinco, así que `-n` no aplica.
-- **Directorio de salida:** si no se indica `--output`, cada flujo usa su carpeta por defecto (`reportes/`, `articulos/`, `social/` o `impresos/`) y la crea si no existe. Una ruta que apunte al directorio actual se rechaza con error de uso, en los subcomandos y también en los modos clásicos.
+- **Directorio de salida:** si no se indica `--output`, cada flujo usa su carpeta por defecto (`reportes/`, `articulos/`, `portadas/`, `social/` o `impresos/`) y la crea si no existe. Una ruta que apunte al directorio actual se rechaza con error de uso, en los subcomandos y también en los modos clásicos.
 - **Sin argumentos:** `python -m news_agent` no ejecuta ningún flujo. Muestra la ayuda y sale con código 2, porque el modo clásico por defecto consumiría tokens de la API y escribiría en el directorio actual sin que el usuario lo haya pedido. Los cron deben indicar el flujo y la salida explícitamente.
 
 ### 7.5. Limpieza de artefactos (`clean`)
 
-- **Alcance:** solo los artefactos propios de la herramienta, declarados como patrones en `news_agent/cleanup.py`: pautas y companion JSON de `reportes/`, notas de `articulos/` y bundles de `social/`.
+- **Alcance:** solo los artefactos propios de la herramienta, declarados como patrones en `news_agent/cleanup.py`: pautas y companion JSON de `reportes/`, notas de `articulos/`, bundles de `social/` y bundles de portadas de `portadas/`.
 - **Fuera de alcance:** los bundles de `impresos/` todavía no son un objetivo de `clean`. Se limpian a mano hasta que se agregue su patrón.
 - **Nunca se elimina** la caché de contenido (`cache/`) ni los recursos de la marca (`assets/`): ninguna entrada fuera de los patrones declarados se considera, aunque sea antigua.
 - **Fecha de referencia:** la fecha codificada en el nombre cuando existe (pautas, bundles y notas nuevas) y, cuando no (las notas antiguas), la fecha de modificación. La fecha del nombre es la fuente fiable: al clonar o copiar el repositorio, todos los archivos quedan con la fecha de la copia.
@@ -335,8 +337,8 @@ Ejecuta, en orden y dentro de una misma invocación: la generación de la pauta,
 |--------|-----------------|
 | `__main__.py` | Punto de entrada: distingue los subcomandos de los modos clásicos por banderas |
 | `cli.py` | Parser de subcomandos, localización de entradas recientes, selección interactiva y handlers |
-| `cleanup.py` | Detección y borrado de artefactos antiguos |
-| `config.py` | Directorios de salida por defecto (`reportes/`, `articulos/`, `social/`, `impresos/`) y umbral de limpieza |
+| `cleanup.py` | Detección y borrado de artefactos antiguos de `reportes/`, `articulos/`, `social/` y `portadas/` |
+| `config.py` | Directorios de salida por defecto (`reportes/`, `articulos/`, `portadas/`, `social/`, `impresos/`), validación de la configuración visual y umbral de limpieza |
 
 > **¿Por qué el subcomando se reconoce solo en la primera posición?** Los modos clásicos siempre empiezan con una bandera, así que exigir que el nombre del comando vaya primero evita que un valor que coincida con un comando (por ejemplo `--output social`) se interprete como una invocación del subcomando `social`.
 
@@ -345,8 +347,8 @@ Ejecuta, en orden y dentro de una misma invocación: la generación de la pauta,
 | Código | Significado |
 |:------:|-------------|
 | `0` | Ejecución exitosa (o nada que procesar, sin invocar a la API) |
-| `1` | Error de ejecución: configuración, API, pauta imposible de parsear, artefacto de entrada inexistente, fallos parciales de la edición completa o fallos parciales al eliminar artefactos |
-| `2` | Error de uso: comando desconocido, opción inválida, plataforma desconocida, `--select` sin terminal interactiva, falta `--number` sin terminal y sin `--all-articles`, combinación inválida de `--number` con `--all-articles`, combinación inválida de `--write-article`/`--article`, `clean` sin terminal para confirmar o `--days` no positivo |
+| `1` | Error de ejecución: configuración, API, pauta imposible de parsear, artefacto de entrada inexistente, fallo de una portada, fallos parciales de la edición completa o fallos parciales al eliminar artefactos |
+| `2` | Error de uso: comando desconocido, opción inválida, plataforma desconocida, sección o tratamiento de portada inexistente, `--select` sin terminal interactiva, falta `--number` sin terminal y sin `--all-articles`, combinación inválida de `--number` con `--all-articles`, combinación inválida de `--write-article`/`--article`, `clean` sin terminal para confirmar o `--days` no positivo |
 | `130` | Interrupción con Ctrl+C |
 
 ## 8. Subsistema de Tríptico Impreso
@@ -475,3 +477,106 @@ Una medida negativa, un margen que se coma la hoja, un pliegue desconocido, una 
 | `writer.py` | Escribe el bundle y su manifiesto, y redacta el Markdown por panel |
 
 Reutiliza `article_writer.parse_pauta_file`, `source_references.load_companion_data`, `social.json_utils.extract_json_object` y `config.load_triptych_config`. No depende de Pillow: el tríptico se entrega como texto.
+
+## 9. Subsistema de Portadas Editoriales
+
+### 9.1. Objetivo
+
+Resolver la publicación de notas que no tienen una fotografía de cabecera sin dejar un hueco visual ni exigir producción gráfica manual. El subsistema genera, de forma determinista y con Pillow, dos piezas por artículo —una 16:9 para el sitio y otra 1200×630 para `og:image`— y un manifiesto con la sección, el tratamiento y el texto alternativo. No interviene ningún LLM: el titular, la bajada, la cita y la cifra ya están en el artículo.
+
+La implementación adopta el enfoque híbrido del documento de diseño: la jerarquía tipográfica (*text-first*) es la base, la cita destacada cubre las columnas de opinión y el dato duro cubre las notas de fiscalización. El catálogo de ilustraciones vectoriales y la grilla asimétrica del frontend quedan fuera del agente.
+
+### 9.2. Entrada
+
+- **Artículo:** `articulos/articulo_N_AAAA_MM_DD_slug.md`, parseado con `social.article_source.parse_article_file`. De ahí se toman el titular, la firma, el lead, las secciones, los párrafos, las citas candidatas y las cifras.
+- **Bajada:** la propuesta de portada aplicada en el apéndice (`**Bajada:**`); si no existe, la primera línea en cursiva del cuerpo; si tampoco, la primera oración del lead.
+- **Cita:** la primera candidata del parser de RRSS, limpiada de comillas envolventes y atribuciones (`", sostuvo."`).
+- **Cifra:** extracción propia de portadas, más amplia que la de RRSS. Reconoce montos, porcentajes y números con unidades editoriales (páginas, condenados, casos, votos, capítulos, decretos, años, etc.) y descarta fragmentos como los minutos de `16:00 horas`.
+- **Leyenda:** la oración autocontenida más corta que contiene la cifra; si no existe, la bajada.
+- **Sección:** `--category` si se indicó; si no, el número editorial (1–3 `Nacional`, 4–5 `Internacional`); si no hay número, `covers.default_category` (`Actualidad`).
+
+### 9.3. Tratamientos
+
+| Tratamiento | Cuándo se elige | Composición |
+|-------------|-----------------|-------------|
+| `text_first` | Base y respaldo de los demás | Barra de acento, sección, titular grande, regla, bajada, firma y pie |
+| `quote` | Sección `Opinión` con cita utilizable | Titular breve arriba, comilla de acento, cita en serif, firma con marca circular y pie |
+| `data` | Cifra en el titular o en las dos primeras oraciones del lead | Titular breve arriba, cifra gigante con barra de acento, leyenda y pie |
+
+La precedencia es: `Opinión` → `quote`; cifra "fuerte" → `data`; en cualquier otro caso → `text_first`. Un tratamiento pedido con `--treatment` se respeta, salvo que falte la materia prima: en ese caso se cae a `text_first` y se registra una advertencia. La etiqueta legible de cada tratamiento viaja en el manifiesto (`treatment_label`).
+
+### 9.4. Formatos y diseño
+
+| Formato | Tamaño | Uso |
+|---------|--------|-----|
+| `web` | 1600×900 (16:9) | Cabecera del artículo y tarjetas de la portada |
+| `og` | 1200×630 | `og:image` para WhatsApp, X y Facebook |
+
+El diseño se parametriza por el ancho de la pieza (`COVER_BASE_WIDTH = 1600`), de modo que una sola implementación sirve para ambos formatos. Los elementos comunes son la barra superior de acento, la etiqueta de sección con tracking, el logo arriba a la derecha, el patrón radial de "chispa" de bajo contraste y el pie con firma, sitio y handle.
+
+La taxonomía y su acento viven en `config.py` y se replican en `social_config.json`:
+
+| Sección | Acento |
+|---------|--------|
+| Actualidad | `#DF3224` |
+| Nacional | `#4C7FB8` |
+| Internacional | `#2C9C9C` |
+| Regional | `#48A868` |
+| Política | `#C9873A` |
+| Cultura | `#9B7BD4` |
+| Opinión | `#F2C14E` |
+
+El fondo se tiñe con el acento de la sección. Si queda demasiado claro, se vuelve al fondo de marca. Si el acento no alcanza 3:1 contra el fondo, se aclara; si el gris apagado no alcanza 4,5:1, se aclara también. Cada ajuste se registra en `warnings`.
+
+### 9.5. Contrato de salida
+
+```
+portadas/AAAA_MM_DD_slug/
+├── portada_web.png
+├── portada_og.png
+└── portada.json
+```
+
+`portada.json` contiene: `title`, `category`, `treatment`, `treatment_label`, `deck`, `quote`, `figure`, `caption`, `byline`, `alt_text`, `header_image`, `og_image`, `source_path`, `source_sha256`, `generated_at`, `formats` y `warnings`. `formats` es una lista de `{name, width, height, path, error}`; una pieza que falla queda con `path: null` y su error, sin impedir que se guarde la otra.
+
+La huella `source_sha256`, junto con `category` y `treatment`, determina la idempotencia: `cover --all` omite el renderizado cuando el manifiesto existente coincide; `--force` lo regenera.
+
+### 9.6. Configuración externa
+
+La sección opcional `covers` de `social_config.json` se valida al cargar con `load_cover_config`:
+
+| Sección | Contenido | Obligatoria |
+|---------|-----------|:-----------:|
+| `categories` | Etiqueta y acento por sección; se fusiona con la taxonomía por defecto | ❌ |
+| `formats` | Tamaño y nombre de archivo de `og` y `web` | ❌ |
+| `limits` | Topes de titular, bajada, cita, cifra, leyenda y líneas de leyenda | ❌ |
+| `default_category` | Sección de respaldo | ❌ |
+| `proposal_categories` | Sección por propuesta; debe tener cinco entradas | ❌ |
+| `texture` | Intensidad del patrón, entre 0 y 0.5 | ❌ |
+
+Si la sección no existe, se usan los defaults del código. La marca (`brand`) sigue siendo obligatoria porque aporta la paleta, las tipografías y el logo. Un acento no hexadecimal, un formato desconocido, un tamaño no positivo, un nombre de archivo con ruta, un límite no positivo, una textura fuera de rango o una categoría inexistente se rechazan con un mensaje que nombra el campo culpable.
+
+### 9.7. Política de errores
+
+- **Configuración inválida o artículo ilegible** → error fatal, sin bundle a medias.
+- **Sección o tratamiento inexistente** → error de uso (código 2).
+- **Un formato falla** → el otro se guarda y el manifiesto registra el error; el comando termina con código 1.
+- **Ningún formato se renderiza** → se aborta sin escribir un manifiesto incompleto.
+- **Sin fuente serif, sin logo o con poco contraste** → se usa la sans en negrita, se compone sin logo o se aclara el color; siempre se advierte y nunca se bloquea la generación.
+- **Texto que no cabe** → se recorta con puntos suspensivos y se advierte; el texto completo queda en el manifiesto.
+- **Artículo ya tiene una portada equivalente** → se omite salvo `--force`.
+- **Lote (`--all`)** → un artículo inválido no aborta los demás; al final se informa cuántos fallaron y se sale con código 1.
+
+### 9.8. Estructura del subsistema
+
+| Módulo (`news_agent/cover/`) | Responsabilidad |
+|------------------------------|-----------------|
+| `orchestrator.py` | Coordina configuración, parseo, contenido, render, escritura e idempotencia |
+| `source.py` | Extrae bajada, cita, cifra, leyenda, firma, `alt` y metadatos del origen |
+| `specs.py` | Fusiona la configuración con los defaults y resuelve sección y tratamiento |
+| `renderer.py` | Dibuja los tres tratamientos con Pillow, ajusta contraste y calcula advertencias |
+| `models.py` | Dataclasses de formatos, contenido, piezas y bundle |
+| `text_utils.py` | Limpia Markdown, divide oraciones y recorta por palabras |
+| `writer.py` | Escribe el bundle, lee el manifiesto y detecta portadas existentes |
+
+Reutiliza `social.article_source.parse_article_file`, las primitivas públicas de `social.banner_renderer` (`brand_palette`, `load_font`, `fit_text`, `draw_lines`, `prepare_logo`, `letter_space`, `blend`, `wrap_text`) y `report_writer._slugify`. No agrega dependencias: Pillow ya está en el proyecto.

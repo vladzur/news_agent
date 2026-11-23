@@ -2,7 +2,7 @@
 
 **Curador automatizado de pauta periodística para La Chispa Sur**, medio digital independiente de izquierda, crítico del modelo neoliberal.
 
-El agente recolecta noticias desde canales RSS y scraping web, las filtra por una ventana temporal de 4 días (96 horas), enriquece los resúmenes cortos extrayendo el contenido completo de los artículos con trafilatura, y utiliza el modelo **DeepSeek-Flash** (vía API compatible con OpenAI SDK) para sintetizar **cinco propuestas de pauta editorial semanal (tres de foco nacional y dos de foco internacional)** con profundidad analítica, tono incisivo y narrativa ágil. Las propuestas internacionales priorizan hechos que conmocionan al mundo, pueblos oprimidos y políticas imperialistas que afectan la estabilidad mundial, con mirada antiimperialista desde el sur global. También permite **escribir artículos completos (~1000 palabras)** a partir de cualquiera de las propuestas generadas, con un sistema de **referencias deterministas a fuentes** que asegura que el redactor reciba el contenido completo de los artículos fuente correctos para cada propuesta. Cada nota pasa después por un **editor de portada** (tres propuestas de titular y bajada) y por un **editor periodístico** que revisa y corrige la redacción, la coherencia y el estilo antes de guardarla. Con `python -m news_agent all --all-articles`, una sola invocación genera la pauta, las cinco notas y las piezas de redes sociales de cada nota.
+El agente recolecta noticias desde canales RSS y scraping web, las filtra por una ventana temporal de 4 días (96 horas), enriquece los resúmenes cortos extrayendo el contenido completo de los artículos con trafilatura, y utiliza el modelo **DeepSeek-Flash** (vía API compatible con OpenAI SDK) para sintetizar **cinco propuestas de pauta editorial semanal (tres de foco nacional y dos de foco internacional)** con profundidad analítica, tono incisivo y narrativa ágil. Las propuestas internacionales priorizan hechos que conmocionan al mundo, pueblos oprimidos y políticas imperialistas que afectan la estabilidad mundial, con mirada antiimperialista desde el sur global. También permite **escribir artículos completos (~1000 palabras)** a partir de cualquiera de las propuestas generadas, con un sistema de **referencias deterministas a fuentes** que asegura que el redactor reciba el contenido completo de los artículos fuente correctos para cada propuesta. Cada nota pasa después por un **editor de portada** (tres propuestas de titular y bajada) y por un **editor periodístico** que revisa y corrige la redacción, la coherencia y el estilo antes de guardarla. Cuando la nota no tiene una fotografía de cabecera, el agente genera una **portada editorial** determinista con Pillow: una pieza 16:9 para el sitio, otra 1200×630 para `og:image` y un manifiesto con la sección, el tratamiento y el texto alternativo. Con `python -m news_agent all --all-articles`, una sola invocación genera la pauta, las cinco notas, sus portadas y las piezas de redes sociales de cada nota.
 
 ---
 
@@ -87,7 +87,46 @@ Toma la pauta semanal completa y la convierte en una **hoja oficio doblada en tr
 
 La geometría del papel, el cuerpo de la tipografía y las reglas de estilo viven en `triptych_config.json`, validado al cargarse: la cantidad de notas debe caber en los paneles disponibles (la portada ocupa uno), y cambiar la medida de la hoja o el tope de columnas no requiere tocar código, porque el presupuesto de caracteres se recalcula solo y el Markdown usa el `preset` declarado.
 
-### 5. CLI por subcomandos
+### 5. Portadas editoriales para notas sin imagen
+
+Cuando una nota no tiene una fotografía de cabecera, el agente no deja un hueco: genera una **portada editorial determinista** con Pillow, sin llamar al modelo y sin depender de servicios externos. La propuesta sigue el enfoque híbrido del documento de diseño: la jerarquía tipográfica (*text-first*) es la base, la cita destacada cubre las columnas de opinión y el dato duro cubre las notas de fiscalización. Se producen dos piezas por nota:
+
+| Formato | Tamaño | Uso |
+|---------|--------|-----|
+| `portada_web.png` | 1600×900 (16:9) | Cabecera del artículo y tarjetas de la portada. |
+| `portada_og.png` | 1200×630 | `og:image` para WhatsApp, X y Facebook. |
+
+Además se guarda `portada.json` con la sección, el tratamiento, el titular, la bajada, la cita o la cifra, la firma, el `alt` y las rutas de las imágenes. El bundle se escribe en `portadas/AAAA_MM_DD_slug/`, con la fecha del artículo y el slug del titular.
+
+1. **Tres tratamientos** — `text_first` compone sección, titular grande, bajada y pie. `quote` usa la cita más incisiva en serif, la firma y la marca circular; es el tratamiento automático de `Opinión`. `data` convierte una cifra en el elemento central y usa la oración que la contiene como leyenda; se elige cuando la cifra aparece en el titular o en las dos primeras oraciones del lead.
+2. **Sección con identidad propia** — el acento de cada sección tiñe el fondo y los elementos de jerarquía. La taxonomía replica la del sitio: `Actualidad`, `Nacional`, `Internacional`, `Regional`, `Política`, `Cultura` y `Opinión`. Si no se indica `--category`, la sección se deduce del número editorial (1–3 → `Nacional`, 4–5 → `Internacional`; sin número → `Actualidad`).
+3. **Material verificado del artículo** — la bajada sale de la propuesta de portada aplicada en el apéndice (o de la línea en cursiva del cuerpo); la cita, de las candidatas que ya rankea el parser de RRSS; la cifra, de una extracción específica de portadas que descarta fragmentos como los minutos de una hora. No se inventan datos.
+4. **Accesibilidad y contraste** — el `alt` se compone a partir del tratamiento, el acento se aclara si no alcanza 3:1 contra el fondo y el gris apagado se ajusta si no llega a 4,5:1. Cada ajuste queda como advertencia en el manifiesto.
+5. **Idempotencia** — `cover --all` omite las portadas que ya existen para el mismo artículo, sección y tratamiento; `--force` las regenera. La huella SHA-256 del artículo evita rehacer trabajo cuando nada cambió.
+
+```bash
+# Portada de una nota concreta
+python -m news_agent cover --article articulos/articulo_1_2026_11_23_slug.md
+
+# Portadas de todas las notas que aún no tienen una
+python -m news_agent cover --all
+
+# Forzar una sección o un tratamiento
+python -m news_agent cover --article articulos/articulo_2_2026_11_23_slug.md \
+  --category Opinión --treatment quote
+
+# Regenerar una portada existente
+python -m news_agent cover --all --force
+
+# Limpiar portadas antiguas
+python -m news_agent clean --target covers --days 90
+```
+
+> **Publicación en el sitio.** El agente no escribe en el CMS: deja las piezas listas para subirlas. En el editor de la nota se usa `portada_web.png` como imagen de cabecera, se copia `alt_text` en el campo de texto alternativo y se asigna la misma `category` del manifiesto. Para las redes sociales se usa `portada_og.png` como `og:image` cuando el CMS permita una imagen distinta de la cabecera; si solo admite una, `portada_og.png` también funciona como cabecera porque el recorte 16:9 es mínimo.
+
+> **¿Por qué no se usa el LLM?** La portada es una pieza gráfica, no una decisión editorial nueva: el titular, la bajada, la cita y la cifra ya existen en el artículo. Generarla en código la vuelve reproducible, instantánea y gratuita; el editor conserva el control con `--category`, `--treatment` y `--force`.
+
+### 6. CLI por subcomandos
 
 El punto de entrada `python -m news_agent` ofrece un CLI de subcomandos pensado para el uso diario. Cada paso del flujo es un comando propio y `all` los encadena en una sola ejecución:
 
@@ -95,23 +134,29 @@ El punto de entrada `python -m news_agent` ofrece un CLI de subcomandos pensado 
 |---------|----------|
 | `report` | Genera la pauta editorial semanal desde los feeds RSS. |
 | `article` | Escribe una nota completa desde una propuesta de la pauta. |
+| `cover` | Genera la portada editorial de una o varias notas sin imagen. |
 | `social` | Genera los bundles de redes sociales de uno o varios artículos publicados. |
 | `print` | Genera el tríptico impreso desde la pauta semanal. |
-| `all` | Ejecuta la secuencia completa: pauta → una nota o todas las propuestas → redes sociales de cada nota → tríptico. |
+| `all` | Ejecuta la secuencia completa: pauta → una nota o todas las propuestas → portadas → redes sociales de cada nota → tríptico. |
 | `clean` | Elimina los artefactos generados con más de N días. |
 
 ```bash
-# Secuencia completa: pauta, una nota, redes sociales y tríptico de una sola vez
+# Secuencia completa: pauta, una nota, portada, redes sociales y tríptico
 python -m news_agent all --number 1
 
-# Edición completa: las cinco propuestas, cada una con sus piezas de RRSS
+# Edición completa: las cinco propuestas, cada una con su portada y sus piezas de RRSS
 python -m news_agent all --all-articles
 
 # O cada paso por separado
 python -m news_agent report
 python -m news_agent article --number 2
+python -m news_agent cover --article articulos/articulo_2_2026_11_23_slug.md
 python -m news_agent social --platforms x,instagram
 python -m news_agent print
+
+# Portadas de todas las notas pendientes, o solo de una elegida por la terminal
+python -m news_agent cover --all
+python -m news_agent cover --select
 
 # RRSS de varios artículos: uno elegido por la terminal, uno concreto por ruta
 # o todos los que haya en articulos/
@@ -127,34 +172,39 @@ python -m news_agent clean --days 90
 
 **Sin argumentos no se ejecuta nada:** `python -m news_agent` a secas muestra la ayuda y sale con código 2. Antes arrancaba la generación de pauta completa —consumiendo tokens de la API— y escribía el resultado en el directorio actual.
 
-**Edición completa:** `all --all-articles` lee las cinco propuestas de la pauta recién generada, escribe una nota por propuesta, genera las piezas de RRSS de cada nota y arma un único tríptico. Si una nota o un bundle social falla, continúa con los demás, muestra el resumen de la edición y termina con código 1. No pregunta por la terminal.
+**Edición completa:** `all --all-articles` lee las cinco propuestas de la pauta recién generada, escribe una nota por propuesta, genera la portada editorial y las piezas de RRSS de cada nota, y arma un único tríptico. Si una nota, una portada o un bundle social falla, continúa con los demás, muestra el resumen de la edición y termina con código 1. No pregunta por la terminal. Con `--skip-covers` se omiten las portadas sin afectar al resto de la secuencia.
 
-**Nunca escribe en el directorio actual:** cuando se omite `--output`, cada flujo usa su carpeta por defecto (`reportes/`, `articulos/`, `social/` o `impresos/`) y la crea si no existe; una ruta que apunte al directorio actual se rechaza con un error de uso. Así la raíz del proyecto no se llena de pautas ni de bundles sueltos.
+**Nunca escribe en el directorio actual:** cuando se omite `--output`, cada flujo usa su carpeta por defecto (`reportes/`, `articulos/`, `portadas/`, `social/` o `impresos/`) y la crea si no existe; una ruta que apunte al directorio actual se rechaza con un error de uso. Así la raíz del proyecto no se llena de pautas ni de bundles sueltos.
 
-**Limpieza:** `clean` solo considera los artefactos propios de la herramienta (pautas, companion JSON, notas y bundles `AAAA_MM_DD_slug`). La caché de contenido (`cache/`) y los assets de la marca (`assets/`) quedan **siempre** fuera de su alcance. La antigüedad se ajusta con `--days`, el alcance con `--target` (incluye `--yes` para automatizar y `--dry-run` para revisar qué se borraría sin eliminar nada). Si algún borrado falla, el comando informa cuántos fallaron y termina con código 1.
+**Limpieza:** `clean` solo considera los artefactos propios de la herramienta (pautas, companion JSON, notas y bundles `AAAA_MM_DD_slug` de `social/` y `portadas/`). La caché de contenido (`cache/`) y los assets de la marca (`assets/`) quedan **siempre** fuera de su alcance. La antigüedad se ajusta con `--days`, el alcance con `--target` (`reports`, `articles`, `social`, `covers` o `all`; incluye `--yes` para automatizar y `--dry-run` para revisar qué se borraría sin eliminar nada). Si algún borrado falla, el comando informa cuántos fallaron y termina con código 1.
 
 #### Opciones por comando
 
 | Opción | Comandos | Descripción |
 |--------|----------|-------------|
 | `--feeds RUTA` | `report`, `all` | JSON de configuración de feeds RSS (por defecto `rss_feeds.json`). |
-| `--output DIR` | `report`, `article`, `social`, `print` | Directorio de salida (por defecto `reportes/`, `articulos/`, `social/` o `impresos/`). |
-| `--base DIR` | `all`, `clean` | Directorio base del proyecto. En `all` se derivan `reportes/`, `articulos/`, `social/` e `impresos/`; en `clean` solo se usan `reportes/`, `articulos/` y `social/` (por defecto `.`). |
+| `--output DIR` | `report`, `article`, `cover`, `social`, `print` | Directorio de salida (por defecto `reportes/`, `articulos/`, `portadas/`, `social/` o `impresos/`). |
+| `--base DIR` | `all`, `clean` | Directorio base del proyecto. En `all` se derivan `reportes/`, `articulos/`, `portadas/`, `social/` e `impresos/`; en `clean` se usan `reportes/`, `articulos/`, `social/` y `portadas/` (por defecto `.`). |
 | `--pauta RUTA` | `article`, `print` | Pauta a usar (por defecto, la más reciente de `reportes/`). |
-| `--article RUTA` | `social` | Artículo de origen (por defecto, el más reciente de `articulos/`). Excluyente con `--all` y `--select`. |
-| `--all` | `social` | Genera un bundle por cada artículo del directorio de origen. Si un artículo termina con un error controlado, continúa con los demás y termina con código 1. |
-| `--select` | `social` | Pregunta por la terminal cuál artículo procesar (requiere TTY). |
-| `--articles-dir DIR` | `social` | Directorio de artículos de origen para `--all` y `--select`, y también para el artículo implícito cuando no se pasa `--article` (por defecto `articulos/`). |
+| `--article RUTA` | `social`, `cover` | Artículo de origen (por defecto, el más reciente de `articulos/`). Excluyente con `--all` y `--select`. |
+| `--all` | `social`, `cover` | Genera un bundle por cada artículo del directorio de origen. En `cover`, omite las portadas que ya existen. Si un artículo termina con un error controlado, continúa con los demás y termina con código 1. |
+| `--select` | `social`, `cover` | Pregunta por la terminal cuál artículo procesar (requiere TTY). |
+| `--articles-dir DIR` | `social`, `cover` | Directorio de artículos de origen para `--all` y `--select`, y también para el artículo implícito cuando no se pasa `--article` (por defecto `articulos/`). |
 | `-n`, `--number N` | `article`, `all` | Propuesta a desarrollar (1 a 5). Si se omite, se pregunta por la terminal. Excluyente con `--all-articles`. |
-| `--all-articles` | `all` | Desarrolla las cinco propuestas y genera las piezas de RRSS de cada nota, sin preguntar por la terminal. |
+| `--all-articles` | `all` | Desarrolla las cinco propuestas y genera la portada y las piezas de RRSS de cada nota, sin preguntar por la terminal. |
 | `--skip-review` | `article`, `all` | Omite la revisión editorial del editor periodístico posterior a la redacción. |
+| `--skip-covers` | `all` | Omite la generación de portadas editoriales sin afectar a las notas, las RRSS ni el tríptico. |
+| `--category SECCIÓN` | `cover` | Sección oficial (`Actualidad`, `Nacional`, `Internacional`, `Regional`, `Política`, `Cultura`, `Opinión`). Si se omite, se deduce del número editorial. |
+| `--treatment TRATAMIENTO` | `cover` | `auto`, `text_first`, `quote` o `data`. `auto` elige cita para `Opinión`, dato duro para una cifra en el titular o el lead, y editorial tipográfica en el resto. |
+| `--force` | `cover` | Regenera una portada aunque ya exista una equivalente. |
+| `--cover-config RUTA` | `cover` | JSON de marca y portadas (por defecto `social_config.json`). |
 | `--platforms LISTA` | `social`, `all` | Plataformas separadas por comas (`x,facebook,instagram`). Por defecto, todas. |
-| `--social-config RUTA` | `social`, `all` | JSON de marca y plantillas (por defecto `social_config.json`). |
+| `--social-config RUTA` | `social`, `all` | JSON de marca, plantillas y portadas (por defecto `social_config.json`). |
 | `--triptych-config RUTA` | `print`, `all` | JSON de geometría, tipografía y estilo del tríptico (por defecto `triptych_config.json`). |
 | `--skip-banners` / `--skip-prompts` | `social`, `all` | Omite el renderizado local de banners y del carrusel de Instagram con Pillow, o la llamada al modelo que genera el prompt visual. Ninguna de las dos evita la llamada que produce los copys. |
 | `--days N` / `--target` / `--dry-run` / `-y` | `clean` | Antigüedad mínima, alcance, simulación y omisión de la confirmación. |
 | `--debug` | `report`, `all` | Guarda el JSON intermedio de artículos procesados para ajustar el prompt. |
-| `--verbose` | `report`, `article`, `social`, `print`, `all` | Activa logging nivel DEBUG para diagnóstico detallado. `clean` acepta la bandera por uniformidad del parser, pero todavía no la aplica. |
+| `--verbose` | `report`, `article`, `cover`, `social`, `print`, `all` | Activa logging nivel DEBUG para diagnóstico detallado. `clean` acepta la bandera por uniformidad del parser, pero todavía no la aplica. |
 
 #### Modos clásicos por banderas
 
@@ -170,13 +220,13 @@ Se mantienen por compatibilidad con los scripts y los cron ya desplegados:
 Flags de los modos clásicos:
 
 - `--verbose`: Activa logging nivel DEBUG para diagnóstico detallado.
-- `--output`: Directorio donde guardar los archivos generados. Si se omite se usa `reportes/`, `articulos/` o `social/` según el modo, y una ruta que apunte al directorio actual se rechaza: los modos clásicos tampoco escriben en el directorio actual. El tríptico impreso se genera desde `print` o desde el paso 4 de `all`; los modos clásicos no lo generan (usa `impresos/` por defecto).
+- `--output`: Directorio donde guardar los archivos generados. Si se omite se usa `reportes/`, `articulos/` o `social/` según el modo, y una ruta que apunte al directorio actual se rechaza: los modos clásicos tampoco escriben en el directorio actual. El tríptico impreso se genera desde `print` o desde el paso 5 de `all`; los modos clásicos no lo generan (usa `impresos/` por defecto).
 - `--write-article RUTA_PAUTA`: Activa el modo de escritura de artículo desde una pauta existente. Requiere `--article N`. Este modo aplica por defecto la revisión editorial; no tiene una bandera equivalente a `--skip-review`.
 - `--article N`: Propuesta a desarrollar (1 a 5). Solo es válido junto con `--write-article`; sin él, el CLI rechaza la invocación con código 2.
 - `--debug`: Guarda un archivo JSON intermedio en `<directorio_de_salida>/debug/articulos_procesados_YYYY_MM_DD.json` con los datos completos de cada artículo (resumen RSS, contenido extraído y resumen final enviado al LLM) para depuración y ajuste de prompts. Con la salida por defecto queda en `reportes/debug/`.
 - `--socialize RUTA_ARTICULO`: Activa el modo de repurposing para redes sociales. No se puede combinar con `--feeds`, `--debug`, `--write-article` ni `--article`.
 - `--platforms LISTA`: Plataformas a preparar, separadas por comas (`x,facebook,instagram`). Por defecto, todas. Filtra los Markdown y los banners generados; el carrusel vertical solo se genera si se pide `instagram`.
-- `--social-config RUTA`: Ruta al JSON de marca y plantillas (por defecto `social_config.json`).
+- `--social-config RUTA`: Ruta al JSON de marca y plantillas (por defecto `social_config.json`). En los subcomandos, el mismo archivo aporta la sección `covers` de las portadas.
 - `--skip-banners`: Omite el renderizado de banners y del carrusel vertical de Instagram con Pillow.
 - `--skip-prompts`: Omite la generación del prompt visual en inglés.
 
@@ -188,10 +238,10 @@ Flags de los modos clásicos:
 assets/                     # Recursos gráficos de la marca (logo de los banners)
 news_agent/
 ├── __main__.py            # Punto de entrada CLI (subcomandos + modos clásicos)
-├── cli.py                 # CLI por subcomandos: report, article, social, print, all, clean
+├── cli.py                 # CLI por subcomandos: report, article, cover, social, print, all, clean
 ├── cleanup.py             # Detección y borrado de artefactos antiguos del comando clean
 ├── orchestrator.py        # Orquestador del pipeline completo
-├── config.py              # Carga de .env, validación de API key, feeds JSON
+├── config.py              # Carga de .env, validación de API key, feeds y configuración visual
 ├── rss_fetcher.py         # Ingesta RSS + despacho a scraping según método
 ├── scraper.py             # Scraping web con requests + BeautifulSoup (selectores CSS)
 ├── content_enricher.py    # Extracción de texto completo con trafilatura + caché
@@ -204,7 +254,15 @@ news_agent/
 ├── headline_editor.py     # Editor de portada: 3 propuestas de titular y bajada
 ├── editorial_review.py    # Editor periodístico: revisión y corrección del artículo
 ├── source_references.py   # Emparejamiento determinista de fuentes y companion JSON
-└── social/                # Subsistema de repurposing para redes sociales (RRSS)
+├── cover/                 # Subsistema de portadas editoriales para notas sin imagen
+│   ├── orchestrator.py    # Flujo: artículo → sección/tratamiento → render → bundle
+│   ├── source.py          # Bajada, cita, cifra, leyenda, alt y metadatos del origen
+│   ├── specs.py           # Categorías, formatos, límites y tratamientos resueltos
+│   ├── renderer.py        # Renderizado Pillow: text-first, cita y dato duro
+│   ├── models.py          # Dataclasses de formatos, contenido y resultados
+│   ├── text_utils.py      # Limpieza de Markdown, oraciones y recortes
+│   └── writer.py          # Escritura del bundle y del manifiesto
+├── social/                # Subsistema de repurposing para redes sociales (RRSS)
     ├── orchestrator.py    # Flujo RRSS: copys → prompt visual → banners → carrusel → bundle
     ├── article_source.py  # Parseo del artículo y anclas concretas (lugares, nombres, cifras)
     ├── prompt_builder.py  # Prompts de copys (ES) y del prompt visual (EN)
@@ -236,7 +294,7 @@ news_agent/
 | Scraping web | `requests` + `beautifulsoup4` | Extracción de artículos desde sitios sin RSS con selectores CSS configurables |
 | Enriquecimiento | `trafilatura` | Extracción del texto completo de artículos con resúmenes RSS insuficientes |
 | Cliente LLM | `openai` (SDK) | Conexión con DeepSeek API en modo compatible |
-| Renderizado de assets | `Pillow` | Generación local de banners y del carrusel vertical de Instagram, sin servicios externos |
+| Renderizado de assets | `Pillow` | Generación local de banners, carrusel vertical y portadas editoriales, sin servicios externos |
 | Lenguaje | Python ≥ 3.10 | stdlib + 6 dependencias |
 | Configuración | `.env` + `rss_feeds.json` + `social_config.json` + `triptych_config.json` | Separación de credenciales, fuentes, marca y geometría de imprenta |
 | Testing | `pytest`, `pytest-mock`, `freezegun`, `pytest-cov` | Tests unitarios de los módulos del pipeline, RRSS y tríptico; `__main__` y las dataclasses se cubren de forma indirecta |
@@ -371,18 +429,22 @@ Para medios que no disponen de feed RSS, usa `"method": "scraping"` con selector
 ### 5. Ejecutar
 
 ```bash
-# Secuencia completa: pauta + una nota + redes sociales (pregunta qué propuesta desarrollar)
+# Secuencia completa: pauta + una nota + portada + redes sociales (pregunta qué propuesta desarrollar)
 python -m news_agent all
 
 # Secuencia completa sin preguntas, para automatizar una sola nota
 python -m news_agent all --number 1 --platforms x,instagram
 
-# Edición completa: las cinco propuestas y las redes sociales de cada nota
+# Edición completa: las cinco propuestas, sus portadas y las redes sociales de cada nota
 python -m news_agent all --all-articles --platforms x,facebook,instagram
+
+# Edición sin portadas editoriales (por ejemplo, si todas las notas ya tienen fotografía)
+python -m news_agent all --all-articles --skip-covers
 
 # Paso a paso
 python -m news_agent report --feeds rss_feeds.json
 python -m news_agent article --number 1
+python -m news_agent cover --article articulos/articulo_1_2026_09_14_slug.md
 python -m news_agent social --platforms x,instagram
 
 # Regenerar una nota sin la revisión editorial (ahorra una llamada al modelo)
@@ -404,9 +466,9 @@ python -m news_agent clean --days 90 --dry-run
 python -m news_agent clean --days 90 --yes
 ```
 
-### 5b. Configurar la marca para RRSS (opcional)
+### 5b. Configurar la marca, las RRSS y las portadas (opcional)
 
-Edita `social_config.json` para ajustar la identidad visual sin tocar código:
+Edita `social_config.json` para ajustar la identidad visual de los banners y de las portadas sin tocar código:
 
 ```json
 {
@@ -437,6 +499,12 @@ Edita `social_config.json` para ajustar la identidad visual sin tocar código:
 | `banners.safe_zone` | ❌ | Zonas seguras superior e inferior para los formatos verticales, incluido `instagram_portrait` |
 | `instagram_carousel.format` | ❌ | Formato del carrusel; debe apuntar a un `instagram_*` 4:5 vertical declarado en `banners.sizes`. Por defecto, `instagram_portrait` |
 | `visual_prompts.*` | ✅ | Los tres tratamientos, las reglas de decisión, el prompt negativo de marca, los negativos por tratamiento, la proporción y el sufijo de Midjourney; se validan al cargar |
+| `covers.categories` | ❌ | Acento y etiqueta de cada sección. Se fusiona con la taxonomía por defecto (`Actualidad`, `Nacional`, `Internacional`, `Regional`, `Política`, `Cultura`, `Opinión`); se valida al cargar |
+| `covers.formats` | ❌ | Tamaño y nombre de archivo de `og` (1200×630) y `web` (1600×900). Se fusiona con los defaults |
+| `covers.limits` | ❌ | Topes de titular, bajada, cita, cifra, leyenda y líneas de leyenda de la portada |
+| `covers.proposal_categories` | ❌ | Sección que corresponde a cada propuesta: por defecto las tres primeras son `Nacional` y las dos últimas `Internacional` |
+| `covers.default_category` | ❌ | Sección de respaldo cuando el artículo no trae número editorial (por defecto `Actualidad`) |
+| `covers.texture` | ❌ | Intensidad del patrón de fondo, entre 0 y 0.5 (por defecto `0.09`) |
 
 Los formatos de banner se nombran con el prefijo de su plataforma (`instagram_feed`, `instagram_story`), lo que permite filtrar por `--platforms` sin mantener un mapa adicional. Además, la variable de entorno `SOCIAL_FONT_DIR` permite apuntar a un directorio propio de fuentes.
 
@@ -485,6 +553,14 @@ Las constantes principales se encuentran en [news_agent/config.py](news_agent/co
 | `SOCIAL_IG_SLIDE_TEXT_MAX_CHARS` / `_FIGURE_MAX_CHARS` | `240` / `40` | Topes de texto y cifra de cada slide de resumen; el slide no tiene titular |
 | `SOCIAL_MIN_ARTICLE_WORDS` | `150` | Por debajo de esto el artículo no da material suficiente: aborta antes de llamar a la API |
 | `SOCIAL_BANNER_BASE_WIDTH` | `1080` | Ancho de referencia del diseño de banners |
+| `DEFAULT_COVERS_OUTPUT_DIR` | `"portadas"` | Directorio base de los bundles de portada |
+| `COVER_BASE_WIDTH` | `1600` | Ancho de referencia del diseño de portadas |
+| `COVER_TREATMENTS` | `("text_first", "quote", "data")` | Tratamientos disponibles; `auto` elige entre ellos |
+| `COVER_CATEGORIES` | Siete secciones | Taxonomía y acento por sección, replicada de `utils/categories.ts` del sitio |
+| `COVER_FORMATS` | `og` 1200×630 y `web` 1600×900 | Formatos de salida y nombre de archivo |
+| `COVER_LIMITS` | Ver `config.py` | Topes de líneas y caracteres de cada tratamiento |
+| `COVER_PROPOSAL_CATEGORIES` | 3 `Nacional` + 2 `Internacional` | Sección por defecto de cada propuesta |
+| `COVER_FONT_SERIF_CANDIDATES` | DejaVu, Liberation, Noto y Georgia | Fuentes serif para la cita; si no hay ninguna, se usa la sans en negrita |
 | `TRIPTYCH_MAX_TOKENS` | `8192` | Presupuesto de la generación del tríptico (portada + cinco notas en un solo JSON) |
 | `TRIPTYCH_TEMPERATURE` | `0.3` | Temperatura del tríptico: sobrio y fiel a la pauta, menos creativo que el copy de RRSS |
 | `TRIPTYCH_REASONING_EFFORT` | `"high"` | Razonamiento para la redacción en lenguaje simple |
@@ -542,6 +618,12 @@ El agente implementa fail-safe en cada etapa del pipeline:
 - **Fuente tipográfica ausente** → se usa la fuente por defecto de Pillow y se advierte en el log.
 - **Artículo demasiado corto para RRSS** → aborta antes de llamar a la API (ahorro de tokens).
 - **Configuración de marca inválida** → error descriptivo al cargar `social_config.json` si falta una sección, un color, un tratamiento o una clave de `visual_prompts`, si una plataforma declara límites inválidos, o si una plantilla apunta a un formato inexistente.
+- **Configuración de portadas inválida** → error descriptivo al cargar la sección `covers`: acento no hexadecimal, formato desconocido, tamaño no positivo, nombre de archivo con ruta, límite no positivo o categoría inexistente en el mapa de propuestas.
+- **Portada: un formato falla** → el otro se guarda igualmente y el manifiesto registra la pieza fallida con su error; el comando termina con código 1.
+- **Portada: ningún formato se puede renderizar** → se aborta sin escribir un manifiesto incompleto.
+- **Portada ya existente** → `cover --all` la omite si la huella del artículo, la sección y el tratamiento no cambiaron; `--force` la regenera.
+- **Portada: fuente serif ausente, logo ausente o poco contraste** → se usa la sans en negrita, se compone sin logo o se aclara el acento, y el ajuste viaja como advertencia al manifiesto. Nunca se bloquea la generación.
+- **Portada: titular, bajada, cita o leyenda que no caben** → se recortan con puntos suspensivos y se advierte en el manifiesto; el texto completo queda en `portada.json`.
 - **Tríptico: JSON inválido o contrato incumplido** → se reintenta con una nota de corrección; agotados los intentos, se aborta sin escribir el bundle.
 - **Tríptico: nota sin «por qué te importa», cuerpo demasiado corto o cantidad de notas incorrecta** → error estructural; no se escribe una pieza impublicable.
 - **Tríptico: bloque que desborda la columna o regla de estilo incumplida** → advertencia en el Markdown y el manifiesto; el texto nunca se recorta.
@@ -652,6 +734,19 @@ social/2026_09_14_criminalizacion-de-la-disidencia/
 ```
 
 El campo `quote_card.verbatim` de `social_copy.json` indica si la cita se verificó palabra por palabra contra el artículo de origen; el manifiesto lo repite en `verified_quote`. El bloque `instagram_carousel` del manifiesto registra formato, dimensiones, estado (`generated`, `partial`, `failed` o `skipped`) y la ruta de cada slide. El directorio `social/` está en `.gitignore`, mientras que el subsistema de código vive en `news_agent/social/`.
+
+### Bundle de portada (`portadas/AAAA_MM_DD_slug-del-titulo/`)
+
+Cada ejecución de `cover` produce una carpeta autocontenida con las piezas que el editor sube al CMS. La fecha es la del artículo, no la de la ejecución:
+
+```
+portadas/2026_11_23_rabat-y-la-diferencia-juridica/
+├── portada_web.png             # 1600×900, cabecera 16:9 del sitio
+├── portada_og.png              # 1200×630, og:image para redes
+└── portada.json                # Sección, tratamiento, textos, alt y rutas
+```
+
+`portada.json` incluye `title`, `category`, `treatment`, `treatment_label`, `deck`, `quote`, `figure`, `caption`, `byline`, `alt_text`, `header_image`, `og_image`, `source_path`, `source_sha256`, `generated_at`, `formats` y `warnings`. La huella `source_sha256` junto con `category` y `treatment` permite que `cover --all` omita las portadas ya generadas. El directorio `portadas/` está en `.gitignore`, mientras que el subsistema de código vive en `news_agent/cover/`.
 
 ### Bundle del tríptico impreso (`impresos/AAAA_MM_DD_pauta-semanal/`)
 
