@@ -53,6 +53,8 @@ Automatizar la recopilación, filtrado y análisis de la agenda noticiosa nacion
   - `PAUTA_MAX_TOKENS`: **65536** para la pauta semanal (presupuesto compartido entre razonamiento y contenido).
 
   - `ARTICLE_MAX_TOKENS`: **16384** para la escritura de artículos.
+
+  - `EDITORIAL_REVIEW_MAX_TOKENS`: **16384**, `EDITORIAL_REVIEW_REASONING_EFFORT="high"` y `EDITORIAL_REVIEW_TEMPERATURE=0.2` para la revisión editorial. La etapa admite un reintento (`EDITORIAL_REVIEW_JSON_MAX_RETRIES=1`) y valida que el cuerpo corregido conserve entre `0.7` y `1.3` veces el volumen del original.
     
   - Razonamiento: `PAUTA_REASONING_EFFORT="high"` y `ARTICLE_REASONING_EFFORT="high"`. El modo thinking se activa por llamada; el reintento sin razonamiento usa `CONTENT_RETRY_MAX_TOKENS=8192` como piso.
 
@@ -122,6 +124,8 @@ Markdown
 - **Respuesta que no es un artículo:** Antes de escribir el archivo, se verifica que la respuesta traiga titular de nivel 1 y al menos un subtítulo de sección. Si no los trae, se descarta y se aborta sin crear archivo, para no publicar contenido inválido.
 
 - **Editor de portada:** Tras la redacción se hace una segunda llamada con rol de editor de portada. Devuelve, en JSON, **tres propuestas de titular y bajada** con enfoques fijos (denuncia/tesis política, narrativo/humano y analítico/geopolítico). Los largos se validan en código —12 a 16 palabras el titular, 25 a 45 la bajada—; si no se cumplen se reintenta una vez con una nota de corrección y, si el segundo intento tampoco cumple, se recorta por código y se advierte en el log. La primera propuesta se aplica al artículo y las tres se anexan en un apéndice `## 📰 Propuestas de portada`. El apéndice está marcado como no publicable: el parser de RRSS corta el cuerpo antes de esa marca, de modo que no contamina los prompts de redes sociales. Si la segunda llamada falla, el artículo se guarda igual con el titular del redactor y sin apéndice.
+
+- **Revisión editorial (editor periodístico):** Después de aplicar la portada y antes de anexar el apéndice, una tercera llamada con rol de editor periodístico recibe el titular, la bajada y el cuerpo, y devuelve en JSON las tres piezas corregidas (`titular`, `bajada`, `cuerpo`, `resumen_cambios`). El código exige que el cuerpo conserve el mismo número de secciones y el bloque de fuentes, que su volumen quede entre `0,7` y `1,3` veces el original y que no incluya H1, firma ni apéndice; las referencias `[art. N]` se eliminan y un titular o una bajada fuera de rango conservan la versión de portada. Si la llamada, el JSON o la validación fallan, la nota se guarda con el texto previo: la revisión es fail-open y nunca impide publicar. La propuesta 1 del apéndice se sincroniza con las correcciones; `--skip-review` omite la etapa.
 
 ## 6. Subsistema de Repurposing para Redes Sociales (RRSS)
 
@@ -290,10 +294,10 @@ El motor se opera desde un CLI por subcomandos que reduce la ejecución de cada 
 | Comando | Responsabilidad | Entradas | Artefactos |
 |---------|-----------------|----------|------------|
 | `report` | Genera la pauta editorial semanal | `--feeds`, `--output`, `--debug` | `reportes/pauta_semanal_AAAA_MM_DD.md` y su companion JSON |
-| `article` | Escribe una nota desde una propuesta | `--pauta`, `-n/--number`, `--output` | `articulos/articulo_N_slug.md` |
+| `article` | Escribe una nota desde una propuesta | `--pauta`, `-n/--number`, `--output`, `--skip-review` | `articulos/articulo_N_slug.md` |
 | `social` | Repurposing para redes sociales | `--article`, `--articles-dir`, `--all`, `--select`, `--output`, `--platforms`, `--social-config`, `--skip-banners`, `--skip-prompts` | `social/AAAA_MM_DD_slug/` con copys, prompts, Markdown y banners |
 | `print` | Tríptico impreso de la semana | `--pauta`, `--output`, `--triptych-config` | `impresos/AAAA_MM_DD_pauta-semanal/` con el tríptico en JSON, el Markdown panel por panel y el manifiesto |
-| `all` | Secuencia completa, con una nota o la edición entera | `--feeds`, `--base`, `-n/--number`, `--all-articles`, opciones sociales, `--triptych-config` y `--debug` | Los cuatro anteriores; con `--all-articles`, una nota y un bundle de RRSS por propuesta |
+| `all` | Secuencia completa, con una nota o la edición entera | `--feeds`, `--base`, `-n/--number`, `--all-articles`, `--skip-review`, opciones sociales, `--triptych-config` y `--debug` | Los cuatro anteriores; con `--all-articles`, una nota y un bundle de RRSS por propuesta |
 | `clean` | Limpieza de artefactos antiguos | `--base`, `--target`, `--days`, `--dry-run`, `--yes` | Elimina archivos y bundles |
 
 Todos los comandos aceptan `--verbose`. En `clean` la bandera se acepta por uniformidad del parser, pero todavía no cambia el nivel de logging.

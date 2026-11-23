@@ -13,11 +13,21 @@ from typing import Any
 from .config import (
     ARTICLE_MAX_TOKENS,
     ARTICLE_REASONING_EFFORT,
+    EDITORIAL_REVIEW_MAX_TOKENS,
+    EDITORIAL_REVIEW_REASONING_EFFORT,
+    EDITORIAL_REVIEW_TEMPERATURE,
     NUM_PROPOSALS,
     PORTADA_MAX_TOKENS,
     PORTADA_REASONING_EFFORT,
     PORTADA_TEMPERATURE,
     get_api_key,
+)
+from .editorial_review import (
+    EditorialReview,
+    EditorialReviewError,
+    apply_review,
+    review_and_correct,
+    update_applied_proposal,
 )
 from .headline_editor import (
     HeadlineProposal,
@@ -232,6 +242,7 @@ def write_article(
     article_number: int,
     output_dir: str | Path = ".",
     verbose: bool = False,
+    skip_review: bool = False,
 ) -> dict[str, Any]:
     """Escribe un artículo completo a partir de una propuesta de la pauta.
 
@@ -240,6 +251,8 @@ def write_article(
         article_number: Número de propuesta a desarrollar (1 a 5).
         output_dir: Directorio donde guardar el artículo generado.
         verbose: Si es True, activa logging DEBUG.
+        skip_review: Si es True, omite la revisión editorial posterior a la
+            redacción.
 
     Returns:
         dict con:
@@ -248,8 +261,11 @@ def write_article(
             - proposal_number (int): Número de propuesta.
             - headline_proposals (list[dict]): Tres propuestas de portada,
               vacía si el editor de portada falló.
-            - headline (str): Titular aplicado, solo si hubo propuestas.
-            - deck (str): Bajada aplicada, solo si hubo propuestas.
+            - headline (str): Titular aplicado, solo si hubo propuestas o si
+              la revisión se aplicó.
+            - deck (str): Bajada aplicada, con la misma condición.
+            - review (dict): Estado de la revisión editorial con las claves
+              status (applied, skipped o failed), changes y error.
 
     Raises:
         PautaParseError: Si el archivo de pauta no es válido.
@@ -376,8 +392,10 @@ def write_article(
     # -------------------------------------------------------------------
     # Es una etapa tolerante a fallos: si la llamada o la validación fallan,
     # el artículo se guarda con el titular que escribió el redactor en lugar
-    # de perder la nota completa.
-    headline_proposals = []
+    # de perder la nota completa. El apéndice se anexa al final del flujo,
+    # después de la revisión editorial, para poder sincronizar la propuesta
+    # aplicada con las correcciones.
+    headline_proposals: list[HeadlineProposal] = []
     try:
         headline_proposals = _write_headline_proposals(
             article_content, proposal, api_key
@@ -390,11 +408,56 @@ def write_article(
         )
     else:
         article_content = apply_headline(article_content, headline_proposals)
-        article_content = append_headline_appendix(
-            article_content, headline_proposals
-        )
         logger.info(
             "Titular aplicado: %s", headline_proposals[0].titular
+        )
+
+    # -------------------------------------------------------------------
+    # Paso 4c: Revisión editorial (editor periodístico)
+    # -------------------------------------------------------------------
+    # Última revisión antes de publicar. Es tolerante a fallos: si la llamada
+    # o la validación fallan, se conserva el texto previo y se advierte, porque
+    # una revisión fallida no debe impedir guardar la nota.
+    applied_review: EditorialReview | None = None
+    review_info: dict[str, Any] = {"status": "skipped"}
+
+    if not skip_review:
+        try:
+            applied_review = _write_editorial_review(
+                article_content, proposal, api_key
+            )
+            reviewed_content = apply_review(article_content, applied_review)
+            if not looks_like_article(reviewed_content):
+                raise EditorialReviewError(
+                    "El artículo revisado no conserva la estructura publicable "
+                    "(titular de nivel 1 y subtítulos de sección)."
+                )
+        except (LLMClientError, EditorialReviewError) as exc:
+            applied_review = None
+            logger.warning(
+                "No se pudo aplicar la revisión editorial: %s. La nota se "
+                "guarda con el texto previo.",
+                exc,
+            )
+            review_info = {"status": "failed", "error": str(exc)}
+        else:
+            article_content = reviewed_content
+            if headline_proposals:
+                headline_proposals = update_applied_proposal(
+                    headline_proposals, applied_review
+                )
+            review_info = {
+                "status": "applied",
+                "changes": applied_review.changes,
+            }
+            logger.info(
+                "Revisión editorial aplicada: %s",
+                applied_review.changes or "sin correcciones de fondo.",
+            )
+
+    if headline_proposals:
+        article_content = append_headline_appendix(
+            article_content, headline_proposals
         )
 
     # -------------------------------------------------------------------
@@ -416,10 +479,14 @@ def write_article(
         "title": proposal["title"],
         "proposal_number": article_number,
         "headline_proposals": [p.as_dict() for p in headline_proposals],
+        "review": review_info,
     }
     if headline_proposals:
         result["headline"] = headline_proposals[0].titular
         result["deck"] = headline_proposals[0].bajada
+    elif applied_review is not None:
+        result["headline"] = applied_review.headline
+        result["deck"] = applied_review.deck
 
     return result
 
@@ -452,6 +519,41 @@ def _write_headline_proposals(
     )
     return generate_headline_proposals(
         article_content=article_content,
+        client=client,
+        proposal=proposal,
+    )
+
+
+def _write_editorial_review(
+    article_content: str,
+    proposal: dict[str, Any],
+    api_key: str,
+) -> EditorialReview:
+    """Pide al editor periodístico la revisión del artículo.
+
+    Args:
+        article_content: Markdown del artículo con el titular y la bajada ya
+            aplicados, antes de anexar el apéndice de portada.
+        proposal: Propuesta de pauta de origen.
+        api_key: Clave API de DeepSeek.
+
+    Returns:
+        EditorialReview: Piezas corregidas y resumen de cambios.
+
+    Raises:
+        LLMClientError: Si falla la comunicación con la API.
+        EditorialReviewError: Si la respuesta no es utilizable o el artículo
+            no se puede separar en piezas.
+    """
+    client = LLMClient(
+        api_key=api_key,
+        temperature=EDITORIAL_REVIEW_TEMPERATURE,
+        max_tokens=EDITORIAL_REVIEW_MAX_TOKENS,
+        reasoning_effort=EDITORIAL_REVIEW_REASONING_EFFORT,
+        response_format={"type": "json_object"},
+    )
+    return review_and_correct(
+        article=article_content,
         client=client,
         proposal=proposal,
     )
