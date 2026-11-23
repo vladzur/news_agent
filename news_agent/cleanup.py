@@ -1,8 +1,8 @@
 """Limpieza de los artefactos antiguos generados por el agente.
 
 El subcomando ``clean`` del CLI apoya su lógica en este módulo: detecta pautas,
-artículos y bundles de redes sociales cuya antigüedad supera un máximo de días
-y los elimina.
+artículos, bundles de redes sociales y bundles de portadas cuya antigüedad
+supera un máximo de días y los elimina.
 
 La fecha de referencia de cada entrada se toma del nombre cuando la convención
 la incluye (``pauta_semanal_AAAA_MM_DD.md``, ``social/AAAA_MM_DD_slug/`` y
@@ -26,6 +26,7 @@ from pathlib import Path
 
 from .config import (
     DEFAULT_ARTICLES_DIR,
+    DEFAULT_COVERS_OUTPUT_DIR,
     DEFAULT_REPORTS_DIR,
     DEFAULT_SOCIAL_OUTPUT_DIR,
 )
@@ -39,12 +40,14 @@ logger = logging.getLogger(__name__)
 REPORTS_TARGET = "reports"
 ARTICLES_TARGET = "articles"
 SOCIAL_TARGET = "social"
+COVERS_TARGET = "covers"
 
 # Directorio de cada grupo, relativo al directorio base del proyecto.
 TARGET_DIRECTORIES: dict[str, str] = {
     REPORTS_TARGET: DEFAULT_REPORTS_DIR,
     ARTICLES_TARGET: DEFAULT_ARTICLES_DIR,
     SOCIAL_TARGET: DEFAULT_SOCIAL_OUTPUT_DIR,
+    COVERS_TARGET: DEFAULT_COVERS_OUTPUT_DIR,
 }
 
 # Patrones (glob) de los artefactos de cada grupo. Todo lo que no coincida con
@@ -56,6 +59,7 @@ CLEAN_PATTERNS: dict[str, tuple[str, ...]] = {
     ),
     ARTICLES_TARGET: ("articulo_*.md",),
     SOCIAL_TARGET: ("[0-9][0-9][0-9][0-9]_[0-9][0-9]_[0-9][0-9]_*",),
+    COVERS_TARGET: ("[0-9][0-9][0-9][0-9]_[0-9][0-9]_[0-9][0-9]_*",),
 }
 
 # Grupos disponibles, en el orden en que se informan al usuario.
@@ -63,6 +67,7 @@ ALL_TARGETS: tuple[str, ...] = (
     REPORTS_TARGET,
     ARTICLES_TARGET,
     SOCIAL_TARGET,
+    COVERS_TARGET,
 )
 
 # Fecha (AAAA_MM_DD) dentro del nombre de un artefacto. Se busca en cualquier

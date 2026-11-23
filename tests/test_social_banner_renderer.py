@@ -8,6 +8,7 @@ from PIL import Image
 from news_agent.social import banner_renderer
 from news_agent.social.banner_renderer import (
     _DEFAULT_COLORS,
+    _FONT_SIZES,
     _block_height,
     _content_box,
     blend,
@@ -145,6 +146,36 @@ class TestFonts:
         font = load_font("headline", 20, {"brand": {"fonts": {"headline": "/nada.ttf"}}})
 
         assert font is not None
+
+    def test_cover_roles_share_the_typography_table(self, social_config):
+        # Las portadas editoriales declaran sus roles en la misma tabla que
+        # los banners, para no duplicar el ajuste automático de líneas.
+        roles = (
+            "cover_title",
+            "cover_deck",
+            "cover_kicker",
+            "cover_quote",
+            "cover_figure",
+            "cover_caption",
+            "cover_byline",
+        )
+        canvas = Image.new("RGB", (400, 400))
+        draw = banner_renderer.ImageDraw.Draw(canvas)
+
+        for role in roles:
+            assert role in _FONT_SIZES
+            font, lines, _ = fit_text(
+                "Texto de prueba",
+                role,
+                social_config,
+                draw,
+                300,
+                300,
+                1.0,
+                max_lines=3,
+            )
+            assert lines
+            assert font.getmetrics()
 
 
 # ---------------------------------------------------------------------------

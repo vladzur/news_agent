@@ -233,11 +233,11 @@ class TestSummary:
 
 
 class TestAllIntegration:
-    """El tríptico es el cuarto paso de ``all``."""
+    """El tríptico es el quinto paso de ``all``."""
 
     @pytest.fixture
     def chained(self, tmp_path, monkeypatch) -> dict[str, Any]:
-        """Reemplaza los cuatro pasos de ``all`` por dobles.
+        """Reemplaza los cinco pasos de ``all`` por dobles.
 
         Returns:
             dict[str, Any]: Registro de llamadas y resultados simulados.
@@ -262,6 +262,23 @@ class TestAllIntegration:
                 "article_path": article,
                 "title": "Titular",
                 "proposal_number": 1,
+            }
+
+        def _fake_cover(**kwargs: Any) -> dict[str, Any]:
+            calls["order"].append("cover")
+            bundle = tmp_path / "portadas" / "2026_09_24_titular"
+            return {
+                "bundle_dir": bundle,
+                "title": "Titular",
+                "category": "Nacional",
+                "treatment": "text_first",
+                "treatment_label": "Editorial tipográfica",
+                "formats": [],
+                "metadata_path": bundle / "portada.json",
+                "alt_text": "Alt",
+                "warnings": [],
+                "skipped": False,
+                "failed_count": 0,
             }
 
         def _fake_socialize(**kwargs: Any) -> dict[str, Any]:
@@ -289,6 +306,9 @@ class TestAllIntegration:
         monkeypatch.setattr(cli, "run_pipeline", _fake_pipeline)
         monkeypatch.setattr(cli, "write_article", _fake_write)
         monkeypatch.setattr(
+            "news_agent.cover.orchestrator.run_cover", _fake_cover
+        )
+        monkeypatch.setattr(
             "news_agent.social.orchestrator.run_socialize", _fake_socialize
         )
         monkeypatch.setattr(cli, "run_print", _fake_print)
@@ -298,7 +318,13 @@ class TestAllIntegration:
     def test_runs_the_triptych_as_the_last_step(self, tmp_path, chained):
         main(["all", "--base", str(tmp_path), "--number", "1"])
 
-        assert chained["order"] == ["report", "article", "social", "print"]
+        assert chained["order"] == [
+            "report",
+            "article",
+            "cover",
+            "social",
+            "print",
+        ]
 
     def test_feeds_the_triptych_with_the_generated_pauta(self, tmp_path, chained):
         main(

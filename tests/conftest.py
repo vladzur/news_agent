@@ -560,3 +560,95 @@ def triptych_config_file(triptych_config: dict, tmp_path: Path) -> Path:
         json.dumps(triptych_config, ensure_ascii=False), encoding="utf-8"
     )
     return path
+
+
+@pytest.fixture
+def cover_article_markdown() -> str:
+    """Artículo de ejemplo para las portadas editoriales.
+
+    Incluye una cifra en el titular (``42 familias``), una cita atribuida y
+    el apéndice de propuestas de portada, de modo que las pruebas cubran los
+    tres tratamientos y la extracción de la bajada aplicada.
+
+    Returns:
+        str: Contenido Markdown del artículo.
+    """
+    return """\
+# Cierre de la escuela rural: 42 familias quedan sin matrícula
+
+**Fecha de creación:** 2026-11-23
+
+**Por La Chispa Sur**
+
+---
+
+*La municipalidad de Villarrica confirmó el cierre de la escuela rural y 42 \
+familias quedan sin matrícula para el próximo año.*
+
+El concejo municipal aprobó el cierre con 56 votos a favor y seis en contra. \
+La sesión duró cuatro horas y terminó con la sala dividida. "No vamos a \
+permitir que nos arranquen la escuela", sostuvo.
+
+## La votación que dejó a 42 familias sin escuela
+
+La comunidad escolar llegó con carteles y pidió una nueva votación. El \
+alcalde defendió la medida por el déficit del municipio, mientras las \
+familias anunciaron un recurso ante la Contraloría.
+
+## El futuro de las familias
+
+El municipio ofrece traslado a una escuela del sector, pero las familias \
+denuncian que el viaje diario supera las dos horas. La matrícula de la \
+escuela llegó a 42 estudiantes este año.
+
+---
+
+*Artículo generado a partir de la pauta editorial de La Chispa Sur. Las fuentes \
+utilizadas se listan a continuación.*
+
+**Fuentes consultadas / sugeridas:**
+- Radio Universidad de Chile: cobertura del cierre de la escuela rural.
+- La Tercera: declaraciones del municipio de Villarrica.
+
+## 📰 Propuestas de portada
+
+### 1. Denuncia / tesis política — ✅ aplicada al artículo
+
+**Titular:** Cierre de la escuela rural: 42 familias quedan sin matrícula
+
+**Bajada:** La municipalidad de Villarrica confirmó el cierre de la escuela \
+rural y 42 familias quedan sin matrícula para el próximo año.
+
+### 2. Narrativo / humano
+
+**Titular:** La escuela que se queda sin timbre
+
+**Bajada:** Las familias de Villarrica se organizan para frenar el cierre.
+"""
+
+
+@pytest.fixture
+def cover_article_file(tmp_path: Path, cover_article_markdown: str) -> Path:
+    """Escribe el artículo de portadas en un archivo temporal.
+
+    Returns:
+        Path: Ruta al archivo Markdown escrito.
+    """
+    path = (
+        tmp_path
+        / "articulos"
+        / "articulo_1_2026_11_23_cierre-de-la-escuela-rural.md"
+    )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(cover_article_markdown, encoding="utf-8")
+    return path
+
+
+@pytest.fixture
+def cover_article(cover_article_file: Path):
+    """Artículo de portadas ya parseado.
+
+    Returns:
+        ArticleSource: Artículo listo para construir el contenido de portada.
+    """
+    return parse_article_file(cover_article_file)

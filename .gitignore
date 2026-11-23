@@ -24,6 +24,7 @@ pauta_semanal_*.json
 articulo_*.md
 /social/
 /impresos/
+/portadas/
 debug/
 cache/
 

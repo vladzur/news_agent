@@ -6,9 +6,10 @@ para el uso diario:
 
     report   Genera la pauta editorial semanal desde los feeds RSS.
     article  Escribe una nota completa desde una propuesta de la pauta.
+    cover    Genera la portada editorial de una nota sin imagen.
     social   Genera los bundles de redes sociales de uno o varios artículos.
     print    Genera el tríptico impreso desde la pauta semanal.
-    all      Encadena los cuatro pasos anteriores en una sola ejecución.
+    all      Encadena los cinco pasos anteriores en una sola ejecución.
     clean    Elimina los artefactos generados con más de N días.
 
 Cuando un paso necesita una entrada y no se indica una ruta explícita, el CLI
@@ -18,6 +19,8 @@ toma la más reciente del directorio correspondiente (``reportes/`` o
 Uso:
     python -m news_agent report --feeds rss_feeds.json
     python -m news_agent article --number 2
+    python -m news_agent cover --article articulos/articulo_2_2026_09_24_slug.md
+    python -m news_agent cover --all
     python -m news_agent social --platforms x,instagram
     python -m news_agent social --all
     python -m news_agent social --select
@@ -43,8 +46,10 @@ from .cleanup import (
     remove_entries,
 )
 from .config import (
+    COVER_TREATMENTS,
     DEFAULT_ARTICLES_DIR,
     DEFAULT_CLEAN_MAX_AGE_DAYS,
+    DEFAULT_COVERS_OUTPUT_DIR,
     DEFAULT_PRINT_OUTPUT_DIR,
     DEFAULT_REPORTS_DIR,
     DEFAULT_SOCIAL_OUTPUT_DIR,
@@ -64,6 +69,7 @@ CANCELLED_MESSAGE = "\nEjecución cancelada por el usuario."
 COMMANDS: tuple[str, ...] = (
     "report",
     "article",
+    "cover",
     "social",
     "print",
     "all",
@@ -74,9 +80,10 @@ COMMANDS: tuple[str, ...] = (
 COMMAND_DESCRIPTIONS: dict[str, str] = {
     "report": "Genera la pauta editorial semanal desde los feeds RSS.",
     "article": "Escribe una nota completa desde una propuesta de la pauta.",
+    "cover": "Genera la portada editorial de una nota sin imagen.",
     "social": "Genera los bundles de RRSS de los artículos publicados.",
     "print": "Genera el tríptico impreso desde la pauta semanal.",
-    "all": "Ejecuta la secuencia completa: pauta, notas, RRSS y tríptico.",
+    "all": "Ejecuta la secuencia completa: pauta, notas, portadas, RRSS y tríptico.",
     "clean": "Elimina los artefactos generados con más de N días.",
 }
 
@@ -119,6 +126,7 @@ def _build_epilog() -> str:
             "Ejemplos:",
             f"  {PROGRAM_NAME} report --feeds rss_feeds.json",
             f"  {PROGRAM_NAME} article --number 2",
+            f"  {PROGRAM_NAME} cover --all",
             f"  {PROGRAM_NAME} social --platforms x,instagram",
             f"  {PROGRAM_NAME} print --pauta reportes/pauta_semanal_2026_09_24.md",
             f"  {PROGRAM_NAME} all --number 1",
@@ -148,7 +156,7 @@ def _add_social_platform_options(parser: argparse.ArgumentParser) -> None:
         type=str,
         default=None,
         metavar="RUTA",
-        help="Ruta al JSON de configuración de marca y plantillas "
+        help="Ruta al JSON de configuración de marca, plantillas y portadas "
         "(por defecto: social_config.json).",
     )
     parser.add_argument(
@@ -250,6 +258,91 @@ def _add_article_parser(
     )
     parser.add_argument("--verbose", action="store_true", help=VERBOSE_HELP)
     parser.set_defaults(handler=_handle_article)
+
+
+def _add_cover_parser(
+    subparsers: argparse._SubParsersAction,
+) -> None:
+    """Registra el subcomando ``cover`` (portadas editoriales)."""
+    parser = subparsers.add_parser(
+        "cover",
+        help=COMMAND_DESCRIPTIONS["cover"],
+        description=(
+            "Genera la portada editorial de una nota sin imagen: una pieza "
+            "16:9 para el sitio, otra 1200x630 para og:image y un manifiesto "
+            "con la sección, el tratamiento y el texto alternativo."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "--articles-dir",
+        type=str,
+        default=DEFAULT_ARTICLES_DIR,
+        metavar="DIR",
+        help=f"Directorio donde buscar los artículos que usan --all y "
+        f"--select (por defecto: {DEFAULT_ARTICLES_DIR}/).",
+    )
+    source = parser.add_mutually_exclusive_group()
+    source.add_argument(
+        "--article",
+        type=str,
+        default=None,
+        metavar="RUTA",
+        help="Ruta al artículo Markdown. Por defecto, el más reciente de "
+        f"{DEFAULT_ARTICLES_DIR}/.",
+    )
+    source.add_argument(
+        "--all",
+        action="store_true",
+        dest="all_articles",
+        help="Genera la portada de cada artículo y omite las que ya existen.",
+    )
+    source.add_argument(
+        "--select",
+        action="store_true",
+        help="Pregunta por la terminal cuál de los artículos procesar.",
+    )
+    parser.add_argument(
+        "--output",
+        type=str,
+        default=DEFAULT_COVERS_OUTPUT_DIR,
+        metavar="DIR",
+        help=f"Directorio base de los bundles de portada "
+        f"(por defecto: {DEFAULT_COVERS_OUTPUT_DIR}/).",
+    )
+    parser.add_argument(
+        "--category",
+        type=str,
+        default=None,
+        metavar="SECCIÓN",
+        help="Sección oficial del sitio (Actualidad, Nacional, Internacional, "
+        "Regional, Política, Cultura, Opinión). Si se omite, se deduce del "
+        "número editorial: 1-3 Nacional, 4-5 Internacional; sin número, "
+        "Actualidad.",
+    )
+    parser.add_argument(
+        "--treatment",
+        choices=("auto", *COVER_TREATMENTS),
+        default="auto",
+        help="Tratamiento de la portada. 'auto' elige cita para Opinión, "
+        "dato duro cuando hay una cifra en el titular o el lead, y editorial "
+        "tipográfica en el resto (por defecto: auto).",
+    )
+    parser.add_argument(
+        "--cover-config",
+        type=str,
+        default=None,
+        metavar="RUTA",
+        help="Ruta al JSON de marca y portadas "
+        "(por defecto: social_config.json).",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Regenera la portada aunque ya exista una equivalente.",
+    )
+    parser.add_argument("--verbose", action="store_true", help=VERBOSE_HELP)
+    parser.set_defaults(handler=_handle_cover)
 
 
 def _add_social_parser(
@@ -357,8 +450,9 @@ def _add_all_parser(
         help=COMMAND_DESCRIPTIONS["all"],
         description=(
             "Ejecuta la secuencia completa: genera la pauta, escribe una nota "
-            "o todas las propuestas, produce el bundle de redes sociales de "
-            "cada nota y arma el tríptico impreso, todo de una vez."
+            "o todas las propuestas, produce la portada editorial y el bundle "
+            "de redes sociales de cada nota, y arma el tríptico impreso, todo "
+            "de una vez."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -377,6 +471,7 @@ def _add_all_parser(
         metavar="DIR",
         help="Directorio base del proyecto: las salidas van a "
         f"<DIR>/{DEFAULT_REPORTS_DIR}, <DIR>/{DEFAULT_ARTICLES_DIR}, "
+        f"<DIR>/{DEFAULT_COVERS_OUTPUT_DIR}, "
         f"<DIR>/{DEFAULT_SOCIAL_OUTPUT_DIR} y "
         f"<DIR>/{DEFAULT_PRINT_OUTPUT_DIR} (por defecto: .).",
     )
@@ -409,6 +504,11 @@ def _add_all_parser(
         action="store_true",
         help="Omite la revisión editorial posterior a la redacción.",
     )
+    parser.add_argument(
+        "--skip-covers",
+        action="store_true",
+        help="Omite la generación de portadas editoriales de cada nota.",
+    )
     _add_social_platform_options(parser)
     parser.add_argument(
         "--triptych-config",
@@ -430,9 +530,9 @@ def _add_clean_parser(
         "clean",
         help=COMMAND_DESCRIPTIONS["clean"],
         description=(
-            "Elimina pautas, artículos y bundles de redes sociales que superen "
-            "una antigüedad máxima. Nunca toca la caché de contenido ni los "
-            "assets de la marca."
+            "Elimina pautas, artículos, bundles de redes sociales y bundles de "
+            "portadas que superen una antigüedad máxima. Nunca toca la caché "
+            "de contenido ni los assets de la marca."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -442,15 +542,16 @@ def _add_clean_parser(
         default=".",
         metavar="DIR",
         help="Directorio base del proyecto donde buscar "
-        f"{DEFAULT_REPORTS_DIR}/, {DEFAULT_ARTICLES_DIR}/ y "
-        f"{DEFAULT_SOCIAL_OUTPUT_DIR}/ (por defecto: .).",
+        f"{DEFAULT_REPORTS_DIR}/, {DEFAULT_ARTICLES_DIR}/, "
+        f"{DEFAULT_SOCIAL_OUTPUT_DIR}/ y "
+        f"{DEFAULT_COVERS_OUTPUT_DIR}/ (por defecto: .).",
     )
     parser.add_argument(
         "--target",
         choices=("all", *ALL_TARGETS),
         default="all",
-        help="Grupo de artefactos a limpiar: all, reports, articles o social "
-        "(por defecto: all).",
+        help="Grupo de artefactos a limpiar: all, reports, articles, social "
+        "o covers (por defecto: all).",
     )
     parser.add_argument(
         "--days",
@@ -497,6 +598,7 @@ def build_cli_parser() -> argparse.ArgumentParser:
 
     _add_report_parser(subparsers)
     _add_article_parser(subparsers)
+    _add_cover_parser(subparsers)
     _add_social_parser(subparsers)
     _add_print_parser(subparsers)
     _add_all_parser(subparsers)
@@ -956,6 +1058,39 @@ def print_article_summary(result: dict[str, Any]) -> None:
         print("   ⏭️  Revisión editorial omitida (--skip-review).")
 
 
+def print_cover_summary(result: dict[str, Any]) -> None:
+    """Muestra el resumen de la portada editorial generada.
+
+    Args:
+        result: Resumen devuelto por ``run_cover``.
+    """
+    if result.get("skipped"):
+        print("\n⏭️  Portada ya existente, no se regeneró:")
+        print(f"   📁 {result['bundle_dir']}")
+        print("   Usa --force para regenerarla.")
+        return
+
+    print("\n✅ Portada editorial generada exitosamente:")
+    print(f"   📁 {result['bundle_dir']}")
+    print(
+        f"   🗞️  Sección: {result['category']} · "
+        f"Tratamiento: {result['treatment_label']}"
+    )
+    for item in result.get("formats", []):
+        name = str(item.get("name", "")).upper()
+        if item.get("path"):
+            print(
+                f"   🖼️  {name} {item['width']}×{item['height']}: "
+                f"{item['path']}"
+            )
+        else:
+            print(f"   ⚠️  {name} falló: {item.get('error')}")
+    print(f"   🧾 Metadatos: {result['metadata_path']}")
+    print(f"   ♿ Alt: {result['alt_text']}")
+    if result.get("warnings"):
+        print(f"   ⚠️  Advertencias: {'; '.join(result['warnings'])}")
+
+
 def print_social_summary(result: dict[str, Any]) -> None:
     """Muestra el resumen del bundle de redes sociales.
 
@@ -1110,6 +1245,61 @@ def run_socialize_step(
         sys.exit(2)
 
 
+def run_cover_step(
+    article_path: str | Path,
+    output_dir: str | Path,
+    category: str | None,
+    treatment: str,
+    config_path: str | None,
+    verbose: bool,
+    force: bool = False,
+) -> dict[str, Any]:
+    """Ejecuta el orquestador de portadas sobre un artículo.
+
+    La importación del subsistema es diferida, igual que en RRSS: depende de
+    Pillow y el resto del CLI debe seguir funcionando si no está instalado.
+
+    Args:
+        article_path: Ruta al artículo Markdown.
+        output_dir: Directorio base de los bundles de portada.
+        category: Sección pedida, o None para deducirla del artículo.
+        treatment: Tratamiento pedido (``auto`` o uno concreto).
+        config_path: Ruta a la configuración visual, o None para la default.
+        verbose: Si es True, activa logging DEBUG.
+        force: Si es True, regenera una portada existente.
+
+    Returns:
+        dict[str, Any]: Resumen devuelto por ``run_cover``.
+
+    Raises:
+        SystemExit: Si falta Pillow, la configuración o el artículo no son
+        utilizables, o la sección/tratamiento no existen.
+    """
+    try:
+        from .cover.orchestrator import CoverError, run_cover
+    except ImportError as exc:
+        print(
+            "Error: no se pudo cargar el subsistema de portadas. Verifica que "
+            f"Pillow esté instalado (pip install -e .). Detalle: {exc}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    try:
+        return run_cover(
+            article_path=article_path,
+            output_dir=output_dir,
+            config_path=config_path,
+            category=category,
+            treatment=treatment,
+            verbose=verbose,
+            force=force,
+        )
+    except CoverError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(getattr(exc, "code", 1))
+
+
 def run_print_step(
     pauta_path: str | Path,
     output_dir: str | Path,
@@ -1182,6 +1372,66 @@ def _handle_article(args: argparse.Namespace) -> None:
         args.skip_review,
     )
     print_article_summary(result)
+
+
+def _handle_cover(args: argparse.Namespace) -> None:
+    """Ejecuta el subcomando ``cover``.
+
+    Args:
+        args: Argumentos ya parseados.
+    """
+    articles = resolve_articles(
+        args.article,
+        articles_dir=args.articles_dir,
+        all_articles=args.all_articles,
+        select=args.select,
+    )
+    output_dir = resolve_output_dir(args.output, DEFAULT_COVERS_OUTPUT_DIR)
+
+    if len(articles) > 1:
+        print(
+            f"📚 Se generarán portadas para {len(articles)} artículo(s) de "
+            f"'{args.articles_dir}/'."
+        )
+
+    failures: list[Path] = []
+    for index, article_path in enumerate(articles, start=1):
+        if len(articles) > 1:
+            print(
+                f"\n▶️  Portada {index}/{len(articles)}: {article_path.name}"
+            )
+
+        try:
+            result = run_cover_step(
+                article_path=article_path,
+                output_dir=output_dir,
+                category=args.category,
+                treatment=args.treatment,
+                config_path=args.cover_config,
+                verbose=args.verbose,
+                force=args.force,
+            )
+        except SystemExit as exc:
+            # En lote, un artículo inválido no debe abortar los demás.
+            if len(articles) == 1 or exc.code in (None, 0):
+                raise
+            failures.append(article_path)
+            print(
+                f"⚠️  Se omitió {article_path.name} por un error "
+                f"(código {exc.code}).",
+                file=sys.stderr,
+            )
+            continue
+
+        print_cover_summary(result)
+
+    if failures:
+        print(
+            f"\n❌ {len(failures)} de {len(articles)} artículo(s) no se "
+            "pudieron procesar.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
 
 def _handle_social(args: argparse.Namespace) -> None:
@@ -1407,6 +1657,58 @@ def _socialize_edition(
     return results, failed
 
 
+def _cover_edition(
+    article_results: list[dict[str, Any]],
+    output_dir: Path,
+    config_path: str | None,
+    verbose: bool,
+) -> tuple[list[dict[str, Any]], list[Path]]:
+    """Genera la portada editorial de cada nota de la edición.
+
+    Args:
+        article_results: Resultados de las notas escritas.
+        output_dir: Directorio base de los bundles de portada.
+        config_path: Ruta a la configuración visual, o None.
+        verbose: Si es True, activa logging DEBUG.
+
+    Returns:
+        tuple[list[dict], list[Path]]: Resultados de las portadas generadas y
+        rutas de las notas cuya portada falló.
+    """
+    results: list[dict[str, Any]] = []
+    failed: list[Path] = []
+    total = len(article_results)
+
+    for index, article_result in enumerate(article_results, start=1):
+        article_path = Path(article_result["article_path"])
+        print(f"\n▶️  Portada {index}/{total}: {article_path.name}...")
+        try:
+            result = run_cover_step(
+                article_path=article_path,
+                output_dir=output_dir,
+                category=None,
+                treatment="auto",
+                config_path=config_path,
+                verbose=verbose,
+                force=False,
+            )
+        except SystemExit as exc:
+            if exc.code in (None, 0):
+                raise
+            failed.append(article_path)
+            print(
+                f"⚠️  Se omitió la portada de {article_path.name} por un "
+                f"error (código {exc.code}).",
+                file=sys.stderr,
+            )
+            continue
+
+        results.append(result)
+        print_cover_summary(result)
+
+    return results, failed
+
+
 def _handle_all(args: argparse.Namespace) -> None:
     """Ejecuta el subcomando ``all`` (pauta, notas, RRSS y tríptico).
 
@@ -1433,7 +1735,7 @@ def _handle_all(args: argparse.Namespace) -> None:
 
     base = Path(args.base)
 
-    print("\n▶️  Paso 1/4: generando la pauta editorial...")
+    print("\n▶️  Paso 1/5: generando la pauta editorial...")
     reports_dir = resolve_output_dir(base / DEFAULT_REPORTS_DIR)
     pipeline_result = run_pipeline(
         feeds_path=args.feeds,
@@ -1446,13 +1748,15 @@ def _handle_all(args: argparse.Namespace) -> None:
     pauta_path = Path(pipeline_result["report_path"])
     articles_dir = resolve_output_dir(base / DEFAULT_ARTICLES_DIR)
     social_dir = resolve_output_dir(base / DEFAULT_SOCIAL_OUTPUT_DIR)
+    cover_results: list[dict[str, Any]] = []
     failed_articles: list[int] = []
+    failed_covers: list[Path] = []
     failed_social: list[Path] = []
 
     if full_edition:
         numbers = _proposal_numbers(pauta_path)
         print(
-            f"\n▶️  Paso 2/4: escribiendo {len(numbers)} notas "
+            f"\n▶️  Paso 2/5: escribiendo {len(numbers)} notas "
             "(una por propuesta)..."
         )
         article_results, failed_articles = _write_edition_articles(
@@ -1464,8 +1768,28 @@ def _handle_all(args: argparse.Namespace) -> None:
         )
 
         if article_results:
+            if args.skip_covers:
+                print(
+                    "\n▶️  Paso 3/5: portadas editoriales omitidas "
+                    "(--skip-covers)."
+                )
+            else:
+                print(
+                    "\n▶️  Paso 3/5: generando la portada editorial de cada "
+                    "nota..."
+                )
+                covers_dir = resolve_output_dir(
+                    base / DEFAULT_COVERS_OUTPUT_DIR
+                )
+                cover_results, failed_covers = _cover_edition(
+                    article_results=article_results,
+                    output_dir=covers_dir,
+                    config_path=args.social_config,
+                    verbose=args.verbose,
+                )
+
             print(
-                "\n▶️  Paso 3/4: generando las piezas de RRSS de cada nota..."
+                "\n▶️  Paso 4/5: generando las piezas de RRSS de cada nota..."
             )
             social_results, failed_social = _socialize_edition(
                 article_results=article_results,
@@ -1478,15 +1802,15 @@ def _handle_all(args: argparse.Namespace) -> None:
             )
         else:
             print(
-                "\n⚠️  No se escribió ninguna nota: se omiten las piezas "
-                "de RRSS.",
+                "\n⚠️  No se escribió ninguna nota: se omiten las portadas "
+                "y las piezas de RRSS.",
                 file=sys.stderr,
             )
             social_results = []
     else:
         number = resolve_article_number(args.number, pauta_path)
 
-        print("\n▶️  Paso 2/4: escribiendo la nota...")
+        print("\n▶️  Paso 2/5: escribiendo la nota...")
         article_result = _write_article_step(
             pauta_path,
             number,
@@ -1497,7 +1821,26 @@ def _handle_all(args: argparse.Namespace) -> None:
         print_article_summary(article_result)
         article_results = [article_result]
 
-        print("\n▶️  Paso 3/4: generando las piezas para redes sociales...")
+        if args.skip_covers:
+            print(
+                "\n▶️  Paso 3/5: portada editorial omitida (--skip-covers)."
+            )
+        else:
+            print("\n▶️  Paso 3/5: generando la portada editorial...")
+            covers_dir = resolve_output_dir(base / DEFAULT_COVERS_OUTPUT_DIR)
+            cover_result = run_cover_step(
+                article_path=article_result["article_path"],
+                output_dir=covers_dir,
+                category=None,
+                treatment="auto",
+                config_path=args.social_config,
+                verbose=args.verbose,
+                force=False,
+            )
+            print_cover_summary(cover_result)
+            cover_results = [cover_result]
+
+        print("\n▶️  Paso 4/5: generando las piezas para redes sociales...")
         social_result = run_socialize_step(
             article_path=article_result["article_path"],
             output_dir=social_dir,
@@ -1510,7 +1853,7 @@ def _handle_all(args: argparse.Namespace) -> None:
         print_social_summary(social_result)
         social_results = [social_result]
 
-    print("\n▶️  Paso 4/4: armando el tríptico impreso...")
+    print("\n▶️  Paso 5/5: armando el tríptico impreso...")
     print_dir = resolve_output_dir(base / DEFAULT_PRINT_OUTPUT_DIR)
     print_result = run_print_step(
         pauta_path=pauta_path,
@@ -1524,10 +1867,14 @@ def _handle_all(args: argparse.Namespace) -> None:
         print("\n📊 Resumen de la edición completa:")
         print(f"   📄 Notas escritas: {len(article_results)}/{len(numbers)}")
         print(
+            f"   🖼️  Portadas editoriales: "
+            f"{len(cover_results)}/{len(article_results)}"
+        )
+        print(
             f"   📱 Bundles de RRSS: "
             f"{len(social_results)}/{len(article_results)}"
         )
-        if failed_articles or failed_social:
+        if failed_articles or failed_covers or failed_social:
             print(
                 "\n⚠️  La edición terminó con incidencias; revisa los "
                 "errores anteriores.",

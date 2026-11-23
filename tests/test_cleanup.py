@@ -6,6 +6,7 @@ from pathlib import Path
 
 from news_agent.cleanup import (
     ARTICLES_TARGET,
+    COVERS_TARGET,
     REPORTS_TARGET,
     StaleEntry,
     find_stale_entries,
@@ -14,6 +15,7 @@ from news_agent.cleanup import (
 )
 from news_agent.config import (
     DEFAULT_ARTICLES_DIR,
+    DEFAULT_COVERS_OUTPUT_DIR,
     DEFAULT_REPORTS_DIR,
     DEFAULT_SOCIAL_OUTPUT_DIR,
 )
@@ -54,6 +56,24 @@ def _create_bundle(base: Path, name: str, when: datetime) -> Path:
     bundle = base / DEFAULT_SOCIAL_OUTPUT_DIR / name
     _create_file(bundle / "assets" / "headline_card_x.png", when)
     _create_file(bundle / "manifest.json", when)
+    return bundle
+
+
+def _create_cover_bundle(base: Path, name: str, when: datetime) -> Path:
+    """Crea un bundle de portada con sus piezas, igual que los reales.
+
+    Args:
+        base: Directorio base del proyecto.
+        name: Nombre de la carpeta del bundle (``AAAA_MM_DD_slug``).
+        when: Fecha de modificación de los archivos.
+
+    Returns:
+        Path: La ruta de la carpeta del bundle.
+    """
+    bundle = base / DEFAULT_COVERS_OUTPUT_DIR / name
+    _create_file(bundle / "portada_og.png", when)
+    _create_file(bundle / "portada_web.png", when)
+    _create_file(bundle / "portada.json", when)
     return bundle
 
 
@@ -156,6 +176,14 @@ class TestFindStaleEntries:
         assert [entry.path for entry in entries] == [bundle.resolve()]
         assert entries[0].size_bytes > 0
 
+    def test_detects_cover_bundles_with_their_pieces(self, tmp_path):
+        bundle = _create_cover_bundle(tmp_path, "2026_07_01_titular", NOW)
+
+        entries = find_stale_entries(tmp_path, max_age_days=30, now=NOW)
+
+        assert [entry.path for entry in entries] == [bundle.resolve()]
+        assert entries[0].size_bytes > 0
+
     def test_covers_every_target_by_default(self, tmp_path):
         report = _create_file(
             tmp_path / DEFAULT_REPORTS_DIR / "pauta_semanal_2026_06_01.md", NOW
@@ -165,13 +193,19 @@ class TestFindStaleEntries:
             NOW - timedelta(days=90),
         )
         bundle = _create_bundle(tmp_path, "2026_06_01_titular", NOW)
+        cover = _create_cover_bundle(tmp_path, "2026_06_01_titular", NOW)
 
         found = {
             entry.path
             for entry in find_stale_entries(tmp_path, max_age_days=30, now=NOW)
         }
 
-        assert found == {report.resolve(), article.resolve(), bundle.resolve()}
+        assert found == {
+            report.resolve(),
+            article.resolve(),
+            bundle.resolve(),
+            cover.resolve(),
+        }
 
     def test_keeps_the_artifacts_inside_the_cutoff(self, tmp_path):
         _create_file(
@@ -268,6 +302,16 @@ class TestFindStaleEntries:
         )
 
         assert [entry.path for entry in entries] == [article.resolve()]
+
+    def test_filters_by_the_covers_target(self, tmp_path):
+        cover = _create_cover_bundle(tmp_path, "2026_08_01_titular", NOW)
+        _create_bundle(tmp_path, "2026_08_01_titular", NOW)
+
+        entries = find_stale_entries(
+            tmp_path, targets=(COVERS_TARGET,), max_age_days=30, now=NOW
+        )
+
+        assert [entry.path for entry in entries] == [cover.resolve()]
 
 
 class TestRemoveEntries:

@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import re
+import unicodedata
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
@@ -198,6 +199,84 @@ SOCIAL_FONT_REGULAR_CANDIDATES = (
     "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
     "/usr/share/fonts/TTF/DejaVuSans.ttf",
     "/System/Library/Fonts/Supplemental/Arial.ttf",
+)
+
+# ---------------------------------------------------------------------------
+# Constantes del subsistema de portadas editoriales
+# ---------------------------------------------------------------------------
+# Portadas para las notas que no tienen imagen de cabecera. El diseño es
+# determinista (Pillow) y no consume LLM: la ausencia de fotografía se
+# resuelve con jerarquía tipográfica, sección y un patrón de marca. Se generan
+# dos piezas: una 16:9 para el sitio y otra 1200x630 para og:image.
+DEFAULT_COVERS_OUTPUT_DIR = "portadas"
+COVER_BASE_WIDTH = 1600
+
+# Tratamientos disponibles y etiqueta que se muestra en el manifiesto.
+COVER_TREATMENTS = ("text_first", "quote", "data")
+COVER_DEFAULT_TREATMENT = "auto"
+COVER_TREATMENT_LABELS = {
+    "text_first": "Editorial tipográfica",
+    "quote": "Cita de opinión",
+    "data": "Dato duro",
+}
+
+# Taxonomía de secciones vigente en el sitio. El acento de cada sección tiñe
+# el fondo y los elementos de jerarquía; 'Opinión' usa el acento cálido de la
+# marca porque su tratamiento es la cita destacada.
+COVER_DEFAULT_CATEGORY = "Actualidad"
+COVER_CATEGORIES = {
+    "Actualidad": {"label": "Actualidad", "accent": "#DF3224"},
+    "Nacional": {"label": "Nacional", "accent": "#4C7FB8"},
+    "Internacional": {"label": "Internacional", "accent": "#2C9C9C"},
+    "Regional": {"label": "Regional", "accent": "#48A868"},
+    "Política": {"label": "Política", "accent": "#C9873A"},
+    "Cultura": {"label": "Cultura", "accent": "#9B7BD4"},
+    "Opinión": {"label": "Opinión", "accent": "#F2C14E"},
+}
+
+# Formatos de salida. 'web' es la cabecera 16:9 del sitio; 'og' es la tarjeta
+# 1200x630 que esperan WhatsApp, X y Facebook.
+COVER_FORMATS = {
+    "og": {"width": 1200, "height": 630, "filename": "portada_og.png"},
+    "web": {"width": 1600, "height": 900, "filename": "portada_web.png"},
+}
+
+# Topes de texto de cada tratamiento, en líneas y caracteres.
+COVER_LIMITS = {
+    "title_max_lines": 4,
+    "deck_max_lines": 3,
+    "quote_max_lines": 4,
+    "figure_max_chars": 24,
+    "caption_max_chars": 220,
+    "caption_max_lines": 4,
+    "deck_max_chars": 260,
+}
+
+# Sección que corresponde a cada propuesta de la pauta: las tres primeras son
+# nacionales y las dos últimas internacionales. Es un default editorial; el
+# editor puede corregirlo con --category.
+COVER_PROPOSAL_CATEGORIES = (
+    "Nacional",
+    "Nacional",
+    "Nacional",
+    "Internacional",
+    "Internacional",
+)
+
+# Intensidad del patrón geométrico de fondo, como mezcla del acento sobre el
+# fondo. Valores altos compiten con el texto y se rechazan al cargar.
+COVER_TEXTURE_INTENSITY = 0.09
+
+# Rutas candidatas para la tipografía serif de la cita de opinión. Se usa la
+# primera que exista; si ninguna está disponible, la cita se dibuja con la
+# sans en negrita y se advierte en el manifiesto. SOCIAL_FONT_DIR también
+# puede aportar la fuente configurada en brand.fonts.quote.
+COVER_FONT_SERIF_CANDIDATES = (
+    "/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationSerif-Bold.ttf",
+    "/usr/share/fonts/truetype/noto/NotoSerif-Bold.ttf",
+    "/usr/share/fonts/TTF/DejaVuSerif-Bold.ttf",
+    "/System/Library/Fonts/Supplemental/Georgia Bold.ttf",
 )
 
 # ---------------------------------------------------------------------------
@@ -874,6 +953,413 @@ def _validate_instagram_carousel_section(
         )
 
 
+# ---------------------------------------------------------------------------
+# Validación de la configuración de portadas editoriales
+# ---------------------------------------------------------------------------
+
+# Campos admitidos en la sección opcional ``covers``. Cualquier otra clave se
+# rechaza para detectar erratas al cargar.
+_COVER_SECTION_FIELDS = frozenset(
+    {
+        "categories",
+        "formats",
+        "limits",
+        "default_category",
+        "proposal_categories",
+        "texture",
+    }
+)
+_COVER_CATEGORY_FIELDS = frozenset({"label", "accent"})
+_COVER_FORMAT_FIELDS = frozenset({"width", "height", "filename"})
+_COVER_FORMAT_NAMES = frozenset(COVER_FORMATS)
+_COVER_TEXTURE_FIELDS = frozenset({"intensity"})
+
+
+def _fold_cover_text(text: str) -> str:
+    """Normaliza un texto para comparar categorías sin caja ni acentos.
+
+    Args:
+        text: Texto original.
+
+    Returns:
+        str: Texto en minúsculas, sin diacríticos y sin espacios extremos.
+    """
+    decomposed = unicodedata.normalize("NFKD", text or "")
+    folded = "".join(
+        char for char in decomposed if not unicodedata.combining(char)
+    )
+    return folded.casefold().strip()
+
+
+def _match_cover_category(
+    name: object, categories: dict[str, dict]
+) -> str | None:
+    """Busca la clave oficial de una categoría, tolerando caja y acentos.
+
+    Args:
+        name: Nombre declarado por el usuario o por la configuración.
+        categories: Categorías efectivas, indexadas por su clave oficial.
+
+    Returns:
+        str | None: Clave oficial, o None si no existe.
+    """
+    if not isinstance(name, str) or not name.strip():
+        return None
+
+    folded = _fold_cover_text(name)
+    for key in categories:
+        if _fold_cover_text(key) == folded:
+            return key
+    return None
+
+
+def _validate_cover_categories(categories: object) -> dict[str, dict]:
+    """Valida y fusiona las categorías de las portadas con los defaults.
+
+    Args:
+        categories: Sección ``covers.categories`` o None.
+
+    Returns:
+        dict[str, dict]: Categorías efectivas, con ``label`` y ``accent``.
+
+    Raises:
+        ConfigurationError: Si una categoría o su acento no son utilizables.
+    """
+    effective = {
+        name: {"label": spec["label"], "accent": spec["accent"]}
+        for name, spec in COVER_CATEGORIES.items()
+    }
+    if categories is None:
+        return effective
+
+    if not isinstance(categories, dict) or not categories:
+        raise ConfigurationError(
+            "La sección 'covers.categories' debe ser un objeto JSON no vacío "
+            "(sección → {label, accent})."
+        )
+
+    for name, spec in categories.items():
+        if not isinstance(name, str) or not name.strip():
+            raise ConfigurationError(
+                "Cada categoría de 'covers.categories' debe tener un nombre "
+                f"de texto no vacío, pero se encontró {name!r}."
+            )
+        if not isinstance(spec, dict):
+            raise ConfigurationError(
+                f"La categoría '{name}' de 'covers.categories' debe ser un "
+                f"objeto JSON, pero es {type(spec).__name__}."
+            )
+
+        unknown = set(spec) - _COVER_CATEGORY_FIELDS
+        if unknown:
+            raise ConfigurationError(
+                f"La categoría '{name}' tiene campos desconocidos: "
+                f"{', '.join(sorted(unknown))}."
+            )
+
+        accent = spec.get("accent")
+        if not isinstance(accent, str) or not _HEX_COLOR_RE.match(
+            accent.strip()
+        ):
+            raise ConfigurationError(
+                f"El acento de la categoría '{name}' debe ser hexadecimal "
+                f"#RRGGBB o #RGB, pero es {accent!r}."
+            )
+
+        label = spec.get("label", name)
+        if not isinstance(label, str) or not label.strip():
+            raise ConfigurationError(
+                f"La etiqueta de la categoría '{name}' debe ser un texto no "
+                f"vacío, pero es {label!r}."
+            )
+
+        effective[name.strip()] = {
+            "label": label.strip(),
+            "accent": accent.strip(),
+        }
+
+    return effective
+
+
+def _validate_cover_formats(formats: object) -> dict[str, dict]:
+    """Valida y fusiona los formatos de salida de las portadas.
+
+    Args:
+        formats: Sección ``covers.formats`` o None.
+
+    Returns:
+        dict[str, dict]: Formatos efectivos con ancho, alto y nombre de archivo.
+
+    Raises:
+        ConfigurationError: Si un formato no es utilizable o el archivo no es
+                            un nombre plano.
+    """
+    effective = {
+        name: {
+            "width": int(spec["width"]),
+            "height": int(spec["height"]),
+            "filename": str(spec["filename"]),
+        }
+        for name, spec in COVER_FORMATS.items()
+    }
+    if formats is None:
+        return effective
+
+    if not isinstance(formats, dict) or not formats:
+        raise ConfigurationError(
+            "La sección 'covers.formats' debe ser un objeto JSON no vacío "
+            "(formato → {width, height, filename})."
+        )
+
+    for name, spec in formats.items():
+        if name not in _COVER_FORMAT_NAMES:
+            raise ConfigurationError(
+                f"El formato de portada '{name}' no está soportado. "
+                f"Opciones válidas: {', '.join(sorted(_COVER_FORMAT_NAMES))}."
+            )
+        if not isinstance(spec, dict):
+            raise ConfigurationError(
+                f"El formato '{name}' debe ser un objeto JSON, pero es "
+                f"{type(spec).__name__}."
+            )
+
+        unknown = set(spec) - _COVER_FORMAT_FIELDS
+        if unknown:
+            raise ConfigurationError(
+                f"El formato '{name}' tiene campos desconocidos: "
+                f"{', '.join(sorted(unknown))}."
+            )
+
+        width = spec.get("width", effective[name]["width"])
+        height = spec.get("height", effective[name]["height"])
+        filename = spec.get("filename", effective[name]["filename"])
+
+        for field, value in (("width", width), ("height", height)):
+            if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+                raise ConfigurationError(
+                    f"El campo '{field}' del formato '{name}' debe ser un "
+                    f"entero mayor que cero, pero es {value!r}."
+                )
+
+        if not isinstance(filename, str) or not filename.strip():
+            raise ConfigurationError(
+                f"El campo 'filename' del formato '{name}' debe ser un texto "
+                f"no vacío, pero es {filename!r}."
+            )
+        filename = filename.strip()
+        if (
+            "/" in filename
+            or "\\" in filename
+            or filename in {".", ".."}
+            or filename.startswith(".")
+        ):
+            raise ConfigurationError(
+                f"El campo 'filename' del formato '{name}' debe ser un nombre "
+                f"de archivo plano, sin rutas, pero es {filename!r}."
+            )
+
+        effective[name] = {
+            "width": int(width),
+            "height": int(height),
+            "filename": filename,
+        }
+
+    return effective
+
+
+def _validate_cover_limits(limits: object) -> dict[str, int]:
+    """Valida los topes de texto de las portadas.
+
+    Args:
+        limits: Sección ``covers.limits`` o None.
+
+    Returns:
+        dict[str, int]: Límites efectivos.
+
+    Raises:
+        ConfigurationError: Si una clave es desconocida o su valor no es un
+                            entero positivo.
+    """
+    effective = {key: int(value) for key, value in COVER_LIMITS.items()}
+    if limits is None:
+        return effective
+
+    if not isinstance(limits, dict):
+        raise ConfigurationError(
+            "La sección 'covers.limits' debe ser un objeto JSON."
+        )
+
+    unknown = set(limits) - set(COVER_LIMITS)
+    if unknown:
+        raise ConfigurationError(
+            "La sección 'covers.limits' tiene campos desconocidos: "
+            f"{', '.join(sorted(unknown))}."
+        )
+
+    for key, value in limits.items():
+        if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+            raise ConfigurationError(
+                f"El límite '{key}' de 'covers.limits' debe ser un entero "
+                f"mayor que cero, pero es {value!r}."
+            )
+        effective[key] = value
+
+    return effective
+
+
+def _validate_cover_texture(texture: object) -> dict[str, float]:
+    """Valida la intensidad del patrón de fondo de las portadas.
+
+    Args:
+        texture: Sección ``covers.texture`` o None.
+
+    Returns:
+        dict[str, float]: Textura efectiva.
+
+    Raises:
+        ConfigurationError: Si la intensidad no está entre 0 y 0.5.
+    """
+    effective = {"intensity": float(COVER_TEXTURE_INTENSITY)}
+    if texture is None:
+        return effective
+
+    if not isinstance(texture, dict):
+        raise ConfigurationError(
+            "La sección 'covers.texture' debe ser un objeto JSON."
+        )
+
+    unknown = set(texture) - _COVER_TEXTURE_FIELDS
+    if unknown:
+        raise ConfigurationError(
+            "La sección 'covers.texture' tiene campos desconocidos: "
+            f"{', '.join(sorted(unknown))}."
+        )
+
+    intensity = texture.get("intensity", COVER_TEXTURE_INTENSITY)
+    if (
+        isinstance(intensity, bool)
+        or not isinstance(intensity, (int, float))
+        or not 0.0 <= float(intensity) <= 0.5
+    ):
+        raise ConfigurationError(
+            "El campo 'intensity' de 'covers.texture' debe ser un número "
+            f"entre 0 y 0.5, pero es {intensity!r}."
+        )
+
+    effective["intensity"] = float(intensity)
+    return effective
+
+
+def _validate_cover_proposal_categories(
+    value: object, categories: dict[str, dict]
+) -> list[str]:
+    """Valida el mapa propuesta → categoría de las portadas.
+
+    Args:
+        value: Lista declarada en ``covers.proposal_categories`` o None.
+        categories: Categorías efectivas.
+
+    Returns:
+        list[str]: Categorías efectivas, una por propuesta.
+
+    Raises:
+        ConfigurationError: Si el largo no coincide con las propuestas o
+                            alguna categoría no existe.
+    """
+    if value is None:
+        declared: list[object] | None = list(COVER_PROPOSAL_CATEGORIES)
+    elif isinstance(value, (list, tuple)):
+        declared = list(value)
+    else:
+        declared = None
+
+    if declared is None:
+        raise ConfigurationError(
+            "La sección 'covers.proposal_categories' debe ser una lista de "
+            f"{NUM_PROPOSALS} categorías."
+        )
+    if len(declared) != NUM_PROPOSALS:
+        raise ConfigurationError(
+            "La sección 'covers.proposal_categories' debe tener "
+            f"{NUM_PROPOSALS} categorías, una por propuesta, pero tiene "
+            f"{len(declared)}."
+        )
+
+    resolved: list[str] = []
+    for index, name in enumerate(declared, start=1):
+        key = _match_cover_category(name, categories)
+        if key is None:
+            raise ConfigurationError(
+                f"La propuesta {index} apunta a la categoría {name!r}, que no "
+                "existe en 'covers.categories'. Opciones válidas: "
+                f"{', '.join(sorted(categories))}."
+            )
+        resolved.append(key)
+
+    return resolved
+
+
+def _validate_covers_section(covers: object) -> dict:
+    """Valida y normaliza la sección opcional ``covers`` de la configuración.
+
+    La sección es opcional: si no está, se usan los valores por defecto del
+    módulo. Cuando existe, se fusiona con los defaults para que una
+    configuración parcial no obligue a repetir la taxonomía o los formatos.
+
+    Args:
+        covers: Valor crudo de la sección ``covers``, o None.
+
+    Returns:
+        dict: Sección normalizada con categorías, formatos, límites, textura,
+              categoría por defecto y mapa de propuestas.
+
+    Raises:
+        ConfigurationError: Si la sección o alguno de sus valores no es
+                            utilizable.
+    """
+    if covers is None:
+        covers = {}
+    if not isinstance(covers, dict):
+        raise ConfigurationError(
+            "La sección 'covers' de la configuración visual debe ser un "
+            f"objeto JSON, pero es {type(covers).__name__}."
+        )
+
+    unknown = set(covers) - _COVER_SECTION_FIELDS
+    if unknown:
+        raise ConfigurationError(
+            "La sección 'covers' tiene campos desconocidos: "
+            f"{', '.join(sorted(unknown))}."
+        )
+
+    categories = _validate_cover_categories(covers.get("categories"))
+    formats = _validate_cover_formats(covers.get("formats"))
+    limits = _validate_cover_limits(covers.get("limits"))
+    texture = _validate_cover_texture(covers.get("texture"))
+
+    declared_default = covers.get("default_category", COVER_DEFAULT_CATEGORY)
+    default_category = _match_cover_category(declared_default, categories)
+    if default_category is None:
+        raise ConfigurationError(
+            "El campo 'default_category' de 'covers' apunta a la categoría "
+            f"{declared_default!r}, que no existe. Opciones válidas: "
+            f"{', '.join(sorted(categories))}."
+        )
+
+    proposal_categories = _validate_cover_proposal_categories(
+        covers.get("proposal_categories"), categories
+    )
+
+    return {
+        "categories": categories,
+        "formats": formats,
+        "limits": limits,
+        "texture": texture,
+        "default_category": default_category,
+        "proposal_categories": proposal_categories,
+    }
+
+
 def load_social_config(path: str | Path | None = None) -> dict:
     """Carga la configuración de marca y plantillas del subsistema RRSS.
 
@@ -904,6 +1390,40 @@ def load_social_config(path: str | Path | None = None) -> dict:
     _validate_instagram_carousel_section(
         data.get("instagram_carousel"), data["banners"]
     )
+
+    return data
+
+
+def load_cover_config(path: str | Path | None = None) -> dict:
+    """Carga la configuración de marca y portadas editoriales.
+
+    Reutiliza ``social_config.json`` porque la identidad visual es única: la
+    paleta, las tipografías y el logo de los banners son los mismos que los de
+    las portadas. La sección ``covers`` es opcional y se normaliza aquí para
+    que el resto del subsistema trabaje con categorías, formatos y límites ya
+    resueltos.
+
+    Args:
+        path: Ruta al archivo JSON. Si es None, se usa SOCIAL_CONFIG_PATH.
+
+    Returns:
+        dict: Configuración con las claves 'brand' y 'covers' normalizada.
+
+    Raises:
+        ConfigurationError: Si el archivo no existe, no es JSON válido, no
+                            tiene la sección 'brand' o 'covers' es inválida.
+    """
+    file_path = Path(path) if path else Path(SOCIAL_CONFIG_PATH)
+    data = _read_social_config_file(file_path)
+
+    brand = data.get("brand")
+    if not isinstance(brand, dict):
+        raise ConfigurationError(
+            "La configuración de portadas requiere la sección 'brand' como "
+            "objeto JSON con la identidad visual de la marca."
+        )
+    _validate_brand_section(brand)
+    data["covers"] = _validate_covers_section(data.get("covers"))
 
     return data
 
