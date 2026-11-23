@@ -84,7 +84,8 @@ COMMAND_DESCRIPTIONS: dict[str, str] = {
 REPORT_FILE_PATTERN = "pauta_semanal_*.md"
 ARTICLE_FILE_PATTERN = "articulo_*.md"
 
-# Número editorial que abre el nombre de los artículos (articulo_3_slug.md).
+# Número editorial que abre el nombre de los artículos, con o sin fecha:
+# articulo_3_2026_11_23_slug.md o la variante antigua articulo_3_slug.md.
 ARTICLE_ORDER_RE = re.compile(r"articulo_(\d+)")
 
 # Ayuda reutilizada por todos los subcomandos.
@@ -541,8 +542,9 @@ def find_latest_article(
 ) -> Path | None:
     """Localiza el artículo más reciente de un directorio.
 
-    Los artículos no llevan fecha en el nombre, así que se usa la fecha de
-    modificación como criterio de orden.
+    Se usa la fecha de modificación como criterio de orden: la fecha del
+    nombre identifica el día de la edición y no permite desempatar varias
+    notas generadas el mismo día.
 
     Args:
         directory: Directorio donde buscar.

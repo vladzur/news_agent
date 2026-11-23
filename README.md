@@ -39,13 +39,13 @@ Toma una propuesta específica de la pauta (1 a 5) y la expande a un artículo d
 4. **Redacción del artículo** — Usa un system prompt de redactor periodístico (identidad La Chispa Sur) que exige trazabilidad de cada dato a las fuentes proporcionadas y **foco editorial único**: desarrolla solo el eje de la propuesta aprobada, descarta el material de origen que trate otros temas y no fuerza conexiones para unirlo.
 5. **Editor de portada** — Una segunda llamada, con rol de editor de portada, devuelve **tres propuestas diferenciadas** de titular y bajada: denuncia/tesis política, narrativo/humano y analítico/geopolítico. Los largos se validan en código (12-16 palabras el titular, 25-45 la bajada): si el modelo se desvía se reintenta una vez y, si vuelve a fallar, solo se recortan los textos que exceden el máximo; los que quedan cortos se conservan con una advertencia en el log. La **propuesta 1 se aplica** como titular y bajada del artículo; las tres quedan en un apéndice `## 📰 Propuestas de portada` al final del archivo para cambiarlas sin repetir la generación. Si esta etapa falla, la nota se guarda igual con el titular del redactor.
 6. **Revisión editorial (editor periodístico)** — Una tercera llamada, con rol de editor periodístico, recibe el **titular seleccionado, la bajada y el cuerpo**, y devuelve las tres piezas corregidas en JSON (`titular`, `bajada`, `cuerpo`, `resumen_cambios`). Revisa ortografía, sintaxis, puntuación, coherencia entre las tres piezas y estilo según la línea editorial de La Chispa Sur, sin agregar hechos ni cambiar el ángulo aprobado. En código se exige que el cuerpo conserve el número de secciones, el bloque de fuentes y un volumen entre 0,7 y 1,3 veces el original; las referencias `[art. N]` se eliminan y un titular o una bajada fuera de rango conservan la versión de portada. Si la etapa falla o devuelve un contrato inválido, **la nota se guarda con el texto previo** y se advierte: la revisión nunca impide publicar. La propuesta 1 del apéndice se sincroniza con las correcciones; las alternativas 2 y 3 se conservan. Con `--skip-review` se omite la etapa.
-7. **Artículo final** — Titular y bajada de portada, lead, desarrollo por secciones con subtítulos, fuentes citadas y el apéndice de propuestas. Guardado como `articulo_N_slug-del-titulo.md`. El apéndice está marcado como no publicable y el parser de RRSS lo excluye del material de origen.
+7. **Artículo final** — Titular y bajada de portada, lead, desarrollo por secciones con subtítulos, fuentes citadas y el apéndice de propuestas. Guardado como `articulo_N_AAAA_MM_DD_slug-del-titulo.md`: la fecha de creación va en el nombre y también en una línea `**Fecha de creación:** AAAA-MM-DD` después del titular, para que sea visible al abrir el archivo. El apéndice está marcado como no publicable y el parser de RRSS lo excluye del material de origen.
 
 > **¿Por qué referencias primero y matching por medio como respaldo?** El prompt exige que el modelo cite cada artículo con `[art. N]`, y el sistema resuelve esa referencia de forma determinista contra los artículos del pipeline. Las referencias fuera de rango se descartan. Cuando la pauta no trae referencias utilizables —pautas antiguas o respuestas que ignoran la instrucción—, entra el matching por nombre de medio + keywords. Si el modelo inventa un número, la referencia puede apuntar al artículo equivocado: el sistema solo valida el rango, así que conviene revisar el companion antes de redactar una nota sensible.
 
 ### 3. Repurposing de artículos para redes sociales (RRSS)
 
-Toma un artículo ya publicado (`articulos/articulo_N_slug.md`) y produce un **bundle autocontenido** con todo lo necesario para publicarlo en X, Facebook e Instagram:
+Toma un artículo ya publicado (`articulos/articulo_N_AAAA_MM_DD_slug.md`) y produce un **bundle autocontenido** con todo lo necesario para publicarlo en X, Facebook e Instagram:
 
 1. **Parseo del artículo de origen** — Separa titular, firma, lead, secciones, fuentes citadas, cifras detectadas y oraciones candidatas a cita. Todo lo que se genere después se valida contra este material.
 2. **Copys estructurados (LLM)** — En una sola llamada obtiene y valida:
@@ -116,7 +116,7 @@ python -m news_agent print
 # RRSS de varios artículos: uno elegido por la terminal, uno concreto por ruta
 # o todos los que haya en articulos/
 python -m news_agent social --select
-python -m news_agent social --article articulos/articulo_3_slug.md
+python -m news_agent social --article articulos/articulo_3_2026_09_14_slug.md
 python -m news_agent social --all
 
 # Limpieza de los artefactos con más de 90 días (pide confirmación)
@@ -165,7 +165,7 @@ Se mantienen por compatibilidad con los scripts y los cron ya desplegados:
 | Generar pauta | `python -m news_agent --feeds rss_feeds.json --output ./reportes` |
 | Generar pauta + debug | `python -m news_agent --feeds rss_feeds.json --output ./reportes --debug` |
 | Escribir artículo | `python -m news_agent --write-article reportes/pauta_semanal_AAAA_MM_DD.md --article 1 --output ./articulos` |
-| Repurposing para RRSS | `python -m news_agent --socialize articulos/articulo_1_slug.md --output ./social` |
+| Repurposing para RRSS | `python -m news_agent --socialize articulos/articulo_1_2026_09_14_slug.md --output ./social` |
 
 Flags de los modos clásicos:
 
@@ -619,9 +619,9 @@ Se genera automáticamente junto con la pauta. Contiene, para cada propuesta, lo
 
 Este archivo es leído automáticamente por `article_writer.py` al redactar un artículo, inyectando el contenido como `## Material de origen disponible` en el prompt del redactor.
 
-### Artículo completo (`articulos/articulo_N_slug-del-titulo.md`)
+### Artículo completo (`articulos/articulo_N_AAAA_MM_DD_slug-del-titulo.md`)
 
-Artículo de ~1000 palabras con lead periodístico, desarrollo en 3 secciones con subtítulos, y fuentes citadas al final. Ver ejemplos reales en [articulos/](articulos/).
+Artículo de ~1000 palabras con lead periodístico, desarrollo en 3 secciones con subtítulos, y fuentes citadas al final. La fecha de creación aparece en el nombre del archivo y en la línea `**Fecha de creación:** AAAA-MM-DD` ubicada después del titular. Ver ejemplos reales en [articulos/](articulos/).
 
 ### Bundle de RRSS (`social/AAAA_MM_DD_slug-del-titulo/`)
 

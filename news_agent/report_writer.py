@@ -1,10 +1,12 @@
 """Módulo de escritura del reporte final en formato Markdown.
 
 Genera el archivo pauta_semanal_AAAA_MM_DD.md con el contenido
-producido por el modelo DeepSeek.
+producido por el modelo DeepSeek y los artículos individuales con su
+fecha de creación en el nombre y en una línea de metadatos.
 """
 
 import logging
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -12,6 +14,15 @@ from pathlib import Path
 # Logger del módulo
 # ---------------------------------------------------------------------------
 logger = logging.getLogger(__name__)
+
+# Línea de metadatos que identifica la fecha de creación del artículo. Se
+# escribe después del titular y antes de la firma para que el parser de RRSS,
+# que arranca el cuerpo en la firma, no la incluya en el material de origen.
+_ARTICLE_DATE_LINE = "**Fecha de creación:**"
+_CREATION_DATE_RE = re.compile(
+    r"(?m)^\s*\*\*Fecha de creación:\*\*.*(?:\n|$)"
+)
+_ARTICLE_HEADLINE_RE = re.compile(r"(?m)^#\s+(?!#).*$")
 
 
 def build_filename() -> str:
@@ -129,8 +140,6 @@ def _slugify(text: str, max_len: int = 50) -> str:
     Returns:
         str: Slug en minúsculas, solo caracteres alfanuméricos y guiones.
     """
-    import re
-
     # Eliminar caracteres especiales, conservar letras, números y espacios
     slug = re.sub(r"[^\w\s-]", "", text.lower())
     # Reemplazar espacios y guiones bajos por un solo guión
@@ -143,6 +152,34 @@ def _slugify(text: str, max_len: int = 50) -> str:
     return slug.strip("-")
 
 
+def _inject_creation_date(content: str, date_str: str) -> str:
+    """Inserta la fecha de creación después del titular del artículo.
+
+    La línea se coloca entre el H1 y la firma. Así queda visible al abrir el
+    archivo y el parser de RRSS, que arranca el cuerpo en la firma, la deja
+    fuera del material de origen. Si el contenido ya trae una línea de fecha
+    de creación, se reemplaza para no duplicarla.
+
+    Args:
+        content: Markdown del artículo.
+        date_str: Fecha en formato AAAA-MM-DD.
+
+    Returns:
+        str: Artículo con la línea de fecha de creación.
+    """
+    cleaned = _CREATION_DATE_RE.sub("", content)
+    date_line = f"{_ARTICLE_DATE_LINE} {date_str}"
+
+    headline_match = _ARTICLE_HEADLINE_RE.search(cleaned)
+    if headline_match is None:
+        return f"{date_line}\n\n{cleaned.lstrip()}"
+
+    tail = cleaned[headline_match.end():].lstrip("\n")
+    updated = f"{cleaned[:headline_match.end()]}\n\n{date_line}\n\n{tail}"
+    updated = re.sub(r"\n{3,}", "\n\n", updated)
+    return updated.rstrip() + "\n"
+
+
 def save_article(
     content: str,
     title: str,
@@ -150,6 +187,10 @@ def save_article(
     output_dir: str | Path = ".",
 ) -> Path:
     """Guarda un artículo individual como archivo Markdown.
+
+    El nombre incluye la fecha de creación en formato AAAA_MM_DD y el archivo
+    lleva una línea ``**Fecha de creación:** AAAA-MM-DD`` después del titular.
+    La fecha se genera desde el código, nunca desde el modelo.
 
     Args:
         content: Texto completo del artículo generado por el LLM.
@@ -167,12 +208,16 @@ def save_article(
     if not output_path.exists():
         raise IOError(f"El directorio de salida no existe: {output_path.resolve()}")
 
+    now = datetime.now(timezone.utc)
+    file_date = now.strftime("%Y_%m_%d")
+    display_date = now.strftime("%Y-%m-%d")
+
     slug = _slugify(title)
-    filename = f"articulo_{article_number}_{slug}.md"
+    filename = f"articulo_{article_number}_{file_date}_{slug}.md"
     file_path = output_path / filename
 
     with open(file_path, "w", encoding="utf-8") as fh:
-        fh.write(content)
+        fh.write(_inject_creation_date(content, display_date))
 
     logger.info("Artículo guardado exitosamente en: %s", file_path.resolve())
     return file_path.resolve()

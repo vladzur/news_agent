@@ -135,14 +135,14 @@ Transformar un artículo ya publicado en piezas multiplataforma para **X/Twitter
 
 ```
 python -m news_agent social --platforms x,instagram
-python -m news_agent --socialize articulos/articulo_1_slug.md --output ./social
+python -m news_agent --socialize articulos/articulo_1_2026_09_14_slug.md --output ./social
 ```
 
 El subsistema produce cuatro familias de artefactos: **copys estructurados**, **prompts visuales en inglés**, **banners renderizados localmente** y el **carrusel vertical de Instagram**. No publica nada en las plataformas ni genera las imágenes finales del prompt visual: entrega al equipo editorial el material listo para publicar y para pegar en un generador de imágenes.
 
 ### 6.2. Entrada
 
-El único origen admitido es un **artículo Markdown ya publicado** (`articulos/articulo_N_slug.md`), con la estructura que produce el agente: titular de nivel 1, firma, separador horizontal, lead, secciones de nivel 2 y bloque final de fuentes.
+El único origen admitido es un **artículo Markdown ya publicado** (`articulos/articulo_N_AAAA_MM_DD_slug.md`), con la estructura que produce el agente: titular de nivel 1, línea de fecha de creación, firma, separador horizontal, lead, secciones de nivel 2 y bloque final de fuentes. La fecha de creación queda antes de la firma para que el parser no la incluya en el cuerpo que alimenta los prompts de RRSS.
 
 - **Formato inválido:** un archivo sin titular de nivel 1 se rechaza con un error explícito de parseo.
 - **Guardia de material:** si el cuerpo del artículo tiene menos de `SOCIAL_MIN_ARTICLE_WORDS` (150) palabras, el flujo se detiene **antes** de invocar la API para evitar consumo innecesario de tokens.
@@ -294,7 +294,7 @@ El motor se opera desde un CLI por subcomandos que reduce la ejecución de cada 
 | Comando | Responsabilidad | Entradas | Artefactos |
 |---------|-----------------|----------|------------|
 | `report` | Genera la pauta editorial semanal | `--feeds`, `--output`, `--debug` | `reportes/pauta_semanal_AAAA_MM_DD.md` y su companion JSON |
-| `article` | Escribe una nota desde una propuesta | `--pauta`, `-n/--number`, `--output`, `--skip-review` | `articulos/articulo_N_slug.md` |
+| `article` | Escribe una nota desde una propuesta | `--pauta`, `-n/--number`, `--output`, `--skip-review` | `articulos/articulo_N_AAAA_MM_DD_slug.md` |
 | `social` | Repurposing para redes sociales | `--article`, `--articles-dir`, `--all`, `--select`, `--output`, `--platforms`, `--social-config`, `--skip-banners`, `--skip-prompts` | `social/AAAA_MM_DD_slug/` con copys, prompts, Markdown y banners |
 | `print` | Tríptico impreso de la semana | `--pauta`, `--output`, `--triptych-config` | `impresos/AAAA_MM_DD_pauta-semanal/` con el tríptico en JSON, el Markdown panel por panel y el manifiesto |
 | `all` | Secuencia completa, con una nota o la edición entera | `--feeds`, `--base`, `-n/--number`, `--all-articles`, `--skip-review`, opciones sociales, `--triptych-config` y `--debug` | Los cuatro anteriores; con `--all-articles`, una nota y un bundle de RRSS por propuesta |
@@ -313,7 +313,7 @@ Ejecuta, en orden y dentro de una misma invocación: la generación de la pauta,
 ### 7.4. Entradas implícitas y directorio de salida
 
 - **Pauta:** si `article` no recibe `--pauta`, toma la más reciente de `reportes/`. El orden lo da el nombre, que incluye la fecha (`AAAA_MM_DD`).
-- **Artículo:** si `social` no recibe `--article` ni usa `--all`/`--select`, toma el de fecha de modificación más reciente del directorio indicado por `--articles-dir` (`articulos/` por defecto), porque las notas no llevan fecha en el nombre.
+- **Artículo:** si `social` no recibe `--article` ni usa `--all`/`--select`, toma el de fecha de modificación más reciente del directorio indicado por `--articles-dir` (`articulos/` por defecto). La fecha del nombre identifica el día de la edición y no desempata varias notas generadas el mismo día; por eso el criterio sigue siendo la modificación.
 - **Propuesta:** si `article` o `all` no reciben `-n/--number`, muestran los cinco titulares y preguntan cuál desarrollar. Sin terminal interactiva (por ejemplo en un cron) la ejecución falla con código 2 y un mensaje que pide `--number` o `--all-articles`, en lugar de quedar esperando una respuesta que nunca llegará. `all` valida el modo de edición y `--platforms` antes de generar la pauta. `--all-articles` es excluyente con `--number` y no requiere terminal.
 - **Pauta del tríptico:** si `print` no recibe `--pauta`, toma la más reciente de `reportes/`. El tríptico no pide número de propuesta: cubre las cinco, así que `-n` no aplica.
 - **Directorio de salida:** si no se indica `--output`, cada flujo usa su carpeta por defecto (`reportes/`, `articulos/`, `social/` o `impresos/`) y la crea si no existe. Una ruta que apunte al directorio actual se rechaza con error de uso, en los subcomandos y también en los modos clásicos.
@@ -324,7 +324,7 @@ Ejecuta, en orden y dentro de una misma invocación: la generación de la pauta,
 - **Alcance:** solo los artefactos propios de la herramienta, declarados como patrones en `news_agent/cleanup.py`: pautas y companion JSON de `reportes/`, notas de `articulos/` y bundles de `social/`.
 - **Fuera de alcance:** los bundles de `impresos/` todavía no son un objetivo de `clean`. Se limpian a mano hasta que se agregue su patrón.
 - **Nunca se elimina** la caché de contenido (`cache/`) ni los recursos de la marca (`assets/`): ninguna entrada fuera de los patrones declarados se considera, aunque sea antigua.
-- **Fecha de referencia:** la fecha codificada en el nombre cuando existe (pautas y bundles) y, cuando no (las notas), la fecha de modificación. La fecha del nombre es la fuente fiable: al clonar o copiar el repositorio, todos los archivos quedan con la fecha de la copia.
+- **Fecha de referencia:** la fecha codificada en el nombre cuando existe (pautas, bundles y notas nuevas) y, cuando no (las notas antiguas), la fecha de modificación. La fecha del nombre es la fuente fiable: al clonar o copiar el repositorio, todos los archivos quedan con la fecha de la copia.
 - **Umbral:** `--days N` (por defecto `DEFAULT_CLEAN_MAX_AGE_DAYS`, 30). Se elimina lo que supere ese corte; un valor menor que 1 es un error de uso.
 - **Confirmación:** el comando lista lo que va a eliminar, con antigüedad y tamaño, y pide confirmación. `--dry-run` muestra el listado sin borrar nada y `--yes` omite la confirmación para automatizar. En un cron no hay terminal para confirmar, así que se debe usar `--yes` o `--dry-run`; sin terminal y sin `--yes`, el comando sale con error de uso.
 - **Aislamiento de fallos:** si un artefacto no se puede eliminar, se registra en el log, el resto del lote continúa y el resumen final informa cuántos fallaron. Si hubo fallos parciales, el comando termina con código 1.

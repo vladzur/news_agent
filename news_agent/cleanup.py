@@ -5,10 +5,11 @@ artículos y bundles de redes sociales cuya antigüedad supera un máximo de dí
 y los elimina.
 
 La fecha de referencia de cada entrada se toma del nombre cuando la convención
-la incluye (``pauta_semanal_AAAA_MM_DD.md`` y ``social/AAAA_MM_DD_slug/``) y,
-cuando no (``articulo_N_slug.md``), de la fecha de modificación del archivo.
-La fecha del nombre es más fiable que la de modificación: al clonar o copiar el
-repositorio, todos los archivos quedan con la fecha de la copia.
+la incluye (``pauta_semanal_AAAA_MM_DD.md``, ``social/AAAA_MM_DD_slug/`` y
+``articulo_N_AAAA_MM_DD_slug.md``) y, cuando no (las notas antiguas
+``articulo_N_slug.md``), de la fecha de modificación del archivo. La fecha del
+nombre es más fiable que la de modificación: al clonar o copiar el repositorio,
+todos los archivos quedan con la fecha de la copia.
 
 Solo se consideran los patrones declarados en ``CLEAN_PATTERNS``: la caché de
 contenido (``cache/``) y los recursos de la marca (``assets/``) quedan siempre
@@ -66,7 +67,8 @@ ALL_TARGETS: tuple[str, ...] = (
 
 # Fecha (AAAA_MM_DD) dentro del nombre de un artefacto. Se busca en cualquier
 # posición porque la convención la sitúa en medio en las pautas
-# (``pauta_semanal_AAAA_MM_DD.md``) y al inicio en los bundles
+# (``pauta_semanal_AAAA_MM_DD.md``) y en las notas
+# (``articulo_N_AAAA_MM_DD_slug.md``), y al inicio en los bundles
 # (``AAAA_MM_DD_slug/``).
 _DATE_IN_NAME_PATTERN = re.compile(r"(?<!\d)(\d{4})_(\d{2})_(\d{2})(?!\d)")
 

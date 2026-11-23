@@ -4,6 +4,7 @@ import re
 from pathlib import Path
 
 import pytest
+from freezegun import freeze_time
 
 from news_agent.report_writer import (
     build_filename,
@@ -202,3 +203,68 @@ class TestSaveArticle:
         assert "?" not in slug_part
         assert "%" not in slug_part
         assert "—" not in slug_part
+
+    @freeze_time("2026-11-23 15:30:00")
+    def test_filename_includes_the_creation_date(self, tmp_path):
+        """El nombre debe incluir la fecha de creación en formato AAAA_MM_DD."""
+        file_path = save_article(
+            "# Titular\n\n**Por La Chispa Sur**\n\nCuerpo.",
+            "Titulo del Articulo",
+            1,
+            output_dir=tmp_path,
+        )
+
+        assert file_path.name.startswith("articulo_1_2026_11_23_")
+        assert file_path.name.endswith(".md")
+        assert "titulo-del-articulo" in file_path.name
+
+    @freeze_time("2026-11-23 15:30:00")
+    def test_injects_the_creation_date_after_the_headline(self, tmp_path):
+        """La fecha debe quedar visible después del titular y antes de la firma."""
+        content = (
+            "# Titular del artículo\n\n"
+            "**Por La Chispa Sur**\n\n"
+            "---\n\n"
+            "*Bajada del artículo.*\n"
+        )
+
+        file_path = save_article(
+            content, "Título del Artículo", 1, output_dir=tmp_path
+        )
+        saved = file_path.read_text(encoding="utf-8")
+        lines = saved.splitlines()
+
+        assert saved.count("**Fecha de creación:**") == 1
+        assert "**Fecha de creación:** 2026-11-23" in saved
+        assert lines[0] == "# Titular del artículo"
+        assert lines[2] == "**Fecha de creación:** 2026-11-23"
+        assert saved.index("**Fecha de creación:**") < saved.index("**Por La Chispa Sur**")
+
+    @freeze_time("2026-11-23 15:30:00")
+    def test_replaces_an_existing_creation_date(self, tmp_path):
+        """No debe duplicar la línea de fecha si el contenido ya la trae."""
+        content = (
+            "# Titular del artículo\n\n"
+            "**Fecha de creación:** 2020-01-01\n\n"
+            "**Por La Chispa Sur**\n"
+        )
+
+        file_path = save_article(
+            content, "Título del Artículo", 1, output_dir=tmp_path
+        )
+        saved = file_path.read_text(encoding="utf-8")
+
+        assert saved.count("**Fecha de creación:**") == 1
+        assert "2020-01-01" not in saved
+        assert "**Fecha de creación:** 2026-11-23" in saved
+
+    @freeze_time("2026-11-23 15:30:00")
+    def test_adds_the_date_when_the_content_has_no_headline(self, tmp_path):
+        """La fecha se escribe igual si el contenido no trae titular de nivel 1."""
+        file_path = save_article(
+            "Contenido sin titular.", "Título del Artículo", 1, output_dir=tmp_path
+        )
+        saved = file_path.read_text(encoding="utf-8")
+
+        assert saved.startswith("**Fecha de creación:** 2026-11-23")
+        assert "Contenido sin titular." in saved
